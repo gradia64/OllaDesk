@@ -1,18 +1,19 @@
 """Test delle funzionalità aggiuntive: pulsante invio, tema sistema, input
 a larghezza piena, allegati, ricerca web, gestione modelli, aggiornamenti.
 
-Uso:  python3 tests/feature_test.py
+Uso:  python3 tests/gui_features.py
 Config isolata in $XDG_CONFIG_HOME; screenshot in /tmp/olladesk_shots.
 """
 import base64
 import os
-import shutil
 import sys
 import time
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-os.environ["XDG_CONFIG_HOME"] = "/tmp/olladesk_test_config"
-shutil.rmtree(os.environ["XDG_CONFIG_HOME"], ignore_errors=True)
+import tempfile
+
+# configurazione isolata in una cartella nuova: niente rmtree su percorsi fissi
+os.environ["XDG_CONFIG_HOME"] = tempfile.mkdtemp(prefix="olladesk_test_config_")
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
@@ -73,9 +74,7 @@ wait_ms(150)
 print(f"3. input full width OK (input {input_w}px su area {pane_w}px, sidebar chiusa)")
 
 # --- 4. allegati: testo + immagine + pdf senza pypdf --------------------------
-tmpdir = "/tmp/olladesk_attachments"
-shutil.rmtree(tmpdir, ignore_errors=True)
-os.makedirs(tmpdir)
+tmpdir = tempfile.mkdtemp(prefix="olladesk_attachments_")
 with open(f"{tmpdir}/note.txt", "w") as f:
     f.write("Il codice segreto è ZANZARA-42.")
 png_b64 = (
@@ -173,7 +172,8 @@ else:
     app.processEvents()
     msgs = win.current_chat["messages"]
     assert msgs[-2]["role"] == "user" and msgs[-2]["web"] is True
-    assert "Risultati della ricerca web" in msgs[-2]["content"]  # i risultati viaggiano nel prompt
+    # i risultati sono salvati nel turno e viaggiano nel prompt (build_api_content)
+    assert "Risultati della ricerca web" in msgs[-2].get("web_block", "")
     win.grab().save(f"{SHOTS}/14_websearch_done.png")
     answer = " ".join(msgs[-1]["content"].lower().split())
     # il confronto con un modello 8B è intrinsecamente flaky (a volte risponde
@@ -273,7 +273,7 @@ win.chat_area.set_web_search(False)
 print("5d. icona globo OK (screenshot on/off in", SHOTS + ")")
 
 # --- 6. gestione modelli -------------------------------------------------------
-dlg = ModelManagerDialog(win.settings["host"], chat_models[0], win)
+dlg = ModelManagerDialog(win.settings["host"], win)
 dlg.show()
 wait_ms(1500)
 app.processEvents()
@@ -289,7 +289,7 @@ print("6a. pull modello inesistente gestito:", dlg.progress_label.text())
 dlg.close()
 
 # --- 7. aggiornamenti ----------------------------------------------------------
-print("7a. comando di aggiornamento:", updater.update_command()[0] if updater.update_command() else None)
+print("7a. comando di aggiornamento:", (updater.update_command_stdin() or [None])[0])
 dlg2 = SettingsDialog(win.settings, win.model_names, win.settings["theme"], win._version, win)
 dlg2.show()
 wait_ms(400)

@@ -40,7 +40,8 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
         - json
     ```
 
-  Il numero di risultati è configurabile. I modelli non chiamano il tool da
+  Come query viene usata solo la prima riga del messaggio (massimo 200
+  caratteri), non l'intero testo. Il numero di risultati è configurabile. I modelli non chiamano il tool da
   soli: i risultati vengono iniettati nel prompt dalla GUI (verificato e2e).
 - **Gestione modelli** (pulsante «Modelli» nella sidebar, Ctrl+M): elenco dei
   modelli installati con dimensione/parametri/quantizzazione, **scaricamento**
@@ -104,11 +105,14 @@ Nel `.desktop` puoi allora usare `Exec=olladesk` al posto del percorso assoluto.
 
 ```bash
 cp olladesk.desktop ~/.local/share/applications/
+install -Dm644 olladesk/assets/olladesk.svg ~/.local/share/icons/hicolor/scalable/apps/olladesk.svg
 update-desktop-database ~/.local/share/applications
 ```
 
-Se sposti la cartella del progetto, aggiorna i percorsi `Exec=` e `Icon=`
-dentro il file `.desktop`.
+Il `.desktop` usa `Exec=olladesk` (l'entry point installato con `pipx`/`pip`)
+e `Icon=olladesk` (l'icona copiata qui sopra nel tema `hicolor`). Se avvii
+l'app dai sorgenti senza installarla, sostituisci `Exec=` con
+`python3 /percorso/di/OllaDesk/main.py`.
 
 ## Scorciatoie
 
@@ -119,6 +123,7 @@ dentro il file `.desktop`.
 | `Ctrl+M`    | Gestione modelli (download/rimozione) |
 | `Ctrl+,`    | Apri le impostazioni            |
 | `Invio`     | Invia il messaggio (attivabile) |
+| `Ctrl+Invio` | Invia il messaggio (sempre)    |
 | `Shift+Invio` | A capo                        |
 
 ## Parametri dei modelli
@@ -144,6 +149,7 @@ Tutto è salvato in `$XDG_CONFIG_HOME/olladesk` (di default
 | `model_params.json` | Profili di parametri per modello   |
 | `chats/index.json`  | Indice delle conversazioni (solo metadati) |
 | `chats/<id>.json`   | Una conversazione per file: salvare un messaggio non riscrive l'archivio |
+| `attachments/`      | Immagini incollate dagli appunti (cartella privata, permessi 700) |
 
 Il vecchio `chats.json` monolitico viene migrato automaticamente al primo
 avvio (lasciato come `chats.json.bak`). Gli allegati sono referenziati per
@@ -156,11 +162,16 @@ Smoke test offscreen (avvia la GUI, chatta davvero con Ollama, salva/ripristina
 i parametri e salva screenshot in `/tmp/olladesk_shots`):
 
 ```bash
-python3 tests/smoke_test.py     # funzionalità base
-python3 tests/feature_test.py   # allegati, ricerca web, modelli, aggiornamenti
-python3 tests/error_test.py     # percorsi di errore (server offline)
+python3 tests/gui_smoke.py      # funzionalità base
+python3 tests/gui_features.py   # allegati, ricerca web, modelli, aggiornamenti
+python3 tests/gui_errors.py     # percorsi di errore (server offline)
 python3 tests/unit_test.py      # unit test delle funzioni pure (senza rete)
 ```
+
+Gli script `gui_*.py` sono collaudi end-to-end (richiedono Ollama e, per la
+ricerca web, la rete) e non vengono raccolti da `pytest`, che esegue solo
+`tests/unit_test.py`. La configurazione di prova vive in una cartella
+temporanea nuova a ogni esecuzione.
 
 Per leggere i PDF come allegati:
 
@@ -189,9 +200,9 @@ olladesk/
     model_params.py         definizioni ed editor dei parametri
     model_manager.py        dialog scaricamento/eliminazione modelli
     settings_dialog.py      finestra impostazioni (2 schede + aggiornamenti)
-tests/smoke_test.py         collaudo automatico offscreen (base)
-tests/feature_test.py       collaudo automatico offscreen (funzionalità extra)
-tests/error_test.py         collaudo percorsi di errore (offline)
+tests/gui_smoke.py          collaudo automatico offscreen (base)
+tests/gui_features.py       collaudo automatico offscreen (funzionalità extra)
+tests/gui_errors.py         collaudo percorsi di errore (offline)
 tests/unit_test.py          unit test delle funzioni pure
 olladesk.desktop            voce per il menu applicazioni di KDE
 ```

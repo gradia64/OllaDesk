@@ -1,17 +1,17 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "olladesk"
-version = "0.2.0"
+dynamic = ["version"]
 description = "A native Linux desktop application for interacting with and managing local LLMs through Ollama, designed with Qt/PySide6"
 readme = "README.md"
-license = { text = "GPL-3.0-or-later" }
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
 requires-python = ">=3.10"
 dependencies = ["PySide6>=6.6"]
 classifiers = [
-    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
     "Environment :: X11 Applications :: Qt",
     "Intended Audience :: End Users/Desktop",
     "Operating System :: POSIX :: Linux",
@@ -28,6 +28,9 @@ olladesk = "olladesk.app:main"
 
 [tool.setuptools]
 packages = ["olladesk", "olladesk.widgets"]
+
+[tool.setuptools.dynamic]
+version = { attr = "olladesk.__version__" }   # unica fonte: olladesk/__init__.py
 
 [tool.setuptools.package-data]
 olladesk = ["assets/*.svg"]

@@ -294,6 +294,9 @@ class ModelParamsTab(QWidget):
     # ------------------------------------------------------------------ API
 
     def reload_models(self) -> None:
+        # ricaricare il profilo scarterebbe le modifiche in corso: chiedi prima
+        if self._dirty and not self.maybe_discard():
+            return
         names = list(self._models_provider())
         current = self.current_model()
         self.model_combo.blockSignals(True)

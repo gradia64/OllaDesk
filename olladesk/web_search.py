@@ -27,8 +27,26 @@ OLLAMA_SEARCH_URL = "https://ollama.com/api/web_search"
 _BLOCK_MARKERS = ("anomaly", "challenge", "detected unusual traffic")
 
 
+MAX_QUERY_CHARS = 200
+
+
 class WebSearchError(Exception):
     pass
+
+
+def make_query(text: str, max_chars: int = MAX_QUERY_CHARS) -> str:
+    """Query di ricerca dal messaggio dell'utente.
+
+    Il messaggio intero (magari lungo, con codice o dati personali) non va
+    spedito al motore di ricerca: si usa la prima riga non vuota, troncata
+    a una parola intera.
+    """
+    line = next((ln.strip() for ln in (text or "").splitlines() if ln.strip()), "")
+    line = re.sub(r"\s+", " ", line)
+    if len(line) <= max_chars:
+        return line
+    cut = line[:max_chars]
+    return cut.rsplit(" ", 1)[0] if " " in cut else cut
 
 
 def _clean(s: str) -> str:
@@ -108,12 +126,14 @@ def search(query: str, n_results: int = 5,
     """Ricerca via DuckDuckGo; fino a n risultati (titolo, url, snippet)."""
     results: list[tuple[str, str, str]] = []
     blocked = False
+    net_error: Exception | None = None
     try:
         page = _fetch("https://lite.duckduckgo.com/lite/", {"q": query}, conn_store=conn_store)
         results = _parse_lite(page)
         if not results and any(m in page for m in _BLOCK_MARKERS):
             blocked = True
-    except Exception:
+    except Exception as e:
+        net_error = e
         results = []
     if not results:
         try:
@@ -121,8 +141,13 @@ def search(query: str, n_results: int = 5,
             results = _parse_full(page)
             if not results and any(m in page for m in _BLOCK_MARKERS):
                 blocked = True
-        except Exception:
+            net_error = None
+        except Exception as e:
+            net_error = net_error or e
             results = []
+    if not results and net_error is not None and not blocked:
+        reason = getattr(net_error, "reason", None) or net_error.__class__.__name__
+        raise WebSearchError(f"DuckDuckGo non raggiungibile ({reason})")
     if not results and blocked:
         raise WebSearchError(
             "DuckDuckGo sta bloccando le richieste automatiche (protezione anti-bot): "
@@ -154,6 +179,11 @@ def search_searxng(base_url: str, query: str, n_results: int = 5,
             conn_store.append(resp)
         with resp:
             data = json.loads(resp.read().decode("utf-8", "replace"))
+    except ValueError as e:
+        raise WebSearchError(
+            "l'istanza SearXNG non ha risposto in JSON: controlla l'URL e che «json» "
+            "sia in search.formats"
+        ) from e
     except urllib.error.HTTPError as e:
         if e.code == 403:
             raise WebSearchError(
@@ -165,8 +195,12 @@ def search_searxng(base_url: str, query: str, n_results: int = 5,
         raise WebSearchError(
             f"istanza SearXNG non raggiungibile su {base_url} ({getattr(e, 'reason', e)})"
         ) from e
+    if not isinstance(data, dict):
+        raise WebSearchError("risposta inattesa dall'istanza SearXNG")
     out: list[tuple[str, str, str]] = []
     for r in (data.get("results") or [])[: max(1, n_results)]:
+        if not isinstance(r, dict):
+            continue
         title = _clean(str(r.get("title", "")))
         link = str(r.get("url", ""))
         snippet = _clean(str(r.get("content", "")))[:400]
@@ -196,6 +230,8 @@ def search_ollama(query: str, api_key: str, n_results: int = 5,
             conn_store.append(resp)
         with resp:
             data = json.loads(resp.read().decode("utf-8", "replace"))
+    except ValueError as e:
+        raise WebSearchError("risposta non valida dal servizio Ollama") from e
     except urllib.error.HTTPError as e:
         if e.code in (401, 403):
             raise WebSearchError(

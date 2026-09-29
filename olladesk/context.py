@@ -43,15 +43,67 @@ def classify(path: Path) -> str:
     return "unknown"
 
 
-def image_to_b64(path) -> str | None:
+MAX_IMAGE_BYTES = 20 * 1024 * 1024
+# formati che i modelli visione di Ollama decodificano direttamente; gli altri
+# (gif, bmp, webp…) vengono convertiti in PNG prima dell'invio
+_NATIVE_IMAGE_EXTS = {".png", ".jpg", ".jpeg"}
+
+
+def _to_png(path: Path) -> bytes | None:
+    try:
+        from PySide6.QtCore import QBuffer, QByteArray, QIODevice
+        from PySide6.QtGui import QImage
+    except ImportError:
+        return None
+    img = QImage(str(path))
+    if img.isNull():
+        return None
+    ba = QByteArray()
+    buf = QBuffer(ba)
+    buf.open(QIODevice.OpenModeFlag.WriteOnly)
+    ok = img.save(buf, "PNG")
+    buf.close()
+    return bytes(ba.data()) if ok else None
+
+
+def image_to_b64(path) -> tuple[str | None, str | None]:
+    """Restituisce (immagine in base64, nota di errore o None)."""
     p = Path(path)
     try:
+        size = p.stat().st_size
+        if size > MAX_IMAGE_BYTES:
+            return None, f"immagine {p.name} troppo grande ({size // (1024 * 1024)} MB, massimo 20 MB): non inviata"
         data = p.read_bytes()
-    except OSError:
+    except OSError as e:
+        return None, f"impossibile leggere l'immagine {p.name}: {e.strerror or e}"
+    if p.suffix.lower() not in _NATIVE_IMAGE_EXTS:
+        data = _to_png(p)
+        if data is None:
+            return None, f"formato dell'immagine {p.name} non supportato: non inviata"
+    return base64.b64encode(data).decode("ascii"), None
+
+
+def estimate_tokens(text: str) -> int:
+    """Stima grossolana (≈ 4 caratteri per token), sufficiente per un avviso."""
+    return len(text) // 4
+
+
+def context_overflow_note(messages: list[dict], num_ctx: int | None) -> str | None:
+    """Avviso se il prompt stimato supera la finestra di contesto.
+
+    Ollama tronca il prompt dall'inizio quando è troppo lungo: si perdono
+    il prompt di sistema e i primi messaggi senza alcun errore. Senza un
+    num_ctx personalizzato si usa 4096, il predefinito delle versioni recenti.
+    """
+    limit = int(num_ctx) if num_ctx else 4096
+    used = sum(estimate_tokens(m.get("content", "")) for m in messages)
+    if used <= limit * 0.9:
         return None
-    if len(data) > 20 * 1024 * 1024:
-        return None
-    return base64.b64encode(data).decode("ascii")
+    return (
+        f"il contesto stimato (~{used} token) supera la finestra del modello ({limit} token): "
+        "Ollama scarterà l'inizio del prompt. Aumenta «num_ctx» in Impostazioni → "
+        "Parametri modelli, oppure riduci allegati e cronologia."
+    )
 
 
 def _pdf_text(path: Path) -> tuple[str, str | None]:
@@ -83,13 +135,22 @@ def extract_text(path: Path) -> tuple[str, str | None]:
     return text, None
 
 
+def history_window(messages: list[dict], limit: int) -> list[dict]:
+    """Messaggi da inviare: gli ultimi `limit` PRECEDENTI più il turno corrente.
+
+    Con limit = 0 si invia comunque l'ultimo messaggio (quello appena
+    scritto): prima veniva escluso e Ollama riceveva solo il prompt di sistema.
+    """
+    return messages[-(max(0, int(limit)) + 1):] if messages else []
+
+
 def build_api_content(msg: dict, include_full: bool) -> tuple[str, list[str]]:
     """Contenuto del messaggio utente per la richiesta a Ollama.
 
     Con ``include_full=True`` (solo l'ultimo turno) allega il contenuto dei
     file e i risultati della ricerca web, leggendoli dal disco al momento;
     per i turni precedenti lascia solo il testo e un segnaposto, così il
-    contesto non gonfia a ogni round e chats.json resta leggero.
+    contesto non gonfia a ogni round e il file della chat resta leggero.
 
     Restituisce (contenuto, avvisi).
     """
@@ -99,6 +160,8 @@ def build_api_content(msg: dict, include_full: bool) -> tuple[str, list[str]]:
 
     if include_full:
         for att in msg.get("attachments_meta") or []:
+            if not isinstance(att, dict) or not att.get("path"):
+                continue
             p = Path(att["path"])
             kind = att.get("kind") or classify(p)
             if kind == "image":

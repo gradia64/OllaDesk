@@ -204,6 +204,146 @@ def test_chat_split_and_legacy_migration():
             os.environ["XDG_CONFIG_HOME"] = old
 
 
+def _isolated_config():
+    """Context manager: XDG_CONFIG_HOME in una cartella temporanea nuova."""
+    import contextlib
+
+    @contextlib.contextmanager
+    def cm():
+        old = os.environ.get("XDG_CONFIG_HOME")
+        os.environ["XDG_CONFIG_HOME"] = tempfile.mkdtemp()
+        try:
+            yield
+        finally:
+            if old is None:
+                os.environ.pop("XDG_CONFIG_HOME", None)
+            else:
+                os.environ["XDG_CONFIG_HOME"] = old
+    return cm()
+
+
+def test_rename_survives_next_save():
+    # regressione: rinominare una chat non aperta aggiornava solo l'indice
+    from olladesk import config
+    with _isolated_config():
+        chat = {"id": "r1", "title": "Vecchio", "model": "m", "updated": 1, "messages": []}
+        assert config.save_chat(chat)
+        assert config.rename_chat("r1", "Nuovo")
+        reopened = config.load_chat("r1")
+        assert reopened["title"] == "Nuovo"
+        reopened["messages"].append({"role": "user", "display": "x"})
+        config.save_chat(reopened)
+        assert config.load_chats()[0]["title"] == "Nuovo"
+
+
+def test_index_rebuilt_when_corrupt_or_missing():
+    from olladesk import config
+    with _isolated_config():
+        for i in range(3):
+            config.save_chat({"id": f"c{i}", "title": f"T{i}", "updated": i, "messages": []})
+        idx = config.chats_dir() / "index.json"
+        idx.write_text("{ non json", encoding="utf-8")
+        assert [c["id"] for c in config.load_chats()] == ["c2", "c1", "c0"]
+        idx.unlink()
+        assert len(config.load_chats()) == 3
+        # un salvataggio con indice corrotto non deve rendere orfane le altre
+        idx.write_text("garbage", encoding="utf-8")
+        config.save_chat({"id": "c3", "title": "T3", "updated": 9, "messages": []})
+        assert len(config.load_chats()) == 4
+
+
+def test_write_failure_reported():
+    from olladesk import config
+    with _isolated_config():
+        d = config.chats_dir()
+        os.chmod(d, 0o500)   # sola lettura
+        try:
+            if os.access(d, os.W_OK):
+                return       # eseguito come root: il test non è significativo
+            assert config.save_chat({"id": "w1", "messages": []}) is False
+        finally:
+            os.chmod(d, 0o700)
+
+
+def test_history_window_always_includes_current_turn():
+    from olladesk.context import history_window
+    msgs = [{"role": "user", "n": i} for i in range(5)]
+    assert history_window(msgs, 0) == msgs[-1:]
+    assert history_window(msgs, 2) == msgs[-3:]
+    assert history_window(msgs, 100) == msgs
+    assert history_window([], 3) == []
+
+
+def test_context_overflow_note():
+    from olladesk.context import context_overflow_note
+    small = [{"role": "user", "content": "ciao"}]
+    big = [{"role": "user", "content": "x" * 40_000}]
+    assert context_overflow_note(small, None) is None
+    assert context_overflow_note(big, None)             # 4096 predefinito
+    assert context_overflow_note(big, 32768) is None
+
+
+def test_image_to_b64_limits_and_conversion():
+    from olladesk import context
+    d = Path(tempfile.mkdtemp())
+    png = d / "p.png"
+    png.write_bytes(bytes.fromhex(
+        "89504e470d0a1a0a0000000d4948445200000001000000010806000000"
+        "1f15c4890000000d49444154789c6360000002000154a24f5d0000000049454e44ae426082"))
+    b64, note = context.image_to_b64(png)
+    assert b64 and note is None
+    missing, note = context.image_to_b64(d / "manca.png")
+    assert missing is None and note
+    bad = d / "rotta.gif"
+    bad.write_bytes(b"non un'immagine")
+    b64, note = context.image_to_b64(bad)
+    assert b64 is None and "non supportato" in note
+
+
+def test_web_query_is_short_first_line():
+    from olladesk.web_search import MAX_QUERY_CHARS, make_query
+    assert make_query("\n  prima   riga \nsegreto\n") == "prima riga"
+    long_q = make_query("parola " * 100)
+    assert len(long_q) <= MAX_QUERY_CHARS and not long_q.endswith(" ")
+    assert make_query("") == ""
+
+
+def test_md_link_url_not_formatted():
+    html = md_to_html("[**doc**](https://x.com/a_b/_c_)")
+    assert 'href="https://x.com/a_b/_c_"' in html
+    assert "<b>doc</b>" in html
+
+
+def test_md_rules_and_ordered_start():
+    assert md_to_html("* * *") == "<hr>"
+    assert md_to_html("- - -") == "<hr>"
+    assert '<ol start="3">' in md_to_html("3. tre\n4. quattro")
+    assert "<ol>" in md_to_html("1. uno\n2. due")
+
+
+def test_is_local_host_debian_hostname():
+    import socket
+    assert is_local_host("http://127.0.1.1:11434")
+    assert is_local_host(f"http://{socket.gethostname()}:11434")
+
+
+def test_clear_ref_keeps_newer_worker():
+    # regressione: il `finished` di un worker annullato azzerava il nuovo
+    from olladesk.main_window import MainWindow
+
+    class Host:
+        _worker = None
+
+    h = Host()
+    old, new = object(), object()
+    clear_old = MainWindow._clear_ref(h, "_worker", old)
+    h._worker = new
+    clear_old()
+    assert h._worker is new
+    MainWindow._clear_ref(h, "_worker", new)()
+    assert h._worker is None
+
+
 # --------------------------------------------------------- secrets_store.py
 
 def test_secrets_store_stub_and_fallback():

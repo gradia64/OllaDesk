@@ -47,5 +47,6 @@ def main() -> int:
     # rete di sicurezza: un thread di rete ancora bloccato su un socket al
     # timeout farebbe abortire l'interprete alla pulizia di Qt; lo stato è
     # già stato salvato su disco a questo punto
+    sys.stdout.flush()
+    sys.stderr.flush()
     os._exit(ret)
-    return ret

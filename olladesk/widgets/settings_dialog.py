@@ -7,9 +7,6 @@ password di amministratore).
 """
 from __future__ import annotations
 
-import os
-from pathlib import Path
-
 from PySide6.QtCore import QProcess, Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -172,7 +169,17 @@ class SettingsDialog(QDialog):
                 "Portachiavi non disponibile: la chiave resta in settings.json "
                 "(file protetto con permessi 600). Installa `keyring` per salvarla in KWallet."
             )
-        form.addRow("Chiave API:", self.web_key_edit)
+        key_row = QHBoxLayout()
+        key_row.setContentsMargins(0, 0, 0, 0)
+        key_row.addWidget(self.web_key_edit, 1)
+        self.clear_key_btn = QPushButton("Rimuovi", w)
+        self.clear_key_btn.setToolTip("Elimina la chiave API salvata")
+        self.clear_key_btn.clicked.connect(self._clear_api_key)
+        key_row.addWidget(self.clear_key_btn)
+        self._key_row = QWidget(w)
+        self._key_row.setLayout(key_row)
+        self._clear_key = False
+        form.addRow("Chiave API:", self._key_row)
 
         self.searxng_edit = QLineEdit(s.get("web_searxng_url", ""), w)
         self.searxng_edit.setPlaceholderText("http://localhost:8888")
@@ -211,8 +218,14 @@ class SettingsDialog(QDialog):
         form = getattr(self, "_gui_form", None)
         if form is None:
             return
-        form.setRowVisible(self.web_key_edit, provider == "ollama")
+        form.setRowVisible(self._key_row, provider == "ollama")
         form.setRowVisible(self.searxng_edit, provider == "searxng")
+
+    def _clear_api_key(self) -> None:
+        """Segna la chiave per la rimozione (effettiva con «Salva»)."""
+        self._clear_key = True
+        self.web_key_edit.clear()
+        self.web_key_edit.setPlaceholderText("la chiave verrà rimossa al salvataggio")
 
     # ------------------------------------------------ aggiornamenti Ollama
 
@@ -336,7 +349,7 @@ class SettingsDialog(QDialog):
             )
 
     def _run_update(self) -> None:
-        if updater.update_command() is None:
+        if not updater.pkexec_available():
             self.update_status.setText(
                 "⚠ `pkexec` non disponibile. Aggiorna manualmente da terminale:\n"
                 f"    {updater.INSTALL_CMD}"
@@ -351,17 +364,9 @@ class SettingsDialog(QDialog):
         self._download_worker.finished.connect(self._download_worker.deleteLater)
         self._download_worker.start()
 
-    def _on_update_script_ready(self, path: str, size: int) -> None:
-        # lo script scaricato NON viene eseguito come file: root leggerebbe un
-        # percorso in /tmp scrivibile dall'utente. Il contenuto passa a `sh -s`
-        # via stdin e il file temporaneo viene subito eliminato.
-        try:
-            script = Path(path).read_text(encoding="utf-8", errors="replace")
-            os.unlink(path)
-        except OSError as e:
-            self.update_status.setText(f"⚠ Lettura dello script scaricato non riuscita: {e}")
-            self.check_btn.setEnabled(True)
-            return
+    def _on_update_script_ready(self, script: bytes) -> None:
+        # lo script resta in memoria e passa a `sh -s` via stdin
+        size = len(script)
         cmd = updater.update_command_stdin()
         if cmd is None:
             self.update_status.setText("⚠ `pkexec` non disponibile sul sistema.")
@@ -377,11 +382,23 @@ class SettingsDialog(QDialog):
         proc.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
         proc.readyReadStandardOutput.connect(self._on_update_output)
         proc.finished.connect(self._on_update_finished)
+        proc.errorOccurred.connect(self._on_update_error)
         self._update_proc = proc
         proc.start(cmd[0], cmd[1:])
-        if proc.waitForStarted(5000):
-            proc.write(script.encode("utf-8"))
-            proc.closeWriteChannel()
+        # scritto nel buffer di QProcess: viene consegnato all'avvio del
+        # processo, senza bloccare la UI con waitForStarted
+        proc.write(script)
+        proc.closeWriteChannel()
+
+    def _on_update_error(self, err) -> None:
+        if err != QProcess.ProcessError.FailedToStart:
+            return   # gli altri casi arrivano anche da finished
+        self._update_proc = None
+        self.update_status.setText(
+            "⚠ Impossibile avviare `pkexec`. Aggiorna manualmente da terminale:\n"
+            f"    {updater.INSTALL_CMD}"
+        )
+        self.check_btn.setEnabled(True)
 
     def _on_update_script_failed(self, err: str) -> None:
         self.update_status.setText(
@@ -424,10 +441,16 @@ class SettingsDialog(QDialog):
             "web_results": self.web_spin.value(),
             "web_provider": self.web_provider_combo.currentData() or "duckduckgo",
             # con il portachiavi la chiave NON finisce mai nel file di config
-            "web_api_key": "" if self._keyring_ok else self.web_key_edit.text().strip(),
+            "web_api_key": self._file_api_key(),
             "web_searxng_url": self.searxng_edit.text().strip() or "http://localhost:8888",
             "system_prompt": self.sys_prompt.toPlainText().strip(),
         }
+
+    def _file_api_key(self) -> str:
+        if self._keyring_ok:
+            # _file_key resta solo se il portachiavi ha rifiutato il salvataggio
+            return self._file_key
+        return "" if self._clear_key else self.web_key_edit.text().strip()
 
     def _normalized_host(self) -> str:
         """Completa l'URL con lo schema se manca (evita errori opachi)."""
@@ -447,10 +470,28 @@ class SettingsDialog(QDialog):
             self.params_tab.save_profile()
         if self._keyring_ok:
             new_key = self.web_key_edit.text().strip()
-            if new_key:
-                secrets_store.save_api_key(new_key)
+            if new_key or self._clear_key:
+                if secrets_store.save_api_key(new_key):
+                    self._file_key = ""
+                else:
+                    # portachiavi non disponibile (es. KWallet chiuso): la
+                    # chiave resta nel file protetto invece di andare persa
+                    self._file_key = new_key
+                    QMessageBox.warning(
+                        self, "Portachiavi non disponibile",
+                        "Non è stato possibile aggiornare la chiave nel portachiavi di KDE.\n"
+                        + ("La chiave è stata salvata in settings.json (permessi 600)."
+                           if new_key else "La chiave precedente potrebbe essere ancora salvata."),
+                    )
+            elif self._file_key and secrets_store.load_api_key():
+                self._file_key = ""   # migrazione nel portachiavi già avvenuta
         settings = self.collect_settings()
-        config.save_settings(settings)
+        if not config.save_settings(settings):
+            QMessageBox.warning(
+                self, "Impostazioni",
+                f"Impossibile scrivere le impostazioni in {config.config_dir()}.\n"
+                "Le modifiche valgono solo fino alla chiusura dell'app.",
+            )
         self.applied.emit(settings)
         self.accept()
 

@@ -1,7 +1,7 @@
 """Smoke test offscreen: avvia la GUI, invia un messaggio reale a Ollama,
 apre le impostazioni, salva/ripristina i parametri e salva screenshot.
 
-Uso:  python3 tests/smoke_test.py
+Uso:  python3 tests/gui_smoke.py
 La configurazione viene isolata in $XDG_CONFIG_HOME per non toccare i file reali.
 """
 import os
@@ -9,7 +9,10 @@ import sys
 import time
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-os.environ["XDG_CONFIG_HOME"] = "/tmp/olladesk_test_config"
+import tempfile
+
+# configurazione isolata in una cartella nuova: niente rmtree su percorsi fissi
+os.environ["XDG_CONFIG_HOME"] = tempfile.mkdtemp(prefix="olladesk_test_config_")
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
@@ -24,9 +27,7 @@ from olladesk.widgets.settings_dialog import SettingsDialog
 SHOTS = "/tmp/olladesk_shots"
 os.makedirs(SHOTS, exist_ok=True)
 
-import shutil
 
-shutil.rmtree(os.environ["XDG_CONFIG_HOME"], ignore_errors=True)
 
 
 def wait_ms(ms: int) -> None:

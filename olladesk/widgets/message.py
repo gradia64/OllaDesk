@@ -127,16 +127,6 @@ class MessageWidget(QFrame):
     def append_stream(self, full_text: str) -> None:
         self.set_text(full_text)
 
-    def set_error(self, msg: str) -> None:
-        self.role = "error"
-        self.setProperty("bubble", "error")
-        self.raw = ""
-        self.stop_animation()
-        self.label.setProperty("error", True)
-        self.label.setTextFormat(Qt.TextFormat.PlainText)
-        self.label.setText(msg)
-        self._refresh_style()
-
     def finish(self, stats: str | None = None, show_ts: bool = False) -> None:
         self.stop_animation()
         if not self.raw:
@@ -153,12 +143,6 @@ class MessageWidget(QFrame):
             self.label.setText(md_to_html(self.raw, bg, fg, inline))
 
     # -------------------------------------------------------------- interni
-
-    def _refresh_style(self) -> None:
-        self.style().unpolish(self)
-        self.style().polish(self)
-        self.label.style().unpolish(self.label)
-        self.label.style().polish(self.label)
 
     def _update_meta(self, show_ts: bool, stats: str | None) -> None:
         bits = []

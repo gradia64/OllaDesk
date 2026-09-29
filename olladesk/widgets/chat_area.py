@@ -6,7 +6,7 @@ attivare la ricerca web; gli allegati compaiono come chip sopra l'input.
 """
 from __future__ import annotations
 
-import time
+import uuid
 from pathlib import Path
 
 from PySide6.QtCore import QSize, Qt, QTimer, Signal
@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .. import context, theme
+from .. import config, context, theme
 from .. import __version__
 from .message import MessageWidget, SystemNoteWidget
 
@@ -108,14 +108,14 @@ class ChatInput(QPlainTextEdit):
         super().insertFromMimeData(mime)
 
     def _paste_image(self, image) -> None:
-        import tempfile
-
         from PySide6.QtGui import QImage
 
         if not isinstance(image, QImage) or image.isNull():
             return
-        stamp = time.strftime("%Y%m%d-%H%M%S")
-        path = str(Path(tempfile.gettempdir()) / f"olladesk-incollato-{stamp}.png")
+        # cartella privata (0700) e nome univoco: in /tmp il file sarebbe
+        # leggibile da altri utenti, sparirebbe al riavvio (la chat però lo
+        # riferisce) e due incolla nello stesso secondo si sovrascrivevano
+        path = str(config.attachments_dir() / f"incollato-{uuid.uuid4().hex[:12]}.png")
         if image.save(path, "PNG"):
             self.pathsDropped.emit([path])
 
@@ -211,10 +211,11 @@ class ChatArea(QWidget):
         input_row.addWidget(self.input_frame, 1)
         root.addLayout(input_row)
 
-        hint = QLabel("Invio: invia · Shift+Invio: a capo", self)
-        hint.setObjectName("metaLabel")
-        hint.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        root.addWidget(hint)
+        self.hint = QLabel(self)
+        self.hint.setObjectName("metaLabel")
+        self.hint.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        root.addWidget(self.hint)
+        self._update_hint()
         root.addSpacing(6)
 
         self._stream_timer = QTimer(self)
@@ -343,6 +344,10 @@ class ChatArea(QWidget):
         # throttle: NON riavviare il timer se è già attivo, altrimenti con
         # stream rapidi il flush slitta di continuo e il testo appare solo alla fine
         if not self._stream_timer.isActive():
+            # ogni flush riconverte TUTTO il Markdown: con risposte lunghe si
+            # diradano gli aggiornamenti (70 ms + 1 ms ogni 100 caratteri, max 400 ms)
+            n = len(self._stream_buffer)
+            self._stream_timer.setInterval(min(400, 70 + n // 100))
             self._stream_timer.start()
 
     def _flush_stream(self) -> None:
@@ -369,9 +374,6 @@ class ChatArea(QWidget):
             if item.widget():
                 item.widget().deleteLater()
         self.stack.setCurrentWidget(self.welcome)
-
-    def has_messages(self) -> bool:
-        return self.msgs.count() > 1
 
     def refresh_theme(self, theme_name: str, show_ts: bool) -> None:
         self.theme_name = theme_name
@@ -513,6 +515,13 @@ class ChatArea(QWidget):
 
     def set_send_on_enter(self, enabled: bool) -> None:
         self.input.set_send_on_enter(enabled)
+        self._update_hint()
+
+    def _update_hint(self) -> None:
+        if self.input.send_on_enter:
+            self.hint.setText("Invio: invia · Shift+Invio: a capo")
+        else:
+            self.hint.setText("Ctrl+Invio: invia · Invio: a capo")
 
     def input_text(self) -> str:
         return self.input.toPlainText().strip()

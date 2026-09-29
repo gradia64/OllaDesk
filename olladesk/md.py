@@ -18,9 +18,9 @@ _ITALIC_RE = re.compile(r"(?<![\w*])\*([^*\n]+)\*(?![\w*])")
 _UNDER_BOLD_RE = re.compile(r"(?<![\w\\])__([^_\n]+)__(?![\w])")
 _UNDER_ITALIC_RE = re.compile(r"(?<![\w\\])_([^_\n]+)_(?![\w])")
 _HEADING_RE = re.compile(r"^(#{1,6})\s+(.+)$")
-_HR_RE = re.compile(r"^\s{0,3}(?:-{3,}|\*{3,})\s*$")
+_HR_RE = re.compile(r"^\s{0,3}(?:(?:-[ \t]*){3,}|(?:\*[ \t]*){3,}|(?:_[ \t]*){3,})$")
 _UL_RE = re.compile(r"^(\s*)[-*+]\s+(.+)$")
-_OL_RE = re.compile(r"^(\s*)\d+[.)]\s+(.+)$")
+_OL_RE = re.compile(r"^(\s*)(\d+)[.)]\s+(.+)$")
 _BLOCK_JOIN_RE = re.compile(
     r"^<(?:li|ul|ol|/ul|/ol|h[1-6]|hr|table|/table|blockquote|/blockquote)\b"
 )
@@ -57,14 +57,25 @@ def _inline(seg: str, inline_code_color: str) -> str:
         )
         return f"\x00I{len(inline) - 1}\x00"
 
+    def _emphasis(t: str) -> str:
+        t = _BOLD_RE.sub(r"<b>\1</b>", t)
+        t = _UNDER_BOLD_RE.sub(r"<b>\1</b>", t)
+        t = _ITALIC_RE.sub(r"<i>\1</i>", t)
+        return _UNDER_ITALIC_RE.sub(r"<i>\1</i>", t)
+
+    def _stash_link(m: re.Match) -> str:
+        # l'URL resta intatto: grassetto/corsivo solo sull'etichetta
+        # (un URL come https://x.com/_a_ altrimenti diventerebbe href=".../<i>a</i>")
+        inline.append(f'<a href="{m.group(2)}">{_emphasis(m.group(1))}</a>')
+        return f"\x00I{len(inline) - 1}\x00"
+
     seg = _INLINE_CODE_RE.sub(_stash, seg)
     seg = html.escape(seg)
-    seg = _LINK_RE.sub(r'<a href="\2">\1</a>', seg)
-    seg = _BOLD_RE.sub(r"<b>\1</b>", seg)
-    seg = _UNDER_BOLD_RE.sub(r"<b>\1</b>", seg)
-    seg = _ITALIC_RE.sub(r"<i>\1</i>", seg)
-    seg = _UNDER_ITALIC_RE.sub(r"<i>\1</i>", seg)
-    seg = re.sub(r"\x00I(\d+)\x00", lambda m: inline[int(m.group(1))], seg)
+    seg = _LINK_RE.sub(_stash_link, seg)
+    seg = _emphasis(seg)
+    # più passate: un link può contenere a sua volta inline code
+    while "\x00I" in seg:
+        seg = re.sub(r"\x00I(\d+)\x00", lambda m: inline[int(m.group(1))], seg)
     return seg
 
 
@@ -103,12 +114,18 @@ def _table_html(rows: list[str], inline_code_color: str, header_bg: str) -> str:
     return "".join(out)
 
 
-def _list_html(items: list[tuple[int, str, str]], pos: int, indent: int,
+def _list_open(kind: str, start: int | None) -> str:
+    if kind == "ol" and start not in (None, 1):
+        return f'<ol start="{start}">'
+    return f"<{kind}>"
+
+
+def _list_html(items: list[tuple[int, str, str, int | None]], pos: int, indent: int,
                kind: str, inline_code_color: str) -> tuple[str, int]:
-    """Costruisce <ul>/<ol> (annidati) da [(indent, kind, testo)]."""
-    out = [f"<{kind}>"]
+    """Costruisce <ul>/<ol> (annidati) da [(indent, kind, testo, numero)]."""
+    out = [_list_open(kind, items[pos][3] if pos < len(items) else None)]
     while pos < len(items):
-        ind, k, text = items[pos]
+        ind, k, text, _num = items[pos]
         if ind < indent:
             break
         if ind > indent:
@@ -153,22 +170,26 @@ def _render_segment(seg: str, inline_code_color: str, header_bg: str) -> str:
             inner = _render_segment("\n".join(quote), inline_code_color, header_bg)
             parts.append(("h", f"<blockquote>{inner}</blockquote>"))
             continue
+        if _HR_RE.match(ln):
+            parts.append(("h", "<hr>"))
+            i += 1
+            continue
         # elenchi, anche annidati
         if _UL_RE.match(ln) or _OL_RE.match(ln):
             items = []
             while i < n:
                 m = _UL_RE.match(lines[i])
-                if m:
-                    items.append((len(m.group(1)), "ul", m.group(2)))
+                if m and not _HR_RE.match(lines[i]):
+                    items.append((len(m.group(1)), "ul", m.group(2), None))
                     i += 1
                     continue
                 m = _OL_RE.match(lines[i])
                 if m:
-                    items.append((len(m.group(1)), "ol", m.group(2)))
+                    items.append((len(m.group(1)), "ol", m.group(3), int(m.group(2))))
                     i += 1
                     continue
                 break
-            base = min(ind for ind, _k, _t in items)
+            base = min(it[0] for it in items)
             html_list, _pos = _list_html(items, 0, base, items[0][1], inline_code_color)
             parts.append(("h", html_list))
             continue
@@ -180,10 +201,6 @@ def _render_segment(seg: str, inline_code_color: str, header_bg: str) -> str:
             parts.append(
                 ("h", f"<h{level}>{_inline(m.group(2), inline_code_color)}</h{level}>")
             )
-            i += 1
-            continue
-        if _HR_RE.match(ln):
-            parts.append(("h", "<hr>"))
             i += 1
             continue
         parts.append(("t", ln))

@@ -2,17 +2,16 @@
 
 - Controllo versione: confronta la versione del server locale con l'ultima
   release pubblicata su GitHub (api.github.com).
-- Aggiornamento: scarica lo script ufficiale in un file temporaneo, poi lo
-  esegue tramite `pkexec` (richiede la password di amministratore, mostrata
-  da KDE Polkit).
+- Aggiornamento: scarica in memoria lo script ufficiale, poi lo passa a
+  `pkexec sh -s` via stdin (richiede la password di amministratore, mostrata
+  da KDE Polkit). Nessun file temporaneo viene letto da root.
 """
 from __future__ import annotations
 
 import json
-import os
 import re
 import shutil
-import tempfile
+import socket
 import urllib.request
 
 from PySide6.QtCore import QThread, Signal
@@ -21,7 +20,7 @@ RELEASES_URL = "https://api.github.com/repos/ollama/ollama/releases/latest"
 INSTALL_SCRIPT_URL = "https://ollama.com/install.sh"
 INSTALL_CMD = "curl -fsSL https://ollama.com/install.sh | sh"
 
-_LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
+_LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1", "0.0.0.0", "localhost.localdomain"}
 
 
 def parse_version(v: str) -> tuple[int, ...]:
@@ -43,17 +42,17 @@ def is_local_host(host: str) -> bool:
         hostname = (urlparse(host).hostname or "").lower()
     except ValueError:
         return False
-    return hostname in _LOCAL_HOSTS
+    if hostname in _LOCAL_HOSTS or hostname.startswith("127."):
+        return True   # Debian associa il nome macchina a 127.0.1.1
+    try:
+        names = {socket.gethostname().lower(), socket.getfqdn().lower()}
+    except OSError:
+        names = set()
+    return hostname in names
 
 
-def update_command(local_path: str | None = None) -> list[str] | None:
-    """Comando per l'aggiornamento (pkexec) o None se non disponibile."""
-    pkexec = shutil.which("pkexec")
-    if not pkexec:
-        return None
-    if local_path:
-        return [pkexec, "sh", local_path]
-    return [pkexec, "sh", "-c", INSTALL_CMD]
+def pkexec_available() -> bool:
+    return shutil.which("pkexec") is not None
 
 
 def update_command_stdin() -> list[str] | None:
@@ -89,13 +88,13 @@ class UpdateCheckWorker(QThread):
 
 
 class UpdateDownloadWorker(QThread):
-    """Scarica lo script ufficiale in un file temporaneo PRIMA di eseguirlo.
+    """Scarica lo script ufficiale in memoria (nessun file su disco).
 
-    Così l'utente vede cosa viene eseguito e con quale dimensione, invece di
-    un `curl | sh` alla cieca.
+    Il contenuto viene poi passato a `pkexec sh -s` via stdin: root non legge
+    mai un file in /tmp di proprietà dell'utente.
     """
 
-    ready = Signal(str, int)   # percorso del file, dimensione in byte
+    ready = Signal(bytes)   # contenuto dello script
     failed = Signal(str)
 
     def run(self) -> None:
@@ -105,11 +104,10 @@ class UpdateDownloadWorker(QThread):
             )
             with urllib.request.urlopen(req, timeout=30) as resp:
                 data = resp.read()
-            fd, path = tempfile.mkstemp(prefix="ollama-install-", suffix=".sh")
-            with os.fdopen(fd, "wb") as fh:
-                fh.write(data)
-            os.chmod(path, 0o755)
         except Exception as e:
             self.failed.emit(str(e))
             return
-        self.ready.emit(path, len(data))
+        if not data.startswith(b"#!"):
+            self.failed.emit("il contenuto scaricato non sembra uno script di installazione")
+            return
+        self.ready.emit(data)

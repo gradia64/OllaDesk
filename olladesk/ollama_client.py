@@ -12,10 +12,6 @@ import urllib.request
 from PySide6.QtCore import QThread, Signal
 
 
-class OllamaError(Exception):
-    """Errore di comunicazione con il server Ollama."""
-
-
 def friendly_error(e: Exception, host: str = "") -> str:
     if isinstance(e, urllib.error.HTTPError):
         try:
@@ -42,37 +38,6 @@ def _open(host: str, path: str, payload: dict | None = None, timeout: float = 10
         url, data=data, headers={"Content-Type": "application/json"}
     )
     return urllib.request.urlopen(req, timeout=timeout)
-
-
-def server_version(host: str) -> str:
-    try:
-        with _open(host, "/api/version", timeout=4) as resp:
-            return json.loads(resp.read().decode("utf-8")).get("version", "?")
-    except Exception as e:  # pragma: no cover - errore di rete gestito dal chiamante
-        raise OllamaError(friendly_error(e, host)) from e
-
-
-def list_models(host: str) -> list[dict]:
-    """Restituisce l'elenco dei modelli installati (GET /api/tags)."""
-    try:
-        with _open(host, "/api/tags", timeout=8) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-    except Exception as e:
-        raise OllamaError(friendly_error(e, host)) from e
-    models = []
-    for m in data.get("models", []):
-        det = m.get("details", {})
-        models.append(
-            {
-                "name": m.get("name") or m.get("model") or "?",
-                "size": m.get("size", 0),
-                "parameter_size": det.get("parameter_size", ""),
-                "quantization": det.get("quantization_level", ""),
-                "family": det.get("family", ""),
-            }
-        )
-    models.sort(key=lambda m: m["name"].lower())
-    return models
 
 
 # --------------------------------------------------------------------- worker
@@ -143,6 +108,9 @@ class ChatWorker(QThread):
         try:
             self._resp = _open(self._host, "/api/chat", self._payload, timeout=600)
             if self._stopped:
+                # chiudere subito: altrimenti Ollama continua a generare per
+                # una richiesta già annullata e accoda quella successiva
+                self._close_resp()
                 return
         except Exception as e:
             if not self._stopped:
@@ -181,7 +149,8 @@ class ChatWorker(QThread):
                 if content:
                     self.chunk.emit(content)
             # stream chiuso senza "done": consideriamo comunque concluso
-            self.done.emit({"done": True})
+            if not self._stopped:
+                self.done.emit({"done": True})
         except Exception as e:
             if not self._stopped:
                 self.failed.emit(friendly_error(e, self._host))
@@ -256,6 +225,7 @@ class PullWorker(QThread):
                 {"model": self._model, "stream": True}, timeout=600,
             )
             if self._stopped:
+                self._close_resp()   # interrompe il pull anche lato server
                 return
         except Exception as e:
             if not self._stopped:
@@ -279,7 +249,9 @@ class PullWorker(QThread):
                     self.done.emit()
                     return
                 self.progress.emit(data)
-            self.done.emit()
+            # stream chiuso senza "success": scaricamento non concluso
+            if not self._stopped:
+                self.failed.emit("scaricamento interrotto: il server ha chiuso la connessione")
         except Exception as e:
             if not self._stopped:
                 self.failed.emit(friendly_error(e, self._host))

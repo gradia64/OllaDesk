@@ -1,11 +1,12 @@
 """Test del percorso di errore con server Ollama non raggiungibile."""
 import os
-import shutil
 import sys
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-os.environ["XDG_CONFIG_HOME"] = "/tmp/olladesk_test_config"
-shutil.rmtree(os.environ["XDG_CONFIG_HOME"], ignore_errors=True)
+import tempfile
+
+# configurazione isolata in una cartella nuova: niente rmtree su percorsi fissi
+os.environ["XDG_CONFIG_HOME"] = tempfile.mkdtemp(prefix="olladesk_test_config_")
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.makedirs("/tmp/olladesk_shots", exist_ok=True)

@@ -40,7 +40,7 @@ class ModelManagerDialog(QDialog):
     può ricaricare l'elenco dei modelli alla chiusura.
     """
 
-    def __init__(self, host: str, current_model: str | None = None, parent=None):
+    def __init__(self, host: str, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Gestione modelli — OllaDesk")
         self.setMinimumSize(680, 540)
@@ -48,6 +48,7 @@ class ModelManagerDialog(QDialog):
         self.changed = False
 
         self._pull_worker: PullWorker | None = None
+        self._cancelled_pulls: list[PullWorker] = []   # annullati, in chiusura
         self._list_worker: ApiWorker | None = None
         self._delete_worker: PostWorker | None = None
 
@@ -131,7 +132,8 @@ class ModelManagerDialog(QDialog):
     def _on_models(self, data: object) -> None:
         self.refresh_btn.setEnabled(True)
         self.tree.clear()
-        for m in (data or {}).get("models", []):
+        models = data.get("models", []) if isinstance(data, dict) else []
+        for m in models:
             det = m.get("details", {})
             item = QTreeWidgetItem(
                 [
@@ -176,8 +178,9 @@ class ModelManagerDialog(QDialog):
         self._pull_worker.done.connect(self._on_pull_done)
         self._pull_worker.failed.connect(self._on_pull_failed)
         self._pull_worker.finished.connect(self._pull_worker.deleteLater)
-        self._pull_worker.finished.connect(lambda: setattr(self, "_pull_worker", None))
-        self._pull_worker.start()
+        w = self._pull_worker
+        w.finished.connect(lambda: self._pull_worker is w and setattr(self, "_pull_worker", None))
+        w.start()
 
     def _pull_running_ui(self, running: bool) -> None:
         self.progress.setVisible(running)
@@ -188,6 +191,8 @@ class ModelManagerDialog(QDialog):
         self.delete_btn.setEnabled(not running and self._selected_model() is not None)
 
     def _on_pull_progress(self, data: dict) -> None:
+        if self.sender() is not self._pull_worker:
+            return
         status = data.get("status", "")
         total = data.get("total")
         completed = data.get("completed")
@@ -204,6 +209,8 @@ class ModelManagerDialog(QDialog):
             self.progress_label.setText(status or "…")
 
     def _on_pull_done(self) -> None:
+        if self.sender() is not self._pull_worker:
+            return   # segnale tardivo di un worker annullato
         self.changed = True
         self._pull_running_ui(False)
         self.progress_label.show()
@@ -211,13 +218,11 @@ class ModelManagerDialog(QDialog):
         self.refresh_models()
 
     def _on_pull_failed(self, err: str) -> None:
-        was_stopped = self._pull_worker is not None and self._pull_worker.stopped
+        if self.sender() is not self._pull_worker:
+            return   # l'annullamento ha già aggiornato la UI
         self._pull_running_ui(False)
         self.progress_label.show()
-        if was_stopped:
-            self.progress_label.setText("⚠ Scaricamento annullato")
-        else:
-            self.progress_label.setText(f"⚠ {err}")
+        self.progress_label.setText(f"⚠ {err}")
 
     def _cancel_pull(self) -> None:
         """Annulla lo scaricamento e ripristina SUBITO la UI.
@@ -226,9 +231,15 @@ class ModelManagerDialog(QDialog):
         uscire il thread in silenzio): se non ripristiniamo qui, la barra di
         avanzamento resta visibile e «Scarica» disabilitato.
         """
-        if self._pull_worker is None:
+        w = self._pull_worker
+        if w is None:
             return
-        self._pull_worker.stop()
+        w.stop()
+        # sganciato subito: si può avviare un nuovo scaricamento senza
+        # aspettare che il thread annullato termini
+        self._pull_worker = None
+        self._cancelled_pulls.append(w)
+        w.finished.connect(lambda: self._cancelled_pulls.remove(w))
         self._pull_running_ui(False)
         self.progress_label.show()
         self.progress_label.setText("⚠ Scaricamento annullato")

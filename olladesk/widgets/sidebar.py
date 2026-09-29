@@ -80,17 +80,6 @@ class ChatSidebar(QWidget):
                 self.list.setCurrentItem(item)
         self.list.blockSignals(False)
 
-    def select_chat(self, chat_id: str | None) -> None:
-        self.list.blockSignals(True)
-        if chat_id is None:
-            self.list.clearSelection()
-        else:
-            for i in range(self.list.count()):
-                if self.list.item(i).data(Qt.ItemDataRole.UserRole) == chat_id:
-                    self.list.setCurrentRow(i)
-                    break
-        self.list.blockSignals(False)
-
     def set_busy(self, busy: bool) -> None:
         self.list.setEnabled(not busy)
         self.new_btn.setEnabled(not busy)
@@ -116,9 +105,19 @@ class ChatSidebar(QWidget):
         if chosen is act_rename:
             from PySide6.QtWidgets import QInputDialog
 
-            current = item.text()
+            current = item.toolTip()   # titolo completo (il testo è abbreviato)
             name, ok = QInputDialog.getText(self, "Rinomina conversazione", "Titolo:", text=current)
             if ok and name.strip():
                 self.chatRenamed.emit(chat_id, name.strip())
         elif chosen is act_del:
-            self.chatDeleted.emit(chat_id)
+            from PySide6.QtWidgets import QMessageBox
+
+            ret = QMessageBox.question(
+                self,
+                "Elimina conversazione",
+                f"Eliminare definitivamente «{item.toolTip()}»?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if ret == QMessageBox.StandardButton.Yes:
+                self.chatDeleted.emit(chat_id)

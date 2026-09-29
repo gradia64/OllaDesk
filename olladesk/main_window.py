@@ -69,11 +69,9 @@ class MainWindow(QMainWindow):
             pass
 
         # avvio: seleziona l'ultima conversazione, poi contatta il server
+        # (load_chats è già ordinato dalla più recente)
         if self.chats:
-            self.current_chat = sorted(self.chats, key=lambda c: c.get("updated", 0))[-1]
-            self._open_chat(self.current_chat["id"])
-        else:
-            self.sidebar.set_chats([], None)
+            self._open_chat(self.chats[0]["id"])
         self.sidebar.set_chats(self.chats, self.current_chat["id"] if self.current_chat else None)
 
         self._status_timer = QTimer(self)
@@ -180,6 +178,17 @@ class MainWindow(QMainWindow):
         self._running_workers.append(w)
         w.finished.connect(lambda: self._untrack_worker(w))
 
+    def _clear_ref(self, attr: str, w):
+        """Slot per `finished`: azzera `attr` solo se punta ancora a `w`.
+
+        Un worker annullato può terminare DOPO che ne è partito uno nuovo:
+        un azzeramento incondizionato scollegherebbe quello nuovo.
+        """
+        def clear() -> None:
+            if getattr(self, attr, None) is w:
+                setattr(self, attr, None)
+        return clear
+
     def _untrack_worker(self, w) -> None:
         try:
             self._running_workers.remove(w)
@@ -235,7 +244,7 @@ class MainWindow(QMainWindow):
         self._status_worker.ready.connect(self._on_server_ok)
         self._status_worker.failed.connect(self._on_server_fail)
         self._status_worker.finished.connect(self._status_worker.deleteLater)
-        self._status_worker.finished.connect(lambda: setattr(self, "_status_worker", None))
+        self._status_worker.finished.connect(self._clear_ref("_status_worker", self._status_worker))
         self._track_worker(self._status_worker)
         self._status_worker.start()
 
@@ -276,7 +285,7 @@ class MainWindow(QMainWindow):
         self._models_worker.ready.connect(self._on_models)
         self._models_worker.failed.connect(self._on_models_fail)
         self._models_worker.finished.connect(self._models_worker.deleteLater)
-        self._models_worker.finished.connect(lambda: setattr(self, "_models_worker", None))
+        self._models_worker.finished.connect(self._clear_ref("_models_worker", self._models_worker))
         self._track_worker(self._models_worker)
         self._models_worker.start()
 
@@ -334,8 +343,11 @@ class MainWindow(QMainWindow):
 
     def _open_models(self) -> None:
         if self._busy():
+            self.chat_area.add_system_note(
+                "Attendi la fine della risposta (o premi ■ per interrompere) prima di gestire i modelli."
+            )
             return
-        dlg = ModelManagerDialog(self.settings["host"], self.current_model(), self)
+        dlg = ModelManagerDialog(self.settings["host"], self)
         dlg.exec()
         if dlg.changed:
             self._refresh_models()
@@ -344,8 +356,18 @@ class MainWindow(QMainWindow):
 
     def _persist_chat(self) -> None:
         """Salva la conversazione corrente (file dedicato + indice)."""
-        if self.current_chat is not None:
-            config.save_chat(self.current_chat)
+        c = self.current_chat
+        if c is None:
+            return
+        if not config.save_chat(c):
+            self.chat_area.add_system_note(
+                "⚠ Impossibile salvare la conversazione su disco "
+                f"({config.chats_dir()}): spazio esaurito o permessi mancanti?"
+            )
+        # tiene allineato l'elenco in memoria (ordine e titolo nella sidebar)
+        entry = {"id": c["id"], "title": c.get("title", "Conversazione"),
+                 "model": c.get("model", ""), "updated": c.get("updated", 0)}
+        self.chats = [e for e in self.chats if e["id"] != c["id"]] + [entry]
 
     def _new_chat(self) -> None:
         if self._busy():
@@ -363,7 +385,11 @@ class MainWindow(QMainWindow):
             # elencata ma il file è mancante: ripulisci l'indice
             config.delete_chat(chat_id)
             self.chats = [c for c in self.chats if c["id"] != chat_id]
-            self.sidebar.set_chats(self.chats, None)
+            if self.current_chat and self.current_chat["id"] == chat_id:
+                self.current_chat = None
+                self.chat_area.clear_messages()
+            self.sidebar.set_chats(self.chats, self.current_chat["id"] if self.current_chat else None)
+            self.chat_area.add_system_note("⚠ Conversazione non leggibile dal disco: rimossa dall'elenco.")
             return
         self.current_chat = chat
         self.chat_area.clear_messages()
@@ -384,7 +410,6 @@ class MainWindow(QMainWindow):
     def _rename_chat(self, chat_id: str, title: str) -> None:
         if self.current_chat and self.current_chat["id"] == chat_id:
             self.current_chat["title"] = title.strip()
-            self.current_chat["updated"] = config.now()
             self._persist_chat()
         else:
             config.rename_chat(chat_id, title.strip())
@@ -445,6 +470,11 @@ class MainWindow(QMainWindow):
         }
         self.chat_area.clear_attachments()
 
+        if web_on and not web_search.make_query(text):
+            self.chat_area.add_system_note(
+                "⚠ Ricerca web saltata: scrivi una domanda insieme agli allegati."
+            )
+            web_on = self._pending_user["web"] = False
         if web_on:
             self._start_web_search()
         else:
@@ -460,7 +490,7 @@ class MainWindow(QMainWindow):
         placeholder.show_status("🌐 Ricerca web in corso…")
 
         self._search_worker = web_search.WebSearchWorker(
-            self._pending_user["display"],
+            web_search.make_query(self._pending_user["display"]),
             int(self.settings.get("web_results", 5)),
             provider=self.settings.get("web_provider", "duckduckgo"),
             api_key=secrets_store.load_api_key() or self.settings.get("web_api_key", ""),
@@ -470,7 +500,7 @@ class MainWindow(QMainWindow):
         self._search_worker.ready.connect(self._on_web_results)
         self._search_worker.failed.connect(self._on_web_failed)
         self._search_worker.finished.connect(self._search_worker.deleteLater)
-        self._search_worker.finished.connect(lambda: setattr(self, "_search_worker", None))
+        self._search_worker.finished.connect(self._clear_ref("_search_worker", self._search_worker))
         self._track_worker(self._search_worker)
         self._search_worker.start()
 
@@ -508,8 +538,6 @@ class MainWindow(QMainWindow):
                 "updated": config.now(),
                 "messages": [],
             }
-            self.chats.append({"id": self.current_chat["id"], "title": self.current_chat["title"],
-                               "model": model, "updated": self.current_chat["updated"]})
 
         ts = config.now()
         msg = {
@@ -543,8 +571,7 @@ class MainWindow(QMainWindow):
         warnings: list[str] = []
         if s["system_prompt"]:
             messages.append({"role": "system", "content": s["system_prompt"]})
-        limit = max(0, int(s["history_limit"]))
-        history = self.current_chat["messages"][-limit:] if limit else []
+        history = context.history_window(self.current_chat["messages"], s["history_limit"])
         last_idx = len(history) - 1
         for i, m in enumerate(history):
             if m["role"] == "assistant":
@@ -557,21 +584,31 @@ class MainWindow(QMainWindow):
             warnings.extend(w)
             entry = {"role": "user", "content": content}
             if full and m.get("image_paths"):
-                imgs = [context.image_to_b64(p) for p in m["image_paths"]]
-                imgs = [b for b in imgs if b]
+                imgs = []
+                for p in m["image_paths"]:
+                    b64, note = context.image_to_b64(p)
+                    if note:
+                        warnings.append(note)
+                    if b64:
+                        imgs.append(b64)
                 if imgs:
                     entry["images"] = imgs
             messages.append(entry)
-        if warnings:
-            self.chat_area.add_system_note("⚠ " + "\n⚠ ".join(warnings))
 
         from .widgets.model_params import options_for_model
+
+        options = options_for_model(model)
+        note = context.context_overflow_note(messages, options.get("num_ctx"))
+        if note:
+            warnings.append(note)
+        if warnings:
+            self.chat_area.add_system_note("⚠ " + "\n⚠ ".join(warnings))
 
         payload = {
             "model": model,
             "messages": messages,
             "stream": bool(s["stream"]),
-            "options": options_for_model(model),
+            "options": options,
         }
 
         self._pending_stream = ""
@@ -583,7 +620,7 @@ class MainWindow(QMainWindow):
         self._worker.done.connect(self._on_done)
         self._worker.failed.connect(self._on_failed)
         self._worker.finished.connect(self._worker.deleteLater)
-        self._worker.finished.connect(lambda: setattr(self, "_worker", None))
+        self._worker.finished.connect(self._clear_ref("_worker", self._worker))
         self._track_worker(self._worker)
         self._worker.start()
 
