@@ -179,6 +179,12 @@ class PostWorker(QThread):
         self._path = path
         self._payload = payload
         self._method = method
+        self._resp = None
+        self._stopped = False
+
+    def stop(self) -> None:
+        self._stopped = True
+        self._close_resp()
 
     def run(self) -> None:
         try:
@@ -189,11 +195,26 @@ class PostWorker(QThread):
                 headers={"Content-Type": "application/json"},
                 method=self._method,
             )
-            with urllib.request.urlopen(req, timeout=60) as resp:
-                body = resp.read().decode("utf-8", "replace").strip()
+            self._resp = urllib.request.urlopen(req, timeout=60)
+            if self._stopped:
+                return
+            body = self._resp.read().decode("utf-8", "replace").strip()
+            if self._stopped:
+                return
             self.ready.emit(json.loads(body) if body else None)
         except Exception as e:
-            self.failed.emit(friendly_error(e, self._host))
+            if not self._stopped:
+                self.failed.emit(friendly_error(e, self._host))
+        finally:
+            self._close_resp()
+
+    def _close_resp(self) -> None:
+        resp, self._resp = self._resp, None
+        if resp is not None:
+            try:
+                resp.close()
+            except Exception:
+                pass
 
 
 class PullWorker(QThread):
