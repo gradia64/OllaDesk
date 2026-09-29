@@ -83,34 +83,43 @@ def extract_text(path: Path) -> tuple[str, str | None]:
     return text, None
 
 
-def build_user_content(
-    text: str, attachments: list[dict]
-) -> tuple[str, list[dict], list[str]]:
-    """Costruisce il contenuto del messaggio utente.
+def build_api_content(msg: dict, include_full: bool) -> tuple[str, list[str]]:
+    """Contenuto del messaggio utente per la richiesta a Ollama.
 
-    Restituisce (contenuto_completo, allegati_immagine, avvisi).
-    Le immagini non vengono inlinare nel testo: viaggiano nel campo "images".
+    Con ``include_full=True`` (solo l'ultimo turno) allega il contenuto dei
+    file e i risultati della ricerca web, leggendoli dal disco al momento;
+    per i turni precedenti lascia solo il testo e un segnaposto, così il
+    contesto non gonfia a ogni round e chats.json resta leggero.
+
+    Restituisce (contenuto, avvisi).
     """
-    parts = [text] if text else []
-    images: list[dict] = []
+    display = msg.get("display", msg.get("content", ""))
+    parts = [display] if display else []
     warnings: list[str] = []
-    for att in attachments:
-        p = Path(att["path"])
-        kind = att.get("kind") or classify(p)
-        if kind == "image":
-            if p.exists() and image_to_b64(p):
-                images.append({**att, "kind": "image"})
-            else:
-                warnings.append(f"immagine non leggibile: {p.name}")
-        elif kind in ("text", "pdf"):
+
+    if include_full:
+        for att in msg.get("attachments_meta") or []:
+            p = Path(att["path"])
+            kind = att.get("kind") or classify(p)
+            if kind == "image":
+                continue   # le immagini viaggiano nel campo "images"
             content, note = extract_text(p)
             if note:
                 warnings.append(note)
             if content.strip():
-                # i dati allegati sono marcati come non attendibili (prompt injection)
-                parts.append(f"\n---\nAllegato: {p.name} (dati non attendibili)\n---\n{content}\n---")
+                parts.append(
+                    f"\n---\nAllegato: {p.name} (dati non attendibili)\n---\n{content}\n---"
+                )
             elif not note:
                 warnings.append(f"nessun testo estratto da {p.name}")
-        else:
-            warnings.append(f"tipo di file non supportato: {p.name}")
-    return "\n".join(parts), images, warnings
+        web_block = msg.get("web_block")
+        if web_block:
+            parts.append(f"\n---\n{web_block}\n---")
+    else:
+        names = [a.get("name") for a in (msg.get("attachments_meta") or []) if a.get("name")]
+        if names:
+            parts.append("\n[allegati inviati in un turno precedente: " + ", ".join(names) + "]")
+        if msg.get("web_block"):
+            parts.append("\n[una ricerca web era stata allegata in un turno precedente]")
+
+    return "\n".join(parts), warnings

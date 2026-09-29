@@ -91,6 +91,15 @@ python3 main.py
 python3 -m olladesk
 ```
 
+### Installazione come pacchetto (consigliata per l'uso quotidiano)
+
+```bash
+pipx install .            # oppure: pip install --user .
+olladesk                  # entry point creato da pyproject.toml
+```
+
+Nel `.desktop` puoi allora usare `Exec=olladesk` al posto del percorso assoluto.
+
 ### Integrazione con KDE Plasma (menu applicazioni)
 
 ```bash
@@ -129,11 +138,17 @@ Tutto è salvato in `$XDG_CONFIG_HOME/olladesk` (di default
 `~/.config/olladesk`). Se esiste una configurazione del vecchio nome
 (`~/.config/ollama-gui`), viene migrata automaticamente al primo avvio:
 
-| File                | Contenuto                          |
+| Percorso            | Contenuto                          |
 |---------------------|------------------------------------|
-| `settings.json`     | Impostazioni della GUI (incl. provider ricerca web) |
+| `settings.json`     | Impostazioni della GUI (la chiave API viaggia nel portachiavi di KDE, se disponibile) |
 | `model_params.json` | Profili di parametri per modello   |
-| `chats.json`        | Conversazioni                      |
+| `chats/index.json`  | Indice delle conversazioni (solo metadati) |
+| `chats/<id>.json`   | Una conversazione per file: salvare un messaggio non riscrive l'archivio |
+
+Il vecchio `chats.json` monolitico viene migrato automaticamente al primo
+avvio (lasciato come `chats.json.bak`). Gli allegati sono referenziati per
+percorso e il loro testo viene allegato al contesto solo nel turno in cui
+vengono inviati.
 
 ## Test
 

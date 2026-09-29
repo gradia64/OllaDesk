@@ -97,20 +97,85 @@ def save_model_params(params: dict) -> None:
 
 
 # ------------------------------------------------------------ conversazioni
+# Ogni conversazione vive in un proprio file (chats/<id>.json); l'indice con
+# i soli metadati sta in chats/index.json. Salvare un messaggio non riscrive
+# più tutto l'archivio, e gli allegati restano come percorsi, non come testo.
+
+def chats_dir() -> Path:
+    d = config_dir() / "chats"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _chats_index_path() -> Path:
+    return config_dir() / "chats" / "index.json"
+
+
+def _migrate_legacy_chats() -> None:
+    """Converte il vecchio chats.json monolitico nei file per conversazione."""
+    legacy = config_dir() / "chats.json"
+    if not legacy.exists():
+        return
+    chats = _read_json(legacy, [])
+    if isinstance(chats, list):
+        for c in chats:
+            if isinstance(c, dict) and c.get("id") and isinstance(c.get("messages"), list):
+                save_chat(c)   # scrive il file dedicato e aggiorna l'indice
+    legacy.rename(legacy.with_suffix(".json.bak"))
+
 
 def load_chats() -> list[dict]:
-    chats = _read_json(config_dir() / "chats.json", [])
-    if not isinstance(chats, list):
-        return []
-    out = []
-    for c in chats:
-        if isinstance(c, dict) and c.get("id") and isinstance(c.get("messages"), list):
-            out.append(c)
+    """Indice dei metadati delle conversazioni, dalla più recente."""
+    if not _chats_index_path().exists():
+        _migrate_legacy_chats()
+    index = _read_json(_chats_index_path(), [])
+    out = [c for c in index if isinstance(c, dict) and c.get("id")]
+    out.sort(key=lambda c: c.get("updated", 0), reverse=True)
     return out
 
 
-def save_chats(chats: list[dict]) -> None:
-    _write_json(config_dir() / "chats.json", chats)
+def load_chat(chat_id: str) -> dict | None:
+    data = _read_json(chats_dir() / f"{chat_id}.json", None)
+    if isinstance(data, dict) and data.get("id") == chat_id and isinstance(data.get("messages"), list):
+        return data
+    return None
+
+
+def save_chat(chat: dict) -> None:
+    """Salva la conversazione (messaggi) e aggiorna l'indice."""
+    chat_id = chat.get("id")
+    if not chat_id:
+        return
+    _write_json(chats_dir() / f"{chat_id}.json", chat)
+    index = _read_json(_chats_index_path(), [])
+    index = [e for e in index if isinstance(e, dict) and e.get("id") != chat_id]
+    index.append(
+        {
+            "id": chat_id,
+            "title": chat.get("title", "Conversazione"),
+            "model": chat.get("model", ""),
+            "updated": chat.get("updated", 0),
+        }
+    )
+    _write_json(_chats_index_path(), index)
+
+
+def rename_chat(chat_id: str, title: str) -> None:
+    index = _read_json(_chats_index_path(), [])
+    for e in index:
+        if isinstance(e, dict) and e.get("id") == chat_id:
+            e["title"] = title
+    _write_json(_chats_index_path(), index)
+
+
+def delete_chat(chat_id: str) -> None:
+    try:
+        (chats_dir() / f"{chat_id}.json").unlink()
+    except OSError:
+        pass
+    index = _read_json(_chats_index_path(), [])
+    index = [e for e in index if isinstance(e, dict) and e.get("id") != chat_id]
+    _write_json(_chats_index_path(), index)
 
 
 def new_chat_id() -> str:

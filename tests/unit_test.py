@@ -10,7 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from olladesk.context import build_user_content, classify, extract_text
+from olladesk.context import build_api_content, classify, extract_text
 from olladesk.md import md_to_html
 from olladesk.updater import is_local_host, is_newer, parse_version
 
@@ -53,6 +53,32 @@ def test_md_links_only_http():
     assert 'href="javascript' not in html
 
 
+def test_md_table():
+    html = md_to_html("| a | b |\n|---|---|\n| 1 | 2 |")
+    assert "<table" in html
+    assert "<b>a</b>" in html and "<b>b</b>" in html
+    assert "<td>1</td>" in html and "<td>2</td>" in html
+
+
+def test_md_blockquote():
+    html = md_to_html("prima\n> una citazione\n> seconda riga\ndopo")
+    assert "<blockquote>" in html and "una citazione" in html
+    assert html.startswith("prima") and html.endswith("dopo")
+
+
+def test_md_nested_list():
+    html = md_to_html("- a\n  - a1\n- b")
+    assert "<li>a<ul><li>a1</li></ul></li>" in html
+    assert "<li>b</li>" in html
+
+
+def test_md_under_bold_and_intraword_safe():
+    html = md_to_html("__grande__ e foo__bar__baz e var_name")
+    assert "<b>grande</b>" in html
+    assert "foo__bar__baz" in html          # underscore interni alla parola: intatti
+    assert "<i>name</i>" not in html
+
+
 # -------------------------------------------------------------- context.py
 
 def test_context_dotfiles_recognized():
@@ -75,15 +101,21 @@ def test_context_bounded_read():
     assert len(text) <= 120_000 + 60                  # troncato, senza leggere tutto
 
 
-def test_context_build_user_content():
+def test_context_build_api_content():
     d = Path(tempfile.mkdtemp())
     (d / "note.txt").write_text("CIAO", encoding="utf-8")
-    full, images, warnings = build_user_content(
-        "domanda",
-        [{"path": str(d / "note.txt"), "name": "note.txt", "kind": "text"}],
-    )
+    msg = {"display": "domanda",
+           "attachments_meta": [{"path": str(d / "note.txt"), "name": "note.txt", "kind": "text"}]}
+    full, warnings = build_api_content(msg, include_full=True)
     assert "CIAO" in full and "dati non attendibili" in full
-    assert not images and not warnings
+    assert not warnings
+    short, _w = build_api_content(msg, include_full=False)
+    assert "CIAO" not in short and "note.txt" in short
+    msg2 = {"display": "domanda", "web_block": "Risultati della ricerca web"}
+    full2, _w2 = build_api_content(msg2, include_full=True)
+    assert "Risultati della ricerca web" in full2
+    short2, _w3 = build_api_content(msg2, include_full=False)
+    assert "Risultati della ricerca web" not in short2
 
 
 # --------------------------------------------------------------- updater.py
@@ -123,6 +155,78 @@ def test_settings_roundtrip_and_permissions():
             os.environ.pop("XDG_CONFIG_HOME", None)
         else:
             os.environ["XDG_CONFIG_HOME"] = old
+
+
+def test_chat_split_and_legacy_migration():
+    from olladesk import config
+    old = os.environ.get("XDG_CONFIG_HOME")
+    os.environ["XDG_CONFIG_HOME"] = tempfile.mkdtemp()
+    try:
+        base = config.config_dir()
+        # simula il vecchio archivio monolitico
+        legacy = [{"id": "abc", "title": "Vecchia", "model": "m", "updated": 5,
+                   "messages": [{"role": "user", "content": "ciao"}]}]
+        (base / "chats.json").write_text(json.dumps(legacy), encoding="utf-8")
+
+        index = config.load_chats()
+        assert [c["id"] for c in index] == ["abc"]          # migrata nell'indice
+        full = config.load_chat("abc")
+        assert full["messages"][0]["content"] == "ciao"
+        assert (base / "chats.json.bak").exists()           # backup del legacy
+
+        full["messages"].append({"role": "assistant", "content": "ehi"})
+        config.save_chat(full)
+        assert config.load_chat("abc")["messages"][0]["content"] == "ciao"
+        assert len(config.load_chats()) == 1
+
+        config.rename_chat("abc", "Nuovo titolo")
+        assert config.load_chats()[0]["title"] == "Nuovo titolo"
+        config.delete_chat("abc")
+        assert config.load_chat("abc") is None and config.load_chats() == []
+    finally:
+        if old is None:
+            os.environ.pop("XDG_CONFIG_HOME", None)
+        else:
+            os.environ["XDG_CONFIG_HOME"] = old
+
+
+# --------------------------------------------------------- secrets_store.py
+
+def test_secrets_store_stub_and_fallback():
+    from olladesk import secrets_store
+
+    class FakeKR:
+        def __init__(self):
+            self.store = {}
+
+        def set_password(self, svc, name, val):
+            self.store[(svc, name)] = val
+
+        def get_password(self, svc, name):
+            return self.store.get((svc, name))
+
+        def delete_password(self, svc, name):
+            self.store.pop((svc, name), None)
+
+    fake = FakeKR()
+    orig = secrets_store._keyring
+    secrets_store._keyring = lambda: fake
+    try:
+        assert secrets_store.available()
+        assert secrets_store.save_api_key("SK-123")
+        assert secrets_store.load_api_key() == "SK-123"
+        assert secrets_store.save_api_key("")      # rimozione
+        assert secrets_store.load_api_key() == ""
+    finally:
+        secrets_store._keyring = orig
+    # senza keyring: fallback silenzioso (la chiave resta nel file, chmod 600)
+    secrets_store._keyring = lambda: None
+    try:
+        assert not secrets_store.available()
+        assert secrets_store.load_api_key() == ""
+        assert secrets_store.save_api_key("x") is False
+    finally:
+        secrets_store._keyring = orig
 
 
 def main() -> int:

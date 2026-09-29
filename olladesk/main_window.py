@@ -6,6 +6,8 @@ richiesta a Ollama).
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QGuiApplication, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
@@ -19,7 +21,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from . import config, context, theme, web_search
+from . import config, context, secrets_store, theme, web_search
 from .ollama_client import ApiWorker, ChatWorker, format_stats
 from .widgets.chat_area import ChatArea
 from .widgets.model_manager import ModelManagerDialog
@@ -220,7 +222,7 @@ class MainWindow(QMainWindow):
             self.chat_area.clear_messages()
             for m in self.current_chat["messages"]:
                 self.chat_area.add_message(
-                    m["role"], m.get("display", m["content"]), m.get("ts"),
+                    m["role"], m.get("display", m.get("content", "")), m.get("ts"),
                     m.get("attachments"), bool(m.get("web")), m.get("stats"),
                 )
 
@@ -340,8 +342,10 @@ class MainWindow(QMainWindow):
 
     # -------------------------------------------------------------- conversazioni
 
-    def _save_chats(self) -> None:
-        config.save_chats(self.chats)
+    def _persist_chat(self) -> None:
+        """Salva la conversazione corrente (file dedicato + indice)."""
+        if self.current_chat is not None:
+            config.save_chat(self.current_chat)
 
     def _new_chat(self) -> None:
         if self._busy():
@@ -354,14 +358,18 @@ class MainWindow(QMainWindow):
     def _open_chat(self, chat_id: str) -> None:
         if self._busy():
             return
-        chat = next((c for c in self.chats if c["id"] == chat_id), None)
+        chat = config.load_chat(chat_id)
         if chat is None:
+            # elencata ma il file è mancante: ripulisci l'indice
+            config.delete_chat(chat_id)
+            self.chats = [c for c in self.chats if c["id"] != chat_id]
+            self.sidebar.set_chats(self.chats, None)
             return
         self.current_chat = chat
         self.chat_area.clear_messages()
         for m in chat["messages"]:
             self.chat_area.add_message(
-                m["role"], m.get("display", m["content"]), m.get("ts"),
+                m["role"], m.get("display", m.get("content", "")), m.get("ts"),
                 m.get("attachments"), bool(m.get("web")), m.get("stats"),
             )
         # ripristina il modello con cui era nata la conversazione
@@ -374,16 +382,18 @@ class MainWindow(QMainWindow):
         self.chat_area.focus_input()
 
     def _rename_chat(self, chat_id: str, title: str) -> None:
-        chat = next((c for c in self.chats if c["id"] == chat_id), None)
-        if chat:
-            chat["title"] = title.strip()
-            chat["updated"] = config.now()
-            self._save_chats()
-            self.sidebar.set_chats(self.chats, chat_id)
+        if self.current_chat and self.current_chat["id"] == chat_id:
+            self.current_chat["title"] = title.strip()
+            self.current_chat["updated"] = config.now()
+            self._persist_chat()
+        else:
+            config.rename_chat(chat_id, title.strip())
+        self.chats = config.load_chats()
+        self.sidebar.set_chats(self.chats, chat_id)
 
     def _delete_chat(self, chat_id: str) -> None:
+        config.delete_chat(chat_id)
         self.chats = [c for c in self.chats if c["id"] != chat_id]
-        self._save_chats()
         if self.current_chat and self.current_chat["id"] == chat_id:
             self.current_chat = None
             self.chat_area.clear_messages()
@@ -413,16 +423,24 @@ class MainWindow(QMainWindow):
 
         atts = self.chat_area.attachments()
         web_on = self.chat_area.web_search_active()
-        full_text, image_atts, warnings = context.build_user_content(text, atts)
+
+        # validazione rapida: il contenuto dei file viene letto alla generazione
+        meta, warnings = [], []
+        for a in atts:
+            p = Path(a["path"])
+            if not p.exists():
+                warnings.append(f"file non leggibile: {a['name']}")
+                continue
+            meta.append({"path": str(p), "name": a["name"], "kind": a["kind"]})
         if warnings:
             self.chat_area.add_system_note("⚠ " + "\n⚠ ".join(warnings))
 
         self._pending_user = {
             "display": text,
-            "full": full_text,
-            "image_paths": [a["path"] for a in image_atts],
+            "attachments_meta": meta,
+            "attachments": [a["name"] for a in meta],
+            "image_paths": [a["path"] for a in meta if a["kind"] == "image"],
             "web": web_on,
-            "attachments": [a["name"] for a in atts],
             "model": model,
         }
         self.chat_area.clear_attachments()
@@ -445,7 +463,7 @@ class MainWindow(QMainWindow):
             self._pending_user["display"],
             int(self.settings.get("web_results", 5)),
             provider=self.settings.get("web_provider", "duckduckgo"),
-            api_key=self.settings.get("web_api_key", ""),
+            api_key=secrets_store.load_api_key() or self.settings.get("web_api_key", ""),
             searxng_url=self.settings.get("web_searxng_url", ""),
             parent=self,
         )
@@ -461,9 +479,7 @@ class MainWindow(QMainWindow):
             return
         self.chat_area.end_stream(discard_empty=True)
         if self._pending_user is not None:
-            self._pending_user["full"] = (
-                f"{self._pending_user['full']}\n\n---\n{block}\n---"
-            )
+            self._pending_user["web_block"] = block
             self._commit_user_message()
 
     def _on_web_failed(self, err: str) -> None:
@@ -484,24 +500,28 @@ class MainWindow(QMainWindow):
             return
         model = p["model"]
         if self.current_chat is None:
+            title = p["display"][:48] + ("…" if len(p["display"]) > 48 else "")
             self.current_chat = {
                 "id": config.new_chat_id(),
-                "title": p["display"][:48] + ("…" if len(p["display"]) > 48 else ""),
+                "title": title or "Allegati",
                 "model": model,
                 "updated": config.now(),
                 "messages": [],
             }
-            self.chats.append(self.current_chat)
+            self.chats.append({"id": self.current_chat["id"], "title": self.current_chat["title"],
+                               "model": model, "updated": self.current_chat["updated"]})
 
         ts = config.now()
         msg = {
             "role": "user",
-            "content": p["full"],
             "display": p["display"],
             "ts": ts,
             "attachments": p["attachments"],
+            "attachments_meta": p["attachments_meta"],
             "web": p["web"],
         }
+        if p.get("web_block"):
+            msg["web_block"] = p["web_block"]
         if p["image_paths"]:
             msg["image_paths"] = p["image_paths"]
         self.current_chat["messages"].append(msg)
@@ -511,7 +531,7 @@ class MainWindow(QMainWindow):
             "user", p["display"], ts, p["attachments"] or None, p["web"]
         )
         self.chat_area.clear_input()
-        self._save_chats()
+        self._persist_chat()
         self.sidebar.set_chats(self.chats, self.current_chat["id"])
         self._start_generation()
 
@@ -520,20 +540,30 @@ class MainWindow(QMainWindow):
         s = self.settings
 
         messages: list[dict] = []
+        warnings: list[str] = []
         if s["system_prompt"]:
             messages.append({"role": "system", "content": s["system_prompt"]})
         limit = max(0, int(s["history_limit"]))
         history = self.current_chat["messages"][-limit:] if limit else []
         last_idx = len(history) - 1
         for i, m in enumerate(history):
-            entry = {"role": m["role"], "content": m["content"]}
-            # le immagini viaggiano solo con l'ultimo messaggio utente (context saving)
-            if i == last_idx and m["role"] == "user" and m.get("image_paths"):
+            if m["role"] == "assistant":
+                messages.append({"role": "assistant", "content": m.get("content", "")})
+                continue
+            # il contenuto completo di allegati/ricerca web viaggia solo con
+            # l'ultimo turno utente: i precedenti lasciano un segnaposto
+            full = i == last_idx
+            content, w = context.build_api_content(m, include_full=full)
+            warnings.extend(w)
+            entry = {"role": "user", "content": content}
+            if full and m.get("image_paths"):
                 imgs = [context.image_to_b64(p) for p in m["image_paths"]]
                 imgs = [b for b in imgs if b]
                 if imgs:
                     entry["images"] = imgs
             messages.append(entry)
+        if warnings:
+            self.chat_area.add_system_note("⚠ " + "\n⚠ ".join(warnings))
 
         from .widgets.model_params import options_for_model
 
@@ -582,7 +612,7 @@ class MainWindow(QMainWindow):
                 msg["stats"] = stats
             self.current_chat["messages"].append(msg)
             self.current_chat["updated"] = config.now()
-            self._save_chats()
+            self._persist_chat()
             self.sidebar.set_chats(self.chats, self.current_chat["id"])
         self._set_idle()
 
@@ -598,7 +628,7 @@ class MainWindow(QMainWindow):
                 {"role": "assistant", "content": partial, "ts": config.now()}
             )
             self.current_chat["updated"] = config.now()
-            self._save_chats()
+            self._persist_chat()
             self.sidebar.set_chats(self.chats, self.current_chat["id"])
         self.chat_area.add_system_note(
             err + "\n\nSuggerimento: avvia Ollama con `ollama serve` e verifica l'URL nelle impostazioni (Ctrl+,)."

@@ -119,7 +119,7 @@ wait_ms(300)
 import json
 
 cfg = os.environ["XDG_CONFIG_HOME"]
-chats = json.load(open(f"{cfg}/olladesk/chats.json"))
+chats = json.load(open(f"{cfg}/olladesk/chats/index.json"))
 assert chats, "chats.json vuoto"
 params = json.load(open(f"{cfg}/olladesk/model_params.json"))
 print("chats salvate:", len(chats), "| profili parametri:", list(params.keys()))

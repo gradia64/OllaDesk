@@ -6,6 +6,7 @@ attivare la ricerca web; gli allegati compaiono come chip sopra l'input.
 """
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 from PySide6.QtCore import QSize, Qt, QTimer, Signal
@@ -39,6 +40,7 @@ FILE_FILTER = (
 
 class ChatInput(QPlainTextEdit):
     sendPressed = Signal()
+    pathsDropped = Signal(list)   # percorsi trascinati o incollati (file/immagini)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -47,6 +49,7 @@ class ChatInput(QPlainTextEdit):
         self.setTabChangesFocus(True)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.send_on_enter = True
+        self.setAcceptDrops(True)
         self.textChanged.connect(self._auto_height)
         self._auto_height()
 
@@ -68,6 +71,53 @@ class ChatInput(QPlainTextEdit):
         fm = self.fontMetrics()
         h = max(2, min(8, int(doc_h))) * fm.lineSpacing() + 22
         self.setFixedHeight(min(190, max(44, h)))
+
+    # trascina file sull'input e incolla immagini/URL dai mimetype
+    def dragEnterEvent(self, ev) -> None:  # noqa: N802 (API Qt)
+        if ev.mimeData().hasUrls() or ev.mimeData().hasImage():
+            ev.acceptProposedAction()
+        else:
+            super().dragEnterEvent(ev)
+
+    def dragMoveEvent(self, ev) -> None:  # noqa: N802 (API Qt)
+        if ev.mimeData().hasUrls() or ev.mimeData().hasImage():
+            ev.acceptProposedAction()
+        else:
+            super().dragMoveEvent(ev)
+
+    def dropEvent(self, ev) -> None:  # noqa: N802 (API Qt)
+        if ev.mimeData().hasUrls():
+            self.pathsDropped.emit([u.toLocalFile() for u in ev.mimeData().urls() if u.isLocalFile()])
+            ev.acceptProposedAction()
+        elif ev.mimeData().hasImage():
+            self._paste_image(ev.mimeData().imageData())
+            ev.acceptProposedAction()
+        else:
+            super().dropEvent(ev)
+
+    def insertFromMimeData(self, mime) -> None:  # noqa: N802 (API Qt)
+        """Intercolla incolla Ctrl+V: allega file/immagini invece del testo."""
+        if mime.hasUrls():
+            local = [u.toLocalFile() for u in mime.urls() if u.isLocalFile()]
+            if local:
+                self.pathsDropped.emit(local)
+                return
+        if mime.hasImage():
+            self._paste_image(mime.imageData())
+            return
+        super().insertFromMimeData(mime)
+
+    def _paste_image(self, image) -> None:
+        import tempfile
+
+        from PySide6.QtGui import QImage
+
+        if not isinstance(image, QImage) or image.isNull():
+            return
+        stamp = time.strftime("%Y%m%d-%H%M%S")
+        path = str(Path(tempfile.gettempdir()) / f"olladesk-incollato-{stamp}.png")
+        if image.save(path, "PNG"):
+            self.pathsDropped.emit([path])
 
 
 class ChatArea(QWidget):
@@ -148,6 +198,7 @@ class ChatArea(QWidget):
 
         self.input = ChatInput(self.input_frame)
         self.input.sendPressed.connect(self._emit_send)
+        self.input.pathsDropped.connect(self._handle_dropped_paths)
         fl.addWidget(self.input, 1)
 
         self.send_btn = QPushButton("➤", self.input_frame)
@@ -171,6 +222,26 @@ class ChatArea(QWidget):
         self._stream_timer.setInterval(70)
         self._stream_timer.timeout.connect(self._flush_stream)
         self._stream_buffer = ""
+
+        # trascinamento file su tutta l'area chat (i messaggi o l'input)
+        self.setAcceptDrops(True)
+
+    def dragEnterEvent(self, ev) -> None:  # noqa: N802 (API Qt)
+        if ev.mimeData().hasUrls():
+            ev.acceptProposedAction()
+
+    def dropEvent(self, ev) -> None:  # noqa: N802 (API Qt)
+        paths = [u.toLocalFile() for u in ev.mimeData().urls() if u.isLocalFile()]
+        if paths:
+            self._handle_dropped_paths(paths)
+            ev.acceptProposedAction()
+
+    def _handle_dropped_paths(self, paths: list) -> None:
+        rejected = self.add_attachment_paths(paths)
+        if rejected:
+            self.add_system_note(
+                "⚠ File ignorati (tipo non supportato o non trovati): " + ", ".join(rejected)
+            )
 
     # ------------------------------------------------------------ benvenuto
 

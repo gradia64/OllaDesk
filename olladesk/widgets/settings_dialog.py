@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .. import config, updater
+from .. import config, secrets_store, updater
 from ..ollama_client import ApiWorker
 from .model_params import ModelParamsTab
 
@@ -143,13 +143,31 @@ class SettingsDialog(QDialog):
         )
         form.addRow("Provider ricerca web:", self.web_provider_combo)
 
-        self.web_key_edit = QLineEdit(s.get("web_api_key", ""), w)
+        self.web_key_edit = QLineEdit("", w)
         self.web_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
-        self.web_key_edit.setPlaceholderText("chiave API dell'account ollama.com")
-        self.web_key_edit.setToolTip(
-            "Chiave creabile su ollama.com → Impostazioni → API Keys.\n"
-            "Serve al provider «Ollama Cloud»; gli altri provider non la richiedono."
-        )
+        self._keyring_ok = secrets_store.available()
+        self._file_key = s.get("web_api_key", "")
+        if self._keyring_ok:
+            # migrazione: una chiave salvata nel file passa al portachiavi
+            if self._file_key and not secrets_store.load_api_key():
+                secrets_store.save_api_key(self._file_key)
+            stored = bool(secrets_store.load_api_key())
+            self.web_key_edit.setPlaceholderText(
+                "lascia vuoto per mantenere quella nel portachiavi di KDE"
+                + (" (una chiave è già salvata)" if stored else " (nessuna chiave salvata)")
+            )
+            self.web_key_edit.setToolTip(
+                "Chiave creabile su ollama.com → Impostazioni → API Keys.\n"
+                "Viene salvata nel portachiavi di sistema (KWallet), mai nei file di configurazione."
+            )
+        else:
+            self.web_key_edit.setText(self._file_key)
+            self.web_key_edit.setPlaceholderText("chiave API dell'account ollama.com")
+            self.web_key_edit.setToolTip(
+                "Chiave creabile su ollama.com → Impostazioni → API Keys.\n"
+                "Portachiavi non disponibile: la chiave resta in settings.json "
+                "(file protetto con permessi 600). Installa `keyring` per salvarla in KWallet."
+            )
         form.addRow("Chiave API:", self.web_key_edit)
 
         self.searxng_edit = QLineEdit(s.get("web_searxng_url", ""), w)
@@ -389,7 +407,8 @@ class SettingsDialog(QDialog):
             "history_limit": self.hist_spin.value(),
             "web_results": self.web_spin.value(),
             "web_provider": self.web_provider_combo.currentData() or "duckduckgo",
-            "web_api_key": self.web_key_edit.text().strip(),
+            # con il portachiavi la chiave NON finisce mai nel file di config
+            "web_api_key": "" if self._keyring_ok else self.web_key_edit.text().strip(),
             "web_searxng_url": self.searxng_edit.text().strip() or "http://localhost:8888",
             "system_prompt": self.sys_prompt.toPlainText().strip(),
         }
@@ -410,6 +429,10 @@ class SettingsDialog(QDialog):
         # «Salva» salva TUTTO: anche i parametri modificati nella seconda scheda
         if self.params_tab.is_dirty():
             self.params_tab.save_profile()
+        if self._keyring_ok:
+            new_key = self.web_key_edit.text().strip()
+            if new_key:
+                secrets_store.save_api_key(new_key)
         settings = self.collect_settings()
         config.save_settings(settings)
         self.applied.emit(settings)

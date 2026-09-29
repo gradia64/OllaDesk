@@ -1,9 +1,9 @@
-"""Conversione minima Markdown → HTML (subset Qt rich text) per i messaggi.
+"""Conversione Markdown → HTML (subset Qt rich text) per i messaggi.
 
-Copre gli elementi più comuni nelle risposte dei modelli: blocchi di codice,
-inline code, grassetto, corsivo, intestazioni, elenchi, link e righe orizzontali.
-Durante lo streaming un blocco di codice non ancora chiuso viene comunque
-renderizzato come blocco.
+Copre: blocchi di codice, inline code, grassetto (** e __), corsivo (* e _),
+intestazioni, elenchi anche annidati, tabelle GFM, citazioni, link e righe
+orizzontali. Durante lo streaming un blocco di codice non ancora chiuso viene
+comunque renderizzato come blocco.
 """
 from __future__ import annotations
 
@@ -15,10 +15,15 @@ _INLINE_CODE_RE = re.compile(r"`([^`\n]+)`")
 _LINK_RE = re.compile(r"\[([^\]]+)\]\((https?://[^)\s]+)\)")
 _BOLD_RE = re.compile(r"\*\*([^*\n]+)\*\*")
 _ITALIC_RE = re.compile(r"(?<![\w*])\*([^*\n]+)\*(?![\w*])")
+_UNDER_BOLD_RE = re.compile(r"(?<![\w\\])__([^_\n]+)__(?![\w])")
+_UNDER_ITALIC_RE = re.compile(r"(?<![\w\\])_([^_\n]+)_(?![\w])")
 _HEADING_RE = re.compile(r"^(#{1,6})\s+(.+)$")
 _HR_RE = re.compile(r"^\s{0,3}(?:-{3,}|\*{3,})\s*$")
-_UL_RE = re.compile(r"^\s{0,3}[-*+]\s+(.+)$")
-_OL_RE = re.compile(r"^\s{0,3}\d+[.)]\s+(.+)$")
+_UL_RE = re.compile(r"^(\s*)[-*+]\s+(.+)$")
+_OL_RE = re.compile(r"^(\s*)\d+[.)]\s+(.+)$")
+_BLOCK_JOIN_RE = re.compile(
+    r"^<(?:li|ul|ol|/ul|/ol|h[1-6]|hr|table|/table|blockquote|/blockquote)\b"
+)
 
 _MAX_CODE_LINE = 110  # lunghezza massima di una riga di codice prima dell'a-capo
 
@@ -42,80 +47,154 @@ def _code_block_html(code: str, code_bg: str, code_fg: str) -> str:
     )
 
 
-def _render_segment(seg: str, inline_code_color: str) -> str:
-    # inline code viene messo da parte prima dell'escape HTML
+def _inline(seg: str, inline_code_color: str) -> str:
+    """Escape HTML + formattazione inline (codice, link, grassetto, corsivo)."""
     inline: list[str] = []
 
-    def _stash_inline(m: re.Match) -> str:
-        inline.append(f"<code><font color=\"{inline_code_color}\">{html.escape(m.group(1))}</font></code>")
+    def _stash(m: re.Match) -> str:
+        inline.append(
+            f"<code><font color=\"{inline_code_color}\">{html.escape(m.group(1))}</font></code>"
+        )
         return f"\x00I{len(inline) - 1}\x00"
 
-    seg = _INLINE_CODE_RE.sub(_stash_inline, seg)
+    seg = _INLINE_CODE_RE.sub(_stash, seg)
     seg = html.escape(seg)
-
     seg = _LINK_RE.sub(r'<a href="\2">\1</a>', seg)
     seg = _BOLD_RE.sub(r"<b>\1</b>", seg)
+    seg = _UNDER_BOLD_RE.sub(r"<b>\1</b>", seg)
     seg = _ITALIC_RE.sub(r"<i>\1</i>", seg)
-
-    lines = seg.split("\n")
-    out: list[str] = []
-    ul = ol = False
-
-    def close_lists() -> None:
-        nonlocal ul, ol
-        if ul:
-            out.append("</ul>")
-            ul = False
-        if ol:
-            out.append("</ol>")
-            ol = False
-
-    for ln in lines:
-        m = _HEADING_RE.match(ln)
-        if m:
-            close_lists()
-            level = len(m.group(1))
-            out.append(f"<h{level}>{m.group(2)}</h{level}>")
-            continue
-        if _HR_RE.match(ln):
-            close_lists()
-            out.append("<hr>")
-            continue
-        m = _UL_RE.match(ln)
-        if m:
-            if ol:
-                out.append("</ol>")
-                ol = False
-            if not ul:
-                out.append("<ul>")
-                ul = True
-            out.append(f"<li>{m.group(1)}</li>")
-            continue
-        m = _OL_RE.match(ln)
-        if m:
-            if ul:
-                out.append("</ul>")
-                ul = False
-            if not ol:
-                out.append("<ol>")
-                ol = True
-            out.append(f"<li>{m.group(1)}</li>")
-            continue
-        close_lists()
-        out.append(ln)
-    close_lists()
-
-    # unisce i blocchi: tra elementi di elenco, intestazioni e righe orizzontali
-    # non vanno <br> (creavano righe vuote in più)
-    block_re = re.compile(r"^<(?:li|ul|ol|/ul|/ol|h[1-6]|hr)\b")
-    joined = out[0] if out else ""
-    for i in range(1, len(out)):
-        if not (block_re.match(out[i - 1]) or block_re.match(out[i])):
-            joined += "<br>"
-        joined += out[i]
-    seg = joined
+    seg = _UNDER_ITALIC_RE.sub(r"<i>\1</i>", seg)
     seg = re.sub(r"\x00I(\d+)\x00", lambda m: inline[int(m.group(1))], seg)
     return seg
+
+
+def _is_table_sep(line: str) -> bool:
+    s = line.strip().strip("|")
+    if not s:
+        return False
+    cells = s.split("|")
+    return bool(cells) and all(re.fullmatch(r"\s*:?-+:?\s*", c) for c in cells)
+
+
+def _split_row(line: str) -> list[str]:
+    s = line.strip()
+    if s.startswith("|"):
+        s = s[1:]
+    if s.endswith("|"):
+        s = s[:-1]
+    return [c.strip() for c in s.split("|")]
+
+
+def _table_html(rows: list[str], inline_code_color: str, header_bg: str) -> str:
+    # rows = [intestazione, righe di dati...] (il separatore non è incluso)
+    out = ['<table width="100%" cellspacing="0" cellpadding="5" border="1">']
+    out.append(
+        f'<tr bgcolor="{header_bg}">'
+        + "".join(f"<td><b>{_inline(c, inline_code_color)}</b></td>" for c in _split_row(rows[0]))
+        + "</tr>"
+    )
+    for r in rows[1:]:
+        out.append(
+            "<tr>"
+            + "".join(f"<td>{_inline(c, inline_code_color)}</td>" for c in _split_row(r))
+            + "</tr>"
+        )
+    out.append("</table>")
+    return "".join(out)
+
+
+def _list_html(items: list[tuple[int, str, str]], pos: int, indent: int,
+               kind: str, inline_code_color: str) -> tuple[str, int]:
+    """Costruisce <ul>/<ol> (annidati) da [(indent, kind, testo)]."""
+    out = [f"<{kind}>"]
+    while pos < len(items):
+        ind, k, text = items[pos]
+        if ind < indent:
+            break
+        if ind > indent:
+            sub, pos = _list_html(items, pos, ind, k, inline_code_color)
+            if out[-1].endswith("</li>"):
+                out[-1] = out[-1][:-5] + sub + "</li>"
+            else:
+                out.append(sub)
+            continue
+        if k != kind:
+            out.append(f"</{kind}>")
+            sub, pos = _list_html(items, pos, ind, k, inline_code_color)
+            out.append(sub)
+            continue
+        out.append(f"<li>{_inline(text, inline_code_color)}</li>")
+        pos += 1
+    out.append(f"</{kind}>")
+    return "".join(out), pos
+
+
+def _render_segment(seg: str, inline_code_color: str, header_bg: str) -> str:
+    lines = seg.split("\n")
+    parts: list[tuple[str, str]] = []   # ("h", html già pronto) | ("t", testo grezzo)
+    i, n = 0, len(lines)
+    while i < n:
+        ln = lines[i]
+        # tabella GFM: riga con pipe seguita dalla riga separatore
+        if "|" in ln and i + 1 < n and _is_table_sep(lines[i + 1]):
+            rows = [ln]
+            i += 2   # salta il separatore
+            while i < n and "|" in lines[i] and lines[i].strip():
+                rows.append(lines[i])
+                i += 1
+            parts.append(("h", _table_html(rows, inline_code_color, header_bg)))
+            continue
+        # blockquote: righe consecutive che iniziano con «>»
+        if ln.lstrip().startswith(">"):
+            quote = []
+            while i < n and lines[i].lstrip().startswith(">"):
+                quote.append(lines[i].lstrip()[1:].lstrip())
+                i += 1
+            inner = _render_segment("\n".join(quote), inline_code_color, header_bg)
+            parts.append(("h", f"<blockquote>{inner}</blockquote>"))
+            continue
+        # elenchi, anche annidati
+        if _UL_RE.match(ln) or _OL_RE.match(ln):
+            items = []
+            while i < n:
+                m = _UL_RE.match(lines[i])
+                if m:
+                    items.append((len(m.group(1)), "ul", m.group(2)))
+                    i += 1
+                    continue
+                m = _OL_RE.match(lines[i])
+                if m:
+                    items.append((len(m.group(1)), "ol", m.group(2)))
+                    i += 1
+                    continue
+                break
+            base = min(ind for ind, _k, _t in items)
+            html_list, _pos = _list_html(items, 0, base, items[0][1], inline_code_color)
+            parts.append(("h", html_list))
+            continue
+        m = _HEADING_RE.match(ln)
+        if m:
+            level = len(m.group(1))
+            parts.append(("h", f"<h{level}>{m.group(2)}</h{level}>"))
+            i += 1
+            continue
+        if _HR_RE.match(ln):
+            parts.append(("h", "<hr>"))
+            i += 1
+            continue
+        parts.append(("t", ln))
+        i += 1
+
+    joined = ""
+    prev_block = False
+    for kind, val in parts:
+        piece = val if kind == "h" else _inline(val, inline_code_color)
+        cur_block = kind == "h"
+        if joined and not (prev_block or cur_block):
+            joined += "<br>"
+        joined += piece
+        prev_block = cur_block
+    return joined
 
 
 def md_to_html(
@@ -137,10 +216,10 @@ def md_to_html(
     for m in _FENCE_SPLIT_RE.finditer(text):
         before = text[pos:m.start()]
         if before.strip():
-            parts.append(_render_segment(before, inline_code_color))
+            parts.append(_render_segment(before, inline_code_color, code_bg))
         parts.append(_code_block_html(m.group(2).rstrip("\n"), code_bg, code_fg))
         pos = m.end()
     tail = text[pos:]
     if tail.strip():
-        parts.append(_render_segment(tail, inline_code_color))
+        parts.append(_render_segment(tail, inline_code_color, code_bg))
     return "".join(parts)

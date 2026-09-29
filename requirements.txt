@@ -1,4 +1,5 @@
 PySide6>=6.6
 
-# Opzionale: per allegare i PDF alle chat
+# Opzionali: PDF allegati e chiave API nel portachiavi (KWallet)
 # pypdf>=4.0
+# keyring>=24

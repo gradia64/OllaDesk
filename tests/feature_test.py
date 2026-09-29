@@ -91,14 +91,14 @@ rejected = win.chat_area.add_attachment_paths(
 )
 assert rejected == [], rejected  # .pdf è accettato: l'avviso arriva all'invio (pypdf)
 
-full, imgs, warns = context.build_user_content(
-    "Cosa c'è nella nota?",
-    win.chat_area.attachments(),
-)
+pseudo = {"display": "Cosa c'è nella nota?", "attachments_meta": win.chat_area.attachments()}
+full, warns = context.build_api_content(pseudo, include_full=True)
 assert "ZANZARA-42" in full, full
-assert len(imgs) == 1 and imgs[0]["kind"] == "image"
-assert any("pypdf" in w for w in warns), warns  # PDF finto → avviso pypdf
-print(f"4. allegati OK (immagini: {len(imgs)}, avvisi: {warns})")
+assert "dati non attendibili" in full
+assert any("pypdf" in w for w in warns), warns   # PDF finto → avviso pypdf
+short, _w = context.build_api_content(pseudo, include_full=False)
+assert "ZANZARA-42" not in short and "note.txt" in short   # nei turni passati: solo segnaposto
+print("4. allegati OK (contenuto allegato solo al turno corrente)")
 
 # invio reale con allegato SOLO testo (llama3.1 non è un modello visione:
 # le immagini vengono rifiutate dal server, errore mostrato in chat)
@@ -113,8 +113,23 @@ while win._busy() and time.time() - t0 < 90:
     wait_ms(200)
 app.processEvents()
 last_user = win.current_chat["messages"][-2]
-assert last_user["role"] == "user" and "ZANZARA-42" in last_user["content"]
-assert last_user["attachments"] == ["note.txt"]
+assert last_user["role"] == "user" and last_user["attachments"] == ["note.txt"]
+
+# 4c. drag&drop e incolla immagini (simulati via mimetype Qt)
+from PySide6.QtCore import QMimeData, QUrl
+mime = QMimeData()
+mime.setUrls([QUrl.fromLocalFile(f"{tmpdir}/note.txt")])
+win.chat_area.input.insertFromMimeData(mime)
+assert any(a["name"] == "note.txt" for a in win.chat_area.attachments()), "drop file"
+from PySide6.QtGui import QImage
+img = QImage(3, 3, QImage.Format.Format_RGB32)
+img.fill(0xFF00FF00)
+mime2 = QMimeData()
+mime2.setImageData(img)
+win.chat_area.input.insertFromMimeData(mime2)
+assert any(a["kind"] == "image" for a in win.chat_area.attachments()), "incolla immagine"
+win.chat_area.clear_attachments()
+print("4c. drag&drop file + incolla immagine OK")
 win.grab().save(f"{SHOTS}/12_attachment_done.png")
 print("4b. invio con allegato OK, il modello ha visto il contenuto")
 
