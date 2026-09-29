@@ -68,11 +68,9 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
 
-        # avvio: seleziona l'ultima conversazione, poi contatta il server
-        # (load_chats è già ordinato dalla più recente)
-        if self.chats:
-            self._open_chat(self.chats[0]["id"])
-        self.sidebar.set_chats(self.chats, self.current_chat["id"] if self.current_chat else None)
+        # avvio: pagina predefinita di benvenuto; le conversazioni salvate si
+        # aprono solo se l'utente le sceglie dalla colonna di sinistra
+        self.sidebar.set_chats(self.chats, None)
 
         self._status_timer = QTimer(self)
         self._status_timer.setInterval(30_000)
