@@ -4,12 +4,13 @@ from __future__ import annotations
 import html
 import time
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QEvent, Qt, QTimer
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QMenu,
     QSizePolicy,
     QToolButton,
     QVBoxLayout,
@@ -72,6 +73,9 @@ class MessageWidget(QFrame):
             | Qt.TextInteractionFlag.LinksAccessibleByMouse
         )
         self.label.linkActivated.connect(lambda _u: None)
+        # menu contestuale dedicato (tasto destro): «Copia messaggio» sempre
+        # disponibile, senza dover prima selezionare il testo
+        self.label.installEventFilter(self)
         inner.addWidget(self.label)
 
         meta_row = QHBoxLayout()
@@ -80,12 +84,12 @@ class MessageWidget(QFrame):
         self.meta = QLabel(self)
         self.meta.setObjectName("metaLabel")
         meta_row.addWidget(self.meta)
-        if role == "assistant":
-            self.copy_btn = QToolButton(self)
-            self.copy_btn.setText("⧉")
-            self.copy_btn.setToolTip("Copia messaggio")
-            self.copy_btn.clicked.connect(self._copy)
-            meta_row.addWidget(self.copy_btn)
+        # pulsante di copia su TUTTI i messaggi, non solo dell'assistente
+        self.copy_btn = QToolButton(self)
+        self.copy_btn.setText("⧉")
+        self.copy_btn.setToolTip("Copia messaggio")
+        self.copy_btn.clicked.connect(self._copy)
+        meta_row.addWidget(self.copy_btn)
         inner.addLayout(meta_row)
 
         self._update_meta(show_ts, stats=None)
@@ -93,10 +97,25 @@ class MessageWidget(QFrame):
 
     # ------------------------------------------------------------------ API
 
+    def eventFilter(self, obj, ev) -> bool:
+        if obj is self.label and ev.type() == QEvent.Type.ContextMenu:
+            menu = QMenu(self)
+            act_copy = menu.addAction("📋  Copia messaggio")
+            menu.addSeparator()
+            act_sel = menu.addAction("Seleziona tutto")
+            chosen = menu.exec(ev.globalPos())
+            if chosen is act_copy:
+                self._copy()
+            elif chosen is act_sel:
+                self.label.selectAll()
+            return True   # sostituisce il menu standard di QLabel
+        return super().eventFilter(obj, ev)
+
     def set_text(self, raw: str) -> None:
         self.raw = raw
         if raw:
             self.stop_animation()
+        self.copy_btn.setVisible(bool(raw))
         bg, fg, inline = theme.code_colors(self.theme_name)
         if raw:
             self.label.setText(md_to_html(raw, bg, fg, inline))
