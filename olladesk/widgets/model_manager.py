@@ -220,8 +220,18 @@ class ModelManagerDialog(QDialog):
             self.progress_label.setText(f"⚠ {err}")
 
     def _cancel_pull(self) -> None:
-        if self._pull_worker is not None:
-            self._pull_worker.stop()
+        """Annulla lo scaricamento e ripristina SUBITO la UI.
+
+        Il worker stoppato non emette più segnali (la connessione chiusa fa
+        uscire il thread in silenzio): se non ripristiniamo qui, la barra di
+        avanzamento resta visibile e «Scarica» disabilitato.
+        """
+        if self._pull_worker is None:
+            return
+        self._pull_worker.stop()
+        self._pull_running_ui(False)
+        self.progress_label.show()
+        self.progress_label.setText("⚠ Scaricamento annullato")
 
     # --------------------------------------------------------- eliminazione
 

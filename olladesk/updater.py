@@ -56,6 +56,18 @@ def update_command(local_path: str | None = None) -> list[str] | None:
     return [pkexec, "sh", "-c", INSTALL_CMD]
 
 
+def update_command_stdin() -> list[str] | None:
+    """`pkexec sh -s`: lo script arriva via stdin.
+
+    Meglio di un file temporaneo in /tmp, che resterebbe di proprietà
+    dell'utente mentre viene eseguito da root.
+    """
+    pkexec = shutil.which("pkexec")
+    if not pkexec:
+        return None
+    return [pkexec, "sh", "-s"]
+
+
 class UpdateCheckWorker(QThread):
     """Scarica il numero dell'ultima release di Ollama da GitHub."""
 

@@ -2,9 +2,13 @@
 
 La scheda interfaccia include anche la sezione «Aggiornamenti Ollama»:
 controllo dell'ultima release su GitHub e aggiornamento tramite lo script
-ufficiale (eseguito con pkexec, quindi con password di amministratore).
+ufficiale, scaricato in memoria e passato a sh via stdin (pkexec chiede la
+password di amministratore).
 """
 from __future__ import annotations
+
+import os
+from pathlib import Path
 
 from PySide6.QtCore import QProcess, Qt, Signal
 from PySide6.QtWidgets import (
@@ -348,24 +352,36 @@ class SettingsDialog(QDialog):
         self._download_worker.start()
 
     def _on_update_script_ready(self, path: str, size: int) -> None:
-        # lo script viene scaricato e mostrato PRIMA di essere eseguito come root
-        self.update_log.clear()
-        self.update_log.show()
-        self.update_status.setText(
-            f"Script ufficiale scaricato ({size} byte): in esecuzione con privilegi di "
-            "amministratore — inserisci la password quando richiesto…"
-        )
-        cmd = updater.update_command(local_path=path)
-        if not cmd:   # non dovrebbe accadere: verificato in _run_update
+        # lo script scaricato NON viene eseguito come file: root leggerebbe un
+        # percorso in /tmp scrivibile dall'utente. Il contenuto passa a `sh -s`
+        # via stdin e il file temporaneo viene subito eliminato.
+        try:
+            script = Path(path).read_text(encoding="utf-8", errors="replace")
+            os.unlink(path)
+        except OSError as e:
+            self.update_status.setText(f"⚠ Lettura dello script scaricato non riuscita: {e}")
+            self.check_btn.setEnabled(True)
+            return
+        cmd = updater.update_command_stdin()
+        if cmd is None:
             self.update_status.setText("⚠ `pkexec` non disponibile sul sistema.")
             self.check_btn.setEnabled(True)
             return
+        self.update_log.clear()
+        self.update_log.show()
+        self.update_status.setText(
+            f"Script ufficiale scaricato ({size} byte): passa a sh via stdin, esecuzione "
+            "con privilegi di amministratore — inserisci la password quando richiesto…"
+        )
         proc = QProcess(self)
         proc.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
         proc.readyReadStandardOutput.connect(self._on_update_output)
         proc.finished.connect(self._on_update_finished)
         self._update_proc = proc
         proc.start(cmd[0], cmd[1:])
+        if proc.waitForStarted(5000):
+            proc.write(script.encode("utf-8"))
+            proc.closeWriteChannel()
 
     def _on_update_script_failed(self, err: str) -> None:
         self.update_status.setText(

@@ -175,7 +175,11 @@ def _render_segment(seg: str, inline_code_color: str, header_bg: str) -> str:
         m = _HEADING_RE.match(ln)
         if m:
             level = len(m.group(1))
-            parts.append(("h", f"<h{level}>{m.group(2)}</h{level}>"))
+            # anche il testo delle intestazioni passa da _inline: escape HTML
+            # (un modello non deve poter iniettare tag o link file://)
+            parts.append(
+                ("h", f"<h{level}>{_inline(m.group(2), inline_code_color)}</h{level}>")
+            )
             i += 1
             continue
         if _HR_RE.match(ln):

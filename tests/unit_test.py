@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from olladesk.context import build_api_content, classify, extract_text
 from olladesk.md import md_to_html
-from olladesk.updater import is_local_host, is_newer, parse_version
+from olladesk.updater import is_local_host, is_newer, parse_version, update_command_stdin
 
 
 # ------------------------------------------------------------------- md.py
@@ -77,6 +77,20 @@ def test_md_under_bold_and_intraword_safe():
     assert "<b>grande</b>" in html
     assert "foo__bar__baz" in html          # underscore interni alla parola: intatti
     assert "<i>name</i>" not in html
+
+
+def test_md_heading_escaped():
+    # le intestazioni devono subire l'escape HTML come tutto il resto
+    html = md_to_html("# a < b e [x](file:///etc/passwd)")
+    assert "&lt; b" in html
+    assert 'href="file://' not in html
+    assert "<h1>" in html
+
+
+def test_update_command_stdin():
+    cmd = update_command_stdin()
+    if cmd is not None:   # pkexec può mancare nell'ambiente di test
+        assert cmd[1:] == ["sh", "-s"]
 
 
 # -------------------------------------------------------------- context.py
