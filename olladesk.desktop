@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=OllaDesk
+GenericName=Client per Ollama
+Comment=Chatta in locale con i tuoi modelli LLM tramite Ollama
+Exec=/usr/bin/python3 /home/gradia/Progetti/OllaDesk/main.py
+Path=/home/gradia/Progetti/OllaDesk
+Icon=/home/gradia/Progetti/OllaDesk/olladesk/assets/olladesk.svg
+Terminal=false
+Categories=Network;Utility;Chat;Development;
+Keywords=ollama;llm;ai;chat;intelligenza;artificiale;locale;olladesk;
+StartupNotify=true
+StartupWMClass=OllaDesk
