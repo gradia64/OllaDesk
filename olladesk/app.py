@@ -43,4 +43,9 @@ def main() -> int:
 
     win = MainWindow()
     win.show()
-    return app.exec()
+    ret = app.exec()
+    # rete di sicurezza: un thread di rete ancora bloccato su un socket al
+    # timeout farebbe abortire l'interprete alla pulizia di Qt; lo stato è
+    # già stato salvato su disco a questo punto
+    os._exit(ret)
+    return ret

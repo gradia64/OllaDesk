@@ -318,8 +318,10 @@ class ModelParamsTab(QWidget):
     def is_dirty(self) -> bool:
         return self._dirty
 
-    def save_profile(self) -> None:
-        model = self.current_model()
+    def save_profile(self, model: str | None = None) -> None:
+        # il modello va specificato esplicitamente quando si salva durante un
+        # cambio di modello: il combo mostra già quello NUOVO
+        model = model or self.current_model()
         if not model:
             return
         params = config.load_model_params()
@@ -371,8 +373,18 @@ class ModelParamsTab(QWidget):
 
     def _on_model_changed(self, _idx: int) -> None:
         if self._dirty:
-            if not self.maybe_discard():
-                # torna al modello precedente
+            ret = QMessageBox.question(
+                self,
+                "Modifiche non salvate",
+                f"Salvare le modifiche di «{self._last_model}» prima di cambiare modello?",
+                QMessageBox.StandardButton.Save
+                | QMessageBox.StandardButton.Discard
+                | QMessageBox.StandardButton.Cancel,
+            )
+            if ret == QMessageBox.StandardButton.Save:
+                # salva sul modello DA CUI si esce, non su quello appena selezionato
+                self.save_profile(self._last_model)
+            elif ret == QMessageBox.StandardButton.Cancel:
                 idx = self.model_combo.findData(self._last_model)
                 if idx >= 0:
                     self.model_combo.blockSignals(True)

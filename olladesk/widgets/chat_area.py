@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 )
 
 from .. import context, theme
+from .. import __version__
 from .message import MessageWidget, SystemNoteWidget
 
 ASSISTANT_MAX_W = 860
@@ -180,7 +181,7 @@ class ChatArea(QWidget):
         title = QLabel("OllaDesk", w)
         title.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         title.setStyleSheet("font-size: 26px; font-weight: 700;")
-        sub = QLabel("Chatta in locale con i tuoi modelli Ollama", w)
+        sub = QLabel(f"Chatta in locale con i tuoi modelli Ollama · v{__version__}", w)
         sub.setObjectName("metaLabel")
         sub.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         lay.addWidget(title)
@@ -239,10 +240,13 @@ class ChatArea(QWidget):
         ts: float | None = None,
         attachments: list[str] | None = None,
         web: bool = False,
+        stats: str | None = None,
     ) -> MessageWidget:
         w = MessageWidget(
             role, text, ts, self.show_ts, self.theme_name, attachments, web, self
         )
+        if stats:
+            w.meta.setText(stats)
         self._apply_widths(w)
         self.msgs.addWidget(self._wrap_row(w, role), 0, Qt.AlignmentFlag.AlignTop)
         self.stack.setCurrentWidget(self.scroll)
@@ -265,7 +269,10 @@ class ChatArea(QWidget):
 
     def stream_text(self, chunk: str) -> None:
         self._stream_buffer += chunk
-        self._stream_timer.start()
+        # throttle: NON riavviare il timer se è già attivo, altrimenti con
+        # stream rapidi il flush slitta di continuo e il testo appare solo alla fine
+        if not self._stream_timer.isActive():
+            self._stream_timer.start()
 
     def _flush_stream(self) -> None:
         if self._stream_widget is not None and self._stream_buffer:
@@ -360,7 +367,9 @@ class ChatArea(QWidget):
         for s in paths:
             p = Path(s).expanduser()
             kind = context.classify(p)
-            if kind == "unknown" or not p.exists() or str(p) in known:
+            if str(p) in known:
+                continue   # già allegato: ignora senza avvisare
+            if kind == "unknown" or not p.exists():
                 rejected.append(p.name)
                 continue
             self._attachments.append(
@@ -450,7 +459,8 @@ class ChatArea(QWidget):
 
     def _emit_send(self) -> None:
         text = self.input_text()
-        if text:
+        # si può inviare anche un messaggio fatto di soli allegati
+        if text or self._attachments:
             self.sendRequested.emit(text)
 
     def _on_button(self) -> None:

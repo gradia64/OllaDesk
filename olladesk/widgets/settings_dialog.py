@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QSpinBox,
@@ -50,6 +51,7 @@ class SettingsDialog(QDialog):
         self._latest_version: str | None = None
         self._check_worker: ApiWorker | None = None
         self._update_proc: QProcess | None = None
+        self._download_worker = None
 
         lay = QVBoxLayout(self)
         lay.setContentsMargins(12, 10, 12, 10)
@@ -161,7 +163,9 @@ class SettingsDialog(QDialog):
         self.sys_prompt = QPlainTextEdit(s.get("system_prompt", ""), w)
         self.sys_prompt.setPlaceholderText("(vuoto = nessun prompt di sistema)")
         self.sys_prompt.setFixedHeight(64)
-        self.sys_prompt.setToolTip("Prompt di sistema applicato alle nuove conversazioni")
+        self.sys_prompt.setToolTip(
+            "Prompt di sistema inviato a Ollama con ogni richiesta (vale per tutte le conversazioni)"
+        )
         form.addRow("Prompt di sistema:", self.sys_prompt)
 
         outer.addLayout(form)
@@ -287,23 +291,30 @@ class SettingsDialog(QDialog):
             return
         self._set_check_busy(False)
         if self._latest_version and self._installed_version not in ("", "?"):
-            if updater.is_newer(self._latest_version, self._installed_version):
+            if not updater.is_newer(self._latest_version, self._installed_version):
+                self.update_status.setText("✓ Ollama è aggiornato.")
+                self.update_btn.setEnabled(False)
+            elif not updater.is_local_host(self.host_edit.text().strip()):
+                # il pulsante aggiorna la macchina LOCALE: con un server remoto
+                # sarebbe un aggiornamento sull'host sbagliato
+                self.update_status.setText(
+                    f"✦ Aggiornamento disponibile ({self._installed_version} → {self._latest_version}), "
+                    "ma il server configurato non è su questa macchina: aggiorna Ollama sull'host remoto."
+                )
+                self.update_btn.setEnabled(False)
+            else:
                 self.update_status.setText(
                     f"✦ Aggiornamento disponibile: {self._installed_version} → {self._latest_version}. "
                     "Premi «Aggiorna ora» (serve la password di amministratore)."
                 )
                 self.update_btn.setEnabled(True)
-            else:
-                self.update_status.setText("✓ Ollama è aggiornato.")
-                self.update_btn.setEnabled(False)
         else:
             self.update_status.setText(
                 "⚠ Verifica non riuscita: controlla la connessione a internet o il server Ollama."
             )
 
     def _run_update(self) -> None:
-        cmd = updater.update_command()
-        if not cmd:
+        if updater.update_command() is None:
             self.update_status.setText(
                 "⚠ `pkexec` non disponibile. Aggiorna manualmente da terminale:\n"
                 f"    {updater.INSTALL_CMD}"
@@ -311,15 +322,39 @@ class SettingsDialog(QDialog):
             return
         self.update_btn.setEnabled(False)
         self.check_btn.setEnabled(False)
+        self.update_status.setText("Scarico lo script ufficiale di installazione…")
+        self._download_worker = updater.UpdateDownloadWorker(self)
+        self._download_worker.ready.connect(self._on_update_script_ready)
+        self._download_worker.failed.connect(self._on_update_script_failed)
+        self._download_worker.finished.connect(self._download_worker.deleteLater)
+        self._download_worker.start()
+
+    def _on_update_script_ready(self, path: str, size: int) -> None:
+        # lo script viene scaricato e mostrato PRIMA di essere eseguito come root
         self.update_log.clear()
         self.update_log.show()
-        self.update_status.setText("Aggiornamento in corso — inserisci la password quando richiesto…")
+        self.update_status.setText(
+            f"Script ufficiale scaricato ({size} byte): in esecuzione con privilegi di "
+            "amministratore — inserisci la password quando richiesto…"
+        )
+        cmd = updater.update_command(local_path=path)
+        if not cmd:   # non dovrebbe accadere: verificato in _run_update
+            self.update_status.setText("⚠ `pkexec` non disponibile sul sistema.")
+            self.check_btn.setEnabled(True)
+            return
         proc = QProcess(self)
         proc.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
         proc.readyReadStandardOutput.connect(self._on_update_output)
         proc.finished.connect(self._on_update_finished)
         self._update_proc = proc
         proc.start(cmd[0], cmd[1:])
+
+    def _on_update_script_failed(self, err: str) -> None:
+        self.update_status.setText(
+            f"⚠ Impossibile scaricare lo script ({err}). Aggiorna manualmente da terminale:\n"
+            f"    {updater.INSTALL_CMD}"
+        )
+        self.check_btn.setEnabled(True)
 
     def _on_update_output(self) -> None:
         proc = self._update_proc
@@ -345,7 +380,7 @@ class SettingsDialog(QDialog):
 
     def collect_settings(self) -> dict:
         return {
-            "host": self.host_edit.text().strip() or config.DEFAULT_SETTINGS["host"],
+            "host": self._normalized_host(),
             "theme": self.theme_combo.currentData() or "dark",
             "font_size": self.font_spin.value(),
             "stream": self.stream_chk.isChecked(),
@@ -359,7 +394,22 @@ class SettingsDialog(QDialog):
             "system_prompt": self.sys_prompt.toPlainText().strip(),
         }
 
+    def _normalized_host(self) -> str:
+        """Completa l'URL con lo schema se manca (evita errori opachi)."""
+        host = self.host_edit.text().strip() or config.DEFAULT_SETTINGS["host"]
+        if not host.startswith(("http://", "https://")):
+            host = "http://" + host
+        return host
+
+    def _update_running(self) -> bool:
+        if self._update_proc is not None and self._update_proc.state() != QProcess.ProcessState.NotRunning:
+            return True
+        return self._download_worker is not None and self._download_worker.isRunning()
+
     def _on_save(self) -> None:
+        # «Salva» salva TUTTO: anche i parametri modificati nella seconda scheda
+        if self.params_tab.is_dirty():
+            self.params_tab.save_profile()
         settings = self.collect_settings()
         config.save_settings(settings)
         self.applied.emit(settings)
@@ -367,21 +417,17 @@ class SettingsDialog(QDialog):
 
     # chiusura gestita: parametri non salvati o aggiornamento in corso
     def reject(self) -> None:
-        if self._update_proc is not None and self._update_proc.state() != QProcess.ProcessState.NotRunning:
+        if self._update_running():
             QMessageBox.warning(self, "Aggiornamento in corso", "Attendi la fine dell'aggiornamento.")
             return
         if not self.params_tab.is_dirty() or self.params_tab.maybe_discard():
             super().reject()
 
     def closeEvent(self, ev) -> None:  # noqa: N802 (API Qt)
-        if self._update_proc is not None and self._update_proc.state() != QProcess.ProcessState.NotRunning:
+        if self._update_running():
             ev.ignore()
             return
         if not self.params_tab.is_dirty() or self.params_tab.maybe_discard():
             super().closeEvent(ev)
         else:
             ev.ignore()
-
-
-# QMessageBox serve a reject(); import in fondo per evitare cicli visivi
-from PySide6.QtWidgets import QMessageBox  # noqa: E402

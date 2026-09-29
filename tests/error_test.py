@@ -8,6 +8,7 @@ os.environ["XDG_CONFIG_HOME"] = "/tmp/olladesk_test_config"
 shutil.rmtree(os.environ["XDG_CONFIG_HOME"], ignore_errors=True)
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+os.makedirs("/tmp/olladesk_shots", exist_ok=True)
 
 from PySide6.QtCore import QTimer, QEventLoop
 from PySide6.QtWidgets import QApplication

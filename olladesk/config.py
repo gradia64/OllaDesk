@@ -43,6 +43,10 @@ def config_dir() -> Path:
             except OSError:
                 pass
     d.mkdir(parents=True, exist_ok=True)
+    try:
+        os.chmod(d, 0o700)   # contiene conversazioni e (eventuali) chiavi API
+    except OSError:
+        pass
     return d
 
 
@@ -60,6 +64,7 @@ def _write_json(path: Path, data: Any) -> None:
         with open(tmp, "w", encoding="utf-8") as fh:
             json.dump(data, fh, ensure_ascii=False, indent=2)
         tmp.replace(path)
+        os.chmod(path, 0o600)   # niente letture da altri utenti
     except OSError:
         pass
 

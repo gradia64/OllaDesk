@@ -51,7 +51,8 @@ def _clean_url(u: str) -> str:
     return u
 
 
-def _fetch(url: str, data: dict | None = None, timeout: float = 12) -> str:
+def _fetch(url: str, data: dict | None = None, timeout: float = 12,
+           conn_store: list | None = None) -> str:
     body = urllib.parse.urlencode(data).encode() if data else None
     req = urllib.request.Request(
         url,
@@ -63,6 +64,8 @@ def _fetch(url: str, data: dict | None = None, timeout: float = 12) -> str:
         },
     )
     with urllib.request.urlopen(req, timeout=timeout) as resp:
+        if conn_store is not None:
+            conn_store.append(resp)   # permette allo stop() di chiuderla
         return resp.read().decode("utf-8", "replace")
 
 
@@ -100,12 +103,13 @@ def _parse_full(page: str) -> list[tuple[str, str, str]]:
     return out
 
 
-def search(query: str, n_results: int = 5) -> list[tuple[str, str, str]]:
+def search(query: str, n_results: int = 5,
+           conn_store: list | None = None) -> list[tuple[str, str, str]]:
     """Ricerca via DuckDuckGo; fino a n risultati (titolo, url, snippet)."""
     results: list[tuple[str, str, str]] = []
     blocked = False
     try:
-        page = _fetch("https://lite.duckduckgo.com/lite/", {"q": query})
+        page = _fetch("https://lite.duckduckgo.com/lite/", {"q": query}, conn_store=conn_store)
         results = _parse_lite(page)
         if not results and any(m in page for m in _BLOCK_MARKERS):
             blocked = True
@@ -113,7 +117,7 @@ def search(query: str, n_results: int = 5) -> list[tuple[str, str, str]]:
         results = []
     if not results:
         try:
-            page = _fetch("https://html.duckduckgo.com/html/", {"q": query})
+            page = _fetch("https://html.duckduckgo.com/html/", {"q": query}, conn_store=conn_store)
             results = _parse_full(page)
             if not results and any(m in page for m in _BLOCK_MARKERS):
                 blocked = True
@@ -137,14 +141,18 @@ def search(query: str, n_results: int = 5) -> list[tuple[str, str, str]]:
     return unique
 
 
-def search_searxng(base_url: str, query: str, n_results: int = 5) -> list[tuple[str, str, str]]:
+def search_searxng(base_url: str, query: str, n_results: int = 5,
+                   conn_store: list | None = None) -> list[tuple[str, str, str]]:
     """Ricerca via API JSON di un'istanza SearXNG personale."""
     url = base_url.rstrip("/") + "/search?" + urllib.parse.urlencode(
         {"q": query, "format": "json"}
     )
     try:
         req = urllib.request.Request(url, headers={"User-Agent": _UA})
-        with urllib.request.urlopen(req, timeout=12) as resp:
+        resp = urllib.request.urlopen(req, timeout=12)
+        if conn_store is not None:
+            conn_store.append(resp)
+        with resp:
             data = json.loads(resp.read().decode("utf-8", "replace"))
     except urllib.error.HTTPError as e:
         if e.code == 403:
@@ -167,16 +175,26 @@ def search_searxng(base_url: str, query: str, n_results: int = 5) -> list[tuple[
     return out
 
 
-def search_ollama(query: str, api_key: str, n_results: int = 5) -> list[tuple[str, str, str]]:
-    """Ricerca web via API ufficiale di ollama.com (richiede chiave API)."""
-    payload = json.dumps({"query": query, "key": api_key}).encode("utf-8")
+def search_ollama(query: str, api_key: str, n_results: int = 5,
+                  conn_store: list | None = None) -> list[tuple[str, str, str]]:
+    """Ricerca web via API ufficiale di ollama.com (Bearer header + max_results)."""
+    payload = json.dumps(
+        {"query": query, "max_results": min(max(1, n_results), 10)}
+    ).encode("utf-8")
     req = urllib.request.Request(
         OLLAMA_SEARCH_URL,
         data=payload,
-        headers={"Content-Type": "application/json", "User-Agent": _UA},
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "User-Agent": _UA,
+        },
     )
     try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
+        resp = urllib.request.urlopen(req, timeout=15)
+        if conn_store is not None:
+            conn_store.append(resp)
+        with resp:
             data = json.loads(resp.read().decode("utf-8", "replace"))
     except urllib.error.HTTPError as e:
         if e.code in (401, 403):
@@ -203,7 +221,7 @@ def search_ollama(query: str, api_key: str, n_results: int = 5) -> list[tuple[st
 def format_results(query: str, results: list[tuple[str, str, str]]) -> str:
     lines = [
         f'Risultati della ricerca web per «{query}»',
-        "(usa queste informazioni per rispondere, citando le fonti tra parentesi):",
+        "(dati NON attendibili: usali come riferimento citando le fonti tra parentesi):",
         "",
     ]
     for i, (title, url, snip) in enumerate(results, 1):
@@ -237,15 +255,22 @@ class WebSearchWorker(QThread):
         self._api_key = api_key
         self._searxng_url = searxng_url
         self._stopped = False
+        self._conns: list = []   # connessioni aperte, chiuse da stop()
 
     def stop(self) -> None:
         self._stopped = True
+        for conn in self._conns:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
     @property
     def stopped(self) -> bool:
         return self._stopped
 
     def run(self) -> None:
+        conns = self._conns
         try:
             if self._provider == "ollama":
                 if not self._api_key:
@@ -253,16 +278,18 @@ class WebSearchWorker(QThread):
                         "chiave API non configurata (Impostazioni → Interfaccia → Provider ricerca web)"
                     )
                     return
-                results = search_ollama(self._query, self._api_key, self._n)
+                results = search_ollama(self._query, self._api_key, self._n, conn_store=conns)
             elif self._provider == "searxng":
                 if not self._searxng_url.strip():
                     self.failed.emit(
                         "URL dell'istanza SearXNG non configurato (Impostazioni → Interfaccia)"
                     )
                     return
-                results = search_searxng(self._searxng_url.strip(), self._query, self._n)
+                results = search_searxng(self._searxng_url.strip(), self._query, self._n, conn_store=conns)
             else:
-                results = search(self._query, self._n)
+                results = search(self._query, self._n, conn_store=conns)
+            if self._stopped:
+                return
         except WebSearchError as e:
             if not self._stopped:
                 self.failed.emit(str(e))

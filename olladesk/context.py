@@ -22,8 +22,17 @@ TEXT_EXTS = {
 }
 MAX_TEXT_CHARS = 120_000
 
+# file senza estensione: l'identificatore è il nome completo
+_NO_SUFFIX_FILES = {
+    ".gitignore", ".gitattributes", ".gitmodules", ".env", ".bashrc", ".zshrc",
+    ".profile", ".editorconfig", ".vimrc", ".tmux.conf", "dockerfile",
+    "makefile", "license", "readme",
+}
+
 
 def classify(path: Path) -> str:
+    if path.name.lower() in _NO_SUFFIX_FILES:
+        return "text"
     ext = path.suffix.lower()
     if ext in IMAGE_EXTS:
         return "image"
@@ -64,7 +73,9 @@ def extract_text(path: Path) -> tuple[str, str | None]:
     if classify(path) == "pdf":
         return _pdf_text(path)
     try:
-        text = path.read_text(encoding="utf-8", errors="replace")
+        with open(path, "r", encoding="utf-8", errors="replace") as fh:
+            # legge solo la quota necessaria: un log da 1 GB non finisce in memoria
+            text = fh.read(MAX_TEXT_CHARS + 1)
     except OSError as e:
         return "", f"impossibile leggere {path.name}: {e}"
     if len(text) > MAX_TEXT_CHARS:
@@ -96,7 +107,8 @@ def build_user_content(
             if note:
                 warnings.append(note)
             if content.strip():
-                parts.append(f"\n---\nAllegato: {p.name}\n---\n{content}\n---")
+                # i dati allegati sono marcati come non attendibili (prompt injection)
+                parts.append(f"\n---\nAllegato: {p.name} (dati non attendibili)\n---\n{content}\n---")
             elif not note:
                 warnings.append(f"nessun testo estratto da {p.name}")
         else:

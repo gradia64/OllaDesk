@@ -1,8 +1,6 @@
 """Gestione modelli Ollama: elenco installati, scaricamento (pull) ed eliminazione."""
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QCursor
 from PySide6.QtWidgets import (
     QCompleter,
     QDialog,
@@ -16,7 +14,6 @@ from PySide6.QtWidgets import (
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
-    QWidget,
 )
 
 from ..ollama_client import ApiWorker, PostWorker, PullWorker
@@ -88,6 +85,10 @@ class ModelManagerDialog(QDialog):
         self.progress_label.hide()
         self.progress_label.setWordWrap(True)
         lay.addWidget(self.progress_label)
+        self.cancel_btn = QPushButton("✕  Annulla scaricamento", self)
+        self.cancel_btn.hide()
+        self.cancel_btn.clicked.connect(self._cancel_pull)
+        lay.addWidget(self.cancel_btn)
 
         # --- elenco modelli --------------------------------------------
         self.tree = QTreeWidget(self)
@@ -181,6 +182,7 @@ class ModelManagerDialog(QDialog):
     def _pull_running_ui(self, running: bool) -> None:
         self.progress.setVisible(running)
         self.progress_label.setVisible(running)
+        self.cancel_btn.setVisible(running)
         self.pull_btn.setEnabled(not running)
         self.name_edit.setEnabled(not running)
         self.delete_btn.setEnabled(not running and self._selected_model() is not None)
@@ -236,7 +238,8 @@ class ModelManagerDialog(QDialog):
         if ret != QMessageBox.StandardButton.Yes:
             return
         self.delete_btn.setEnabled(False)
-        self._delete_worker = PostWorker(self.host, "/api/delete", {"name": model}, self)
+        # l'API Ollama richiede DELETE /api/delete con chiave "model"
+        self._delete_worker = PostWorker(self.host, "/api/delete", {"model": model}, self, "DELETE")
         self._delete_worker.ready.connect(lambda _d: self._on_delete_done(model))
         self._delete_worker.failed.connect(self._on_delete_failed)
         self._delete_worker.finished.connect(self._delete_worker.deleteLater)
@@ -251,3 +254,17 @@ class ModelManagerDialog(QDialog):
     def _on_delete_failed(self, err: str) -> None:
         self.delete_btn.setEnabled(True)
         QMessageBox.warning(self, "Elimina modello", f"Eliminazione non riuscita:\n{err}")
+
+    def reject(self) -> None:
+        if self._pull_worker is not None and self._pull_worker.isRunning():
+            ret = QMessageBox.question(
+                self,
+                "Scaricamento in corso",
+                "Annullare lo scaricamento in corso e chiudere?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            if ret != QMessageBox.StandardButton.Yes:
+                return
+            self._pull_worker.stop()
+            self._pull_worker.wait(3000)
+        super().reject()

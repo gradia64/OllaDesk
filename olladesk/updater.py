@@ -2,20 +2,26 @@
 
 - Controllo versione: confronta la versione del server locale con l'ultima
   release pubblicata su GitHub (api.github.com).
-- Aggiornamento: esegue lo script ufficiale di installazione tramite `pkexec`
-  (richiede la password di amministratore, mostrata da KDE Polkit).
+- Aggiornamento: scarica lo script ufficiale in un file temporaneo, poi lo
+  esegue tramite `pkexec` (richiede la password di amministratore, mostrata
+  da KDE Polkit).
 """
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
+import tempfile
 import urllib.request
 
 from PySide6.QtCore import QThread, Signal
 
 RELEASES_URL = "https://api.github.com/repos/ollama/ollama/releases/latest"
+INSTALL_SCRIPT_URL = "https://ollama.com/install.sh"
 INSTALL_CMD = "curl -fsSL https://ollama.com/install.sh | sh"
+
+_LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
 
 
 def parse_version(v: str) -> tuple[int, ...]:
@@ -27,12 +33,27 @@ def is_newer(latest: str, current: str) -> bool:
     return parse_version(latest) > parse_version(current)
 
 
-def update_command() -> list[str] | None:
+def is_local_host(host: str) -> bool:
+    """True se l'URL del server punta alla macchina locale."""
+    from urllib.parse import urlparse
+
+    if "//" not in (host or ""):
+        host = "http://" + (host or "")
+    try:
+        hostname = (urlparse(host).hostname or "").lower()
+    except ValueError:
+        return False
+    return hostname in _LOCAL_HOSTS
+
+
+def update_command(local_path: str | None = None) -> list[str] | None:
     """Comando per l'aggiornamento (pkexec) o None se non disponibile."""
     pkexec = shutil.which("pkexec")
-    if pkexec:
-        return [pkexec, "sh", "-c", INSTALL_CMD]
-    return None
+    if not pkexec:
+        return None
+    if local_path:
+        return [pkexec, "sh", local_path]
+    return [pkexec, "sh", "-c", INSTALL_CMD]
 
 
 class UpdateCheckWorker(QThread):
@@ -53,3 +74,30 @@ class UpdateCheckWorker(QThread):
             self.failed.emit(f"impossibile controllare gli aggiornamenti: {e}")
             return
         self.ready.emit(tag.lstrip("vV"))
+
+
+class UpdateDownloadWorker(QThread):
+    """Scarica lo script ufficiale in un file temporaneo PRIMA di eseguirlo.
+
+    Così l'utente vede cosa viene eseguito e con quale dimensione, invece di
+    un `curl | sh` alla cieca.
+    """
+
+    ready = Signal(str, int)   # percorso del file, dimensione in byte
+    failed = Signal(str)
+
+    def run(self) -> None:
+        try:
+            req = urllib.request.Request(
+                INSTALL_SCRIPT_URL, headers={"User-Agent": "olladesk"}
+            )
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                data = resp.read()
+            fd, path = tempfile.mkstemp(prefix="ollama-install-", suffix=".sh")
+            with os.fdopen(fd, "wb") as fh:
+                fh.write(data)
+            os.chmod(path, 0o755)
+        except Exception as e:
+            self.failed.emit(str(e))
+            return
+        self.ready.emit(path, len(data))

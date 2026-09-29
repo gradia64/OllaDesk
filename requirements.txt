@@ -1,1 +1,4 @@
 PySide6>=6.6
+
+# Opzionale: per allegare i PDF alle chat
+# pypdf>=4.0

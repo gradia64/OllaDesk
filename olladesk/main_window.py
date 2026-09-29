@@ -46,6 +46,10 @@ class MainWindow(QMainWindow):
         self._preferred_model: str | None = None
         self._pending_stream: str = ""
         self._pending_user: dict | None = None
+        self._chat_stopped = False     # scarta i segnali del worker dopo uno stop
+        self._search_stopped = False
+        self._running_workers: list = []
+        self._zombie_workers: list = []   # worker in arresto, non bloccano la UI
         self._version = "?"
         self._resolved_theme = theme.resolve_theme(self.settings["theme"])
 
@@ -53,7 +57,7 @@ class MainWindow(QMainWindow):
         self._connect_signals()
         self._shortcuts()
 
-        theme.apply_theme(QGuiApplication.instance(), self.settings["theme"], self.settings["font_size"])
+        # il tema è già applicato da olladesk.app prima di creare la finestra
         self.chat_area.set_send_on_enter(self.settings["send_on_enter"])
 
         # segue il cambio tema scuro/chiaro del desktop (modalità "Sistema")
@@ -169,6 +173,36 @@ class MainWindow(QMainWindow):
 
     # ------------------------------------------------------------------- tema
 
+    def _track_worker(self, w) -> None:
+        """Tiene registro dei worker attivi per chiuderli tutti alla chiusura."""
+        self._running_workers.append(w)
+        w.finished.connect(lambda: self._untrack_worker(w))
+
+    def _untrack_worker(self, w) -> None:
+        try:
+            self._running_workers.remove(w)
+        except ValueError:
+            pass
+
+    def _retire_worker(self, w) -> None:
+        """Sgancia un worker in arresto: la UI non attende più la sua morte.
+
+        Il thread può restare bloccato su un socket finché scatta il timeout
+        di rete: gli signal emessi in ritardo vengono scartati e la UI è
+        subito libera di fare nuove richieste.
+        """
+        if w is None:
+            return
+        self._untrack_worker(w)
+        self._zombie_workers.append(w)
+        w.finished.connect(lambda: self._forget_zombie(w))
+
+    def _forget_zombie(self, w) -> None:
+        try:
+            self._zombie_workers.remove(w)
+        except ValueError:
+            pass
+
     def _on_scheme_changed(self, *_a) -> None:
         if self.settings["theme"] == "system":
             self._apply_theme_now()
@@ -177,19 +211,18 @@ class MainWindow(QMainWindow):
         self._resolved_theme = theme.apply_theme(
             QGuiApplication.instance(), self.settings["theme"], self.settings["font_size"]
         )
+        # aggiorna tema/orario/icone dell'area chat PRIMA di ricreare i messaggi
+        self.chat_area.refresh_theme(self._resolved_theme, self.settings["show_timestamps"])
         self._rerender_messages()
 
     def _rerender_messages(self) -> None:
-        show_ts = self.settings["show_timestamps"]
         if self.current_chat:
             self.chat_area.clear_messages()
             for m in self.current_chat["messages"]:
                 self.chat_area.add_message(
                     m["role"], m.get("display", m["content"]), m.get("ts"),
-                    m.get("attachments"), bool(m.get("web")),
+                    m.get("attachments"), bool(m.get("web")), m.get("stats"),
                 )
-        else:
-            self.chat_area.refresh_theme(self._resolved_theme, show_ts)
 
     # ------------------------------------------------------------- connessione
 
@@ -201,6 +234,7 @@ class MainWindow(QMainWindow):
         self._status_worker.failed.connect(self._on_server_fail)
         self._status_worker.finished.connect(self._status_worker.deleteLater)
         self._status_worker.finished.connect(lambda: setattr(self, "_status_worker", None))
+        self._track_worker(self._status_worker)
         self._status_worker.start()
 
     def _on_server_ok(self, data: object) -> None:
@@ -241,6 +275,7 @@ class MainWindow(QMainWindow):
         self._models_worker.failed.connect(self._on_models_fail)
         self._models_worker.finished.connect(self._models_worker.deleteLater)
         self._models_worker.finished.connect(lambda: setattr(self, "_models_worker", None))
+        self._track_worker(self._models_worker)
         self._models_worker.start()
 
     def _on_models(self, data: object) -> None:
@@ -327,8 +362,14 @@ class MainWindow(QMainWindow):
         for m in chat["messages"]:
             self.chat_area.add_message(
                 m["role"], m.get("display", m["content"]), m.get("ts"),
-                m.get("attachments"), bool(m.get("web")),
+                m.get("attachments"), bool(m.get("web")), m.get("stats"),
             )
+        # ripristina il modello con cui era nata la conversazione
+        model = chat.get("model")
+        if model and self.model_combo.isEnabled():
+            idx = self.model_combo.findData(model)
+            if idx >= 0:
+                self.model_combo.setCurrentIndex(idx)
         self.sidebar.set_chats(self.chats, chat_id)
         self.chat_area.focus_input()
 
@@ -394,6 +435,7 @@ class MainWindow(QMainWindow):
     # ----------------------------------------------------------- ricerca web
 
     def _start_web_search(self) -> None:
+        self._search_stopped = False
         self.chat_area.set_streaming(True)
         self.sidebar.set_busy(True)
         placeholder = self.chat_area.begin_stream(config.now())
@@ -411,9 +453,12 @@ class MainWindow(QMainWindow):
         self._search_worker.failed.connect(self._on_web_failed)
         self._search_worker.finished.connect(self._search_worker.deleteLater)
         self._search_worker.finished.connect(lambda: setattr(self, "_search_worker", None))
+        self._track_worker(self._search_worker)
         self._search_worker.start()
 
     def _on_web_results(self, block: str, _query: str) -> None:
+        if self._search_stopped or self.sender() is not self._search_worker:
+            return
         self.chat_area.end_stream(discard_empty=True)
         if self._pending_user is not None:
             self._pending_user["full"] = (
@@ -422,13 +467,9 @@ class MainWindow(QMainWindow):
             self._commit_user_message()
 
     def _on_web_failed(self, err: str) -> None:
-        self.chat_area.end_stream(discard_empty=True)
-        worker = self._search_worker
-        if worker is not None and worker.stopped:
-            # annullata dall'utente
-            self._pending_user = None
-            self._set_idle()
+        if self._search_stopped or self.sender() is not self._search_worker:
             return
+        self.chat_area.end_stream(discard_empty=True)
         self.chat_area.add_system_note(
             f"⚠ Ricerca web non riuscita ({err}).\nProcedo senza i risultati web."
         )
@@ -482,7 +523,7 @@ class MainWindow(QMainWindow):
         if s["system_prompt"]:
             messages.append({"role": "system", "content": s["system_prompt"]})
         limit = max(0, int(s["history_limit"]))
-        history = self.current_chat["messages"][-limit * 2:] if limit else []
+        history = self.current_chat["messages"][-limit:] if limit else []
         last_idx = len(history) - 1
         for i, m in enumerate(history):
             entry = {"role": m["role"], "content": m["content"]}
@@ -504,6 +545,7 @@ class MainWindow(QMainWindow):
         }
 
         self._pending_stream = ""
+        self._chat_stopped = False
         self.chat_area.begin_stream(config.now())
 
         self._worker = ChatWorker(self.settings["host"], payload, self)
@@ -512,31 +554,41 @@ class MainWindow(QMainWindow):
         self._worker.failed.connect(self._on_failed)
         self._worker.finished.connect(self._worker.deleteLater)
         self._worker.finished.connect(lambda: setattr(self, "_worker", None))
+        self._track_worker(self._worker)
         self._worker.start()
 
         self.chat_area.set_streaming(True)
         self.sidebar.set_busy(True)
 
     def _on_chunk(self, chunk: str) -> None:
+        if self._chat_stopped or self.sender() is not self._worker:
+            return
         self._pending_stream += chunk
         self.chat_area.stream_text(chunk)
 
     def _on_done(self, done: dict) -> None:
-        if self.current_chat is None:
+        if self._chat_stopped or self.sender() is not self._worker:
             return
-        self.chat_area.end_stream(format_stats(done))
+        self._finalize_assistant(format_stats(done))
+
+    def _finalize_assistant(self, stats: str | None) -> None:
+        """Chiude la bolla, salva il testo prodotto e torna idle."""
+        self.chat_area.end_stream(stats)
         text = self._pending_stream
         self._pending_stream = ""
-        if text:
-            self.current_chat["messages"].append(
-                {"role": "assistant", "content": text, "ts": config.now()}
-            )
+        if text and self.current_chat is not None:
+            msg = {"role": "assistant", "content": text, "ts": config.now()}
+            if stats:
+                msg["stats"] = stats
+            self.current_chat["messages"].append(msg)
             self.current_chat["updated"] = config.now()
             self._save_chats()
             self.sidebar.set_chats(self.chats, self.current_chat["id"])
         self._set_idle()
 
     def _on_failed(self, err: str) -> None:
+        if self._chat_stopped or self.sender() is not self._worker:
+            return
         self.chat_area.end_stream(discard_empty=True)
         partial = self._pending_stream
         self._pending_stream = ""
@@ -555,13 +607,23 @@ class MainWindow(QMainWindow):
 
     def _on_stop(self) -> None:
         if self._search_worker is not None and self._search_worker.isRunning():
+            # ripristino immediato della UI: i segnali del worker annullato
+            # verranno scartati da _search_stopped
+            self._search_stopped = True
             self._search_worker.stop()
+            self._retire_worker(self._search_worker)
+            self._search_worker = None
+            self.chat_area.end_stream(discard_empty=True)
+            self._pending_user = None
+            self._set_idle()
             return
         if self._worker is not None:
-            self._worker.stop()
-        # il worker chiuderà lo stream; forziamo comunque la conclusione
-        if self._pending_stream:
-            self._on_done({"done": True})
+            self._chat_stopped = True
+            self._worker.stop()   # chiude la connessione: il worker termina subito
+            self._retire_worker(self._worker)
+            self._worker = None
+        if self._pending_stream and self.current_chat is not None:
+            self._finalize_assistant(None)   # conserva il testo già prodotto
         else:
             self.chat_area.end_stream(discard_empty=True)
             self._set_idle()
@@ -574,6 +636,11 @@ class MainWindow(QMainWindow):
     # ---------------------------------------------------------------- impostazioni
 
     def open_settings(self) -> None:
+        if self._busy():
+            self.chat_area.add_system_note(
+                "Attendi la fine della risposta (o premi ■ per interrompere) prima di aprire le impostazioni."
+            )
+            return
         dlg = SettingsDialog(
             self.settings, self.model_names, self.settings["theme"], self._version, self
         )
@@ -592,7 +659,16 @@ class MainWindow(QMainWindow):
     # -------------------------------------------------------------------- chiusura
 
     def closeEvent(self, ev) -> None:  # noqa: N802 (API Qt)
-        if self._worker is not None and self._worker.isRunning():
-            self._worker.stop()
-            self._worker.wait(2000)
+        # ferma e attende (con limite) TUTTI i worker: un QThread distrutto
+        # mentre è in esecuzione fa abortire il processo. Gli "zombie" bloccati
+        # su un socket muoiono al loro timeout di rete.
+        for w in list(self._running_workers) + list(self._zombie_workers):
+            stop = getattr(w, "stop", None)
+            if callable(stop):
+                try:
+                    stop()
+                except Exception:
+                    pass
+        for w in list(self._running_workers) + list(self._zombie_workers):
+            w.wait(1500)
         super().closeEvent(ev)

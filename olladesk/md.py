@@ -105,7 +105,15 @@ def _render_segment(seg: str, inline_code_color: str) -> str:
         out.append(ln)
     close_lists()
 
-    seg = "<br>".join(p for p in out)
+    # unisce i blocchi: tra elementi di elenco, intestazioni e righe orizzontali
+    # non vanno <br> (creavano righe vuote in più)
+    block_re = re.compile(r"^<(?:li|ul|ol|/ul|/ol|h[1-6]|hr)\b")
+    joined = out[0] if out else ""
+    for i in range(1, len(out)):
+        if not (block_re.match(out[i - 1]) or block_re.match(out[i])):
+            joined += "<br>"
+        joined += out[i]
+    seg = joined
     seg = re.sub(r"\x00I(\d+)\x00", lambda m: inline[int(m.group(1))], seg)
     return seg
 
@@ -118,8 +126,10 @@ def md_to_html(
 ) -> str:
     if not text:
         return ""
-    # streaming: se il numero di fence è dispari, chiudo l'ultimo blocco
-    if text.count("```") % 2 == 1:
+    # streaming: se le righe di APERTURA fence sono dispari, chiudo l'ultimo
+    # blocco (i ``` scritti in mezzo al testo non generano più fence spurie)
+    openers = len(re.findall(r"^[^\S\n]*```", text, re.M))
+    if openers % 2 == 1:
         text = text + "\n```"
 
     parts: list[str] = []

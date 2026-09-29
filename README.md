@@ -143,6 +143,8 @@ i parametri e salva screenshot in `/tmp/olladesk_shots`):
 ```bash
 python3 tests/smoke_test.py     # funzionalità base
 python3 tests/feature_test.py   # allegati, ricerca web, modelli, aggiornamenti
+python3 tests/error_test.py     # percorsi di errore (server offline)
+python3 tests/unit_test.py      # unit test delle funzioni pure (senza rete)
 ```
 
 Per leggere i PDF come allegati:
@@ -174,6 +176,8 @@ olladesk/
     settings_dialog.py      finestra impostazioni (2 schede + aggiornamenti)
 tests/smoke_test.py         collaudo automatico offscreen (base)
 tests/feature_test.py       collaudo automatico offscreen (funzionalità extra)
+tests/error_test.py         collaudo percorsi di errore (offline)
+tests/unit_test.py          unit test delle funzioni pure
 olladesk.desktop            voce per il menu applicazioni di KDE
 ```
 

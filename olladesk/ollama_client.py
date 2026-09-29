@@ -87,13 +87,33 @@ class ApiWorker(QThread):
         super().__init__(parent)
         self._host = host
         self._path = path
+        self._resp = None
+
+    def stop(self) -> None:
+        resp, self._resp = self._resp, None
+        if resp is not None:
+            try:
+                resp.close()
+            except Exception:
+                pass
 
     def run(self) -> None:
         try:
-            with _open(self._host, self._path, timeout=8) as resp:
-                self.ready.emit(json.loads(resp.read().decode("utf-8")))
+            self._resp = _open(self._host, self._path, timeout=8)
+            data = json.loads(self._resp.read().decode("utf-8"))
+            self.ready.emit(data)
         except Exception as e:
             self.failed.emit(friendly_error(e, self._host))
+        finally:
+            self._close_resp()
+
+    def _close_resp(self) -> None:
+        resp, self._resp = self._resp, None
+        if resp is not None:
+            try:
+                resp.close()
+            except Exception:
+                pass
 
 
 class ChatWorker(QThread):
@@ -113,11 +133,7 @@ class ChatWorker(QThread):
     def stop(self) -> None:
         """Interrompe la generazione e chiude la connessione."""
         self._stopped = True
-        if self._resp is not None:
-            try:
-                self._resp.close()
-            except Exception:
-                pass
+        self._close_resp()
 
     @property
     def stopped(self) -> bool:
@@ -126,6 +142,8 @@ class ChatWorker(QThread):
     def run(self) -> None:
         try:
             self._resp = _open(self._host, "/api/chat", self._payload, timeout=600)
+            if self._stopped:
+                return
         except Exception as e:
             if not self._stopped:
                 self.failed.emit(friendly_error(e, self._host))
@@ -167,23 +185,42 @@ class ChatWorker(QThread):
         except Exception as e:
             if not self._stopped:
                 self.failed.emit(friendly_error(e, self._host))
+        finally:
+            self._close_resp()
+
+    def _close_resp(self) -> None:
+        resp, self._resp = self._resp, None
+        if resp is not None:
+            try:
+                resp.close()
+            except Exception:
+                pass
 
 
 class PostWorker(QThread):
-    """POST JSON generico (es. /api/delete per rimuovere un modello)."""
+    """Richiesta JSON generica (POST per /api/pull, DELETE per /api/delete…)."""
 
     ready = Signal(object)
     failed = Signal(str)
 
-    def __init__(self, host: str, path: str, payload: dict | None = None, parent=None):
+    def __init__(self, host: str, path: str, payload: dict | None = None, parent=None,
+                 method: str = "POST"):
         super().__init__(parent)
         self._host = host
         self._path = path
         self._payload = payload
+        self._method = method
 
     def run(self) -> None:
         try:
-            with _open(self._host, self._path, self._payload, timeout=60) as resp:
+            url = self._host.rstrip("/") + self._path
+            data = json.dumps(self._payload).encode("utf-8") if self._payload is not None else None
+            req = urllib.request.Request(
+                url, data=data,
+                headers={"Content-Type": "application/json"},
+                method=self._method,
+            )
+            with urllib.request.urlopen(req, timeout=60) as resp:
                 body = resp.read().decode("utf-8", "replace").strip()
             self.ready.emit(json.loads(body) if body else None)
         except Exception as e:
@@ -206,11 +243,7 @@ class PullWorker(QThread):
 
     def stop(self) -> None:
         self._stopped = True
-        if self._resp is not None:
-            try:
-                self._resp.close()
-            except Exception:
-                pass
+        self._close_resp()
 
     @property
     def stopped(self) -> bool:
@@ -222,6 +255,8 @@ class PullWorker(QThread):
                 self._host, "/api/pull",
                 {"model": self._model, "stream": True}, timeout=600,
             )
+            if self._stopped:
+                return
         except Exception as e:
             if not self._stopped:
                 self.failed.emit(friendly_error(e, self._host))
@@ -248,6 +283,16 @@ class PullWorker(QThread):
         except Exception as e:
             if not self._stopped:
                 self.failed.emit(friendly_error(e, self._host))
+        finally:
+            self._close_resp()
+
+    def _close_resp(self) -> None:
+        resp, self._resp = self._resp, None
+        if resp is not None:
+            try:
+                resp.close()
+            except Exception:
+                pass
 
 
 def format_stats(done: dict) -> str | None:
