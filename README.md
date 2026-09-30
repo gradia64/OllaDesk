@@ -71,20 +71,44 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
 
 ## Installazione su Debian
 
-Con i pacchetti di Debian (consigliato):
+### Dal pacchetto .deb (consigliata)
+
+Scarica `olladesk_<versione>_all.deb` dall'ultima
+[release su GitHub](https://github.com/gradia64/OllaDesk/releases/latest)
+e installalo: apt risolve da solo le dipendenze (Python 3.10+ e i moduli
+PySide6 di Qt core/gui/widgets):
+
+```bash
+sudo apt install ./olladesk_0.2.1_all.deb
+```
+
+Il pacchetto installa il launcher `/usr/bin/olladesk`, la voce «OllaDesk»
+nel menu applicazioni con la relativa icona, la manpage e il changelog;
+la disinstallazione è `sudo apt remove olladesk`.
+
+Per costruire il pacchetto dai sorgenti (serve `dpkg-deb`, presente su
+qualunque Debian):
+
+```bash
+scripts/build-deb.sh        # produce dist/olladesk_<versione>_all.deb
+```
+
+### Dai sorgenti
+
+Con i pacchetti di Debian:
 
 ```bash
 sudo apt install python3-pyside6
 ```
 
-oppure via pip:
+oppure via pip (ambiente virtuale):
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## Avvio
+poi avvia dalla cartella del progetto:
 
 ```bash
 python3 main.py
@@ -92,7 +116,7 @@ python3 main.py
 python3 -m olladesk
 ```
 
-### Installazione come pacchetto (consigliata per l'uso quotidiano)
+### Come pacchetto Python (pipx/pip)
 
 ```bash
 pipx install .            # oppure: pip install --user .
@@ -198,6 +222,7 @@ olladesk/
     message.py              bolle dei messaggi
     sidebar.py              elenco conversazioni
     model_params.py         definizioni ed editor dei parametri
+    steppers.py             campi numerici con pulsanti tondi −/+
     model_manager.py        dialog scaricamento/eliminazione modelli
     settings_dialog.py      finestra impostazioni (2 schede + aggiornamenti)
 tests/gui_smoke.py          collaudo automatico offscreen (base)

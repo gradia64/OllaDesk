@@ -122,7 +122,8 @@ immagini, PDF), ricerca web (DuckDuckGo/SearXNG), gestione dei modelli
 (scaricamento ed eliminazione) e tema chiaro/scuro.
 .PP
 L'indirizzo del server e le preferenze sono configurati nell'app
-(Modifica → Impostazioni) e salvati in ~/.config/olladesk/.
+(CTRL+, oppure la voce «Impostazioni» della barra laterale) e salvati
+in ~/.config/olladesk/.
 .SH FILE
 .TP
 .I ~/.config/olladesk/
