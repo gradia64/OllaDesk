@@ -6,10 +6,68 @@ QThread separati e comunicano con la UI tramite segnali.
 from __future__ import annotations
 
 import json
+import time
 import urllib.error
 import urllib.request
 
 from PySide6.QtCore import QThread, Signal
+
+# worker ancora bloccati su un socket quando il loro dialogo si chiude:
+# tenuti in vita qui (senza genitore) finché escono al timeout di rete
+_parked: set = set()
+
+_RESULT_SIGNALS = ("ready", "failed", "chunk", "done", "progress")
+
+
+def park_worker(w: QThread) -> None:
+    """Sgancia un worker ancora in esecuzione dal suo proprietario.
+
+    Il proprietario (un dialogo) può così essere distrutto: un QThread
+    distrutto mentre gira fa abortire il processo. Il worker perde tutti i
+    collegamenti (i segnali non raggiungono slot di oggetti già distrutti),
+    resta referenziato in `_parked` e viene liberato quando termina.
+    """
+    for name in _RESULT_SIGNALS + ("finished",):
+        sig = getattr(w, name, None)
+        if sig is None:
+            continue
+        try:
+            sig.disconnect()
+        except (RuntimeError, TypeError):
+            pass   # nessun collegamento
+    w.setParent(None)
+    _parked.add(w)
+    # deleteLater gira nel thread principale (affinità del QThread); il
+    # riferimento Python cade solo a oggetto distrutto
+    w.finished.connect(w.deleteLater)
+    w.destroyed.connect(lambda *_a: _parked.discard(w))
+
+
+def shutdown_workers(workers, timeout_ms: int = 1500) -> None:
+    """Ferma i worker, li attende con UNA scadenza complessiva e parcheggia
+    quelli ancora bloccati (vedi park_worker)."""
+    workers = [w for w in workers if w is not None]
+    alive = []
+    for w in workers:
+        try:
+            running = w.isRunning()
+        except RuntimeError:   # oggetto C++ già distrutto
+            continue
+        if running:
+            alive.append(w)
+            stop = getattr(w, "stop", None)
+            if callable(stop):
+                try:
+                    stop()
+                except Exception:
+                    pass
+    deadline = time.monotonic() + timeout_ms / 1000
+    for w in alive:
+        remaining = max(0, int((deadline - time.monotonic()) * 1000))
+        w.wait(remaining)
+    for w in alive:
+        if w.isRunning():
+            park_worker(w)
 
 
 def friendly_error(e: Exception, host: str = "") -> str:
@@ -53,22 +111,23 @@ class ApiWorker(QThread):
         self._host = host
         self._path = path
         self._resp = None
+        self._stopped = False
 
     def stop(self) -> None:
-        resp, self._resp = self._resp, None
-        if resp is not None:
-            try:
-                resp.close()
-            except Exception:
-                pass
+        self._stopped = True
+        self._close_resp()
 
     def run(self) -> None:
         try:
             self._resp = _open(self._host, self._path, timeout=8)
+            if self._stopped:
+                return
             data = json.loads(self._resp.read().decode("utf-8"))
-            self.ready.emit(data)
+            if not self._stopped:
+                self.ready.emit(data)
         except Exception as e:
-            self.failed.emit(friendly_error(e, self._host))
+            if not self._stopped:
+                self.failed.emit(friendly_error(e, self._host))
         finally:
             self._close_resp()
 

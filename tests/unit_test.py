@@ -321,6 +321,16 @@ def test_md_rules_and_ordered_start():
     assert "<ol>" in md_to_html("1. uno\n2. due")
 
 
+def test_md_list_kind_switch_balanced():
+    html = md_to_html("- a\n- b\n1. uno\n2. due")
+    assert html == "<ul><li>a</li><li>b</li></ul><ol><li>uno</li><li>due</li></ol>"
+
+
+def test_md_table_needs_matching_separator():
+    assert "<table" not in md_to_html("titolo | x\n---")
+    assert "<table" in md_to_html("| a | b |\n|---|---|\n| 1 | 2 |")
+
+
 def test_is_local_host_debian_hostname():
     import socket
     assert is_local_host("http://127.0.1.1:11434")

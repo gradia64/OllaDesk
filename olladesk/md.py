@@ -136,10 +136,12 @@ def _list_html(items: list[tuple[int, str, str, int | None]], pos: int, indent: 
                 out.append(sub)
             continue
         if k != kind:
+            # stesso livello, tipo diverso (puntato → numerato): chiude questo
+            # elenco e prosegue con un elenco fratello, che si chiude da sé
             out.append(f"</{kind}>")
             sub, pos = _list_html(items, pos, ind, k, inline_code_color)
             out.append(sub)
-            continue
+            return "".join(out), pos
         out.append(f"<li>{_inline(text, inline_code_color)}</li>")
         pos += 1
     out.append(f"</{kind}>")
@@ -152,8 +154,10 @@ def _render_segment(seg: str, inline_code_color: str, header_bg: str) -> str:
     i, n = 0, len(lines)
     while i < n:
         ln = lines[i]
-        # tabella GFM: riga con pipe seguita dalla riga separatore
-        if "|" in ln and i + 1 < n and _is_table_sep(lines[i + 1]):
+        # tabella GFM: riga con pipe seguita da un separatore con lo stesso
+        # numero di celle («testo | x» seguito da «---» NON è una tabella)
+        if ("|" in ln and i + 1 < n and _is_table_sep(lines[i + 1])
+                and len(_split_row(lines[i + 1])) == len(_split_row(ln))):
             rows = [ln]
             i += 2   # salta il separatore
             while i < n and "|" in lines[i] and lines[i].strip():

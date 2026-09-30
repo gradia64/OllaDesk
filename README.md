@@ -79,7 +79,7 @@ e installalo: apt risolve da solo le dipendenze (Python 3.10+ e i moduli
 PySide6 di Qt core/gui/widgets):
 
 ```bash
-sudo apt install ./olladesk_0.2.1_all.deb
+sudo apt install ./olladesk_*_all.deb
 ```
 
 Il pacchetto installa il launcher `/usr/bin/olladesk`, la voce «OllaDesk»
@@ -190,12 +190,19 @@ python3 tests/gui_smoke.py      # funzionalità base
 python3 tests/gui_features.py   # allegati, ricerca web, modelli, aggiornamenti
 python3 tests/gui_errors.py     # percorsi di errore (server offline)
 python3 tests/unit_test.py      # unit test delle funzioni pure (senza rete)
+python3 tests/repro_qthread_crash.py  # chiusura dialoghi con worker bloccati (senza rete)
 ```
 
 Gli script `gui_*.py` sono collaudi end-to-end (richiedono Ollama e, per la
 ricerca web, la rete) e non vengono raccolti da `pytest`, che esegue solo
 `tests/unit_test.py`. La configurazione di prova vive in una cartella
 temporanea nuova a ogni esecuzione.
+
+La CI (`.github/workflows/build-deb.yml`) esegue unit test e
+`repro_qthread_crash.py` a ogni push e pull request; sui tag `v*` verifica
+che il tag coincida con `__version__`, costruisce il `.deb` (riproducibile:
+le date vengono dall'ultimo commit), lo controlla con lintian e lo allega
+alla release.
 
 Per leggere i PDF come allegati:
 
@@ -229,6 +236,7 @@ tests/gui_smoke.py          collaudo automatico offscreen (base)
 tests/gui_features.py       collaudo automatico offscreen (funzionalità extra)
 tests/gui_errors.py         collaudo percorsi di errore (offline)
 tests/unit_test.py          unit test delle funzioni pure
+tests/repro_qthread_crash.py regressione: dialoghi distrutti con worker bloccati
 olladesk.desktop            voce per il menu applicazioni di KDE
 ```
 

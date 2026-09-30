@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 from . import config, context, secrets_store, theme, web_search
-from .ollama_client import ApiWorker, ChatWorker, format_stats
+from .ollama_client import ApiWorker, ChatWorker, format_stats, shutdown_workers
 from .widgets.chat_area import ChatArea
 from .widgets.model_manager import ModelManagerDialog
 from .widgets.settings_dialog import SettingsDialog
@@ -347,7 +347,11 @@ class MainWindow(QMainWindow):
             return
         dlg = ModelManagerDialog(self.settings["host"], self)
         dlg.exec()
-        if dlg.changed:
+        changed = dlg.changed
+        # distrutto a ogni chiusura (prima restava figlio della finestra per
+        # sempre); i worker ancora bloccati sono già stati parcheggiati
+        dlg.deleteLater()
+        if changed:
             self._refresh_models()
 
     # -------------------------------------------------------------- conversazioni
@@ -711,6 +715,7 @@ class MainWindow(QMainWindow):
         )
         dlg.applied.connect(self._apply_settings)
         dlg.exec()
+        dlg.deleteLater()
 
     def _apply_settings(self, s: dict) -> None:
         self.settings = dict(s)
@@ -727,13 +732,6 @@ class MainWindow(QMainWindow):
         # ferma e attende (con limite) TUTTI i worker: un QThread distrutto
         # mentre è in esecuzione fa abortire il processo. Gli "zombie" bloccati
         # su un socket muoiono al loro timeout di rete.
-        for w in list(self._running_workers) + list(self._zombie_workers):
-            stop = getattr(w, "stop", None)
-            if callable(stop):
-                try:
-                    stop()
-                except Exception:
-                    pass
-        for w in list(self._running_workers) + list(self._zombie_workers):
-            w.wait(1500)
+        # un'unica scadenza per tutti: prima 1,5 s per OGNI worker in fila
+        shutdown_workers(list(self._running_workers) + list(self._zombie_workers))
         super().closeEvent(ev)

@@ -94,7 +94,9 @@ pseudo = {"display": "Cosa c'è nella nota?", "attachments_meta": win.chat_area.
 full, warns = context.build_api_content(pseudo, include_full=True)
 assert "ZANZARA-42" in full, full
 assert "dati non attendibili" in full
-assert any("pypdf" in w for w in warns), warns   # PDF finto → avviso pypdf
+# PDF finto → avviso: «pypdf non installato» oppure, con pypdf presente
+# (es. Recommends del .deb), errore di lettura del PDF
+assert any("pypdf" in w or "doc.pdf" in w for w in warns), warns
 short, _w = context.build_api_content(pseudo, include_full=False)
 assert "ZANZARA-42" not in short and "note.txt" in short   # nei turni passati: solo segnaposto
 print("4. allegati OK (contenuto allegato solo al turno corrente)")
@@ -172,8 +174,15 @@ else:
     app.processEvents()
     msgs = win.current_chat["messages"]
     assert msgs[-2]["role"] == "user" and msgs[-2]["web"] is True
-    # i risultati sono salvati nel turno e viaggiano nel prompt (build_api_content)
-    assert "Risultati della ricerca web" in msgs[-2].get("web_block", "")
+    # i risultati sono salvati nel turno e viaggiano nel prompt (build_api_content).
+    # DDG blocca a intermittenza: la ricerca dentro l'app può fallire anche se
+    # quella diretta sopra è riuscita; l'app allora prosegue senza risultati
+    # (comportamento corretto) e il controllo deterministico resta il 5e
+    web_block = msgs[-2].get("web_block", "")
+    if not web_block:
+        print("5b. SKIP: DuckDuckGo ha bloccato la ricerca dell'app (anti-bot); vedi 5e")
+    else:
+        assert "Risultati della ricerca web" in web_block
     win.grab().save(f"{SHOTS}/14_websearch_done.png")
     answer = " ".join(msgs[-1]["content"].lower().split())
     # il confronto con un modello 8B è intrinsecamente flaky (a volte risponde

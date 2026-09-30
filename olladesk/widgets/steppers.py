@@ -2,12 +2,13 @@
 
 Sostituisce le frecce impilate di QSpinBox/QDoubleSpinBox — piccole, strette
 nel bordo arrotondato del tema e scomode da premere — con due pulsanti larghi
-ai lati del campo. Tastiera e rotella del mouse continuano a funzionare sul
-campo interno; tenere premuto un pulsante ripete il passo.
+ai lati del campo. La tastiera funziona sul campo interno; la rotella cambia
+il valore solo quando il campo ha il focus (altrimenti scorre la pagina che
+lo contiene, vedi _WheelOnFocusMixin). Tenere premuto un pulsante ripete il passo.
 """
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QEvent, Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractSpinBox,
     QDoubleSpinBox,
@@ -24,6 +25,29 @@ DEC_TIP = "Diminuisci il valore (tieni premuto per scorrere)"
 INC_TIP = "Aumenta il valore (tieni premuto per scorrere)"
 
 
+class _WheelOnFocusMixin:
+    """La rotella cambia il valore solo se il campo ha il focus.
+
+    Altrimenti l'evento viene ignorato e Qt lo propaga al genitore: l'area
+    scorrevole che contiene il campo scorre, invece di modificare per
+    sbaglio temperatura, num_ctx o dimensione del carattere.
+    """
+
+    def wheelEvent(self, ev) -> None:  # noqa: N802 (API Qt)
+        if not self.hasFocus():
+            ev.ignore()
+            return
+        super().wheelEvent(ev)
+
+
+class _SpinBox(_WheelOnFocusMixin, QSpinBox):
+    pass
+
+
+class _DoubleSpinBox(_WheelOnFocusMixin, QDoubleSpinBox):
+    pass
+
+
 class _NumberStepper(QWidget):
     """[−] [campo] [+] con API ridotta compatibile con QSpinBox."""
 
@@ -38,8 +62,13 @@ class _NumberStepper(QWidget):
         inner.setMinimumWidth(84)
         inner.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         inner.valueChanged.connect(self.valueChanged)
+        inner.valueChanged.connect(self._update_buttons)
+        # il campo prende il focus al clic e con Tab; non con la rotella
+        inner.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
-        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        # solo il contenitore rinuncia al focus: il metodo ridefinito più sotto
+        # inoltrerebbe NoFocus al campo, rendendolo non modificabile
+        super().setFocusPolicy(Qt.FocusPolicy.NoFocus)
 
         self.dec_btn = QPushButton("−", self)
         self.inc_btn = QPushButton("+", self)
@@ -63,6 +92,20 @@ class _NumberStepper(QWidget):
 
         self.dec_btn.clicked.connect(lambda: self._nudge(-1))
         self.inc_btn.clicked.connect(lambda: self._nudge(+1))
+        self._update_buttons()
+
+    def _update_buttons(self, *_a) -> None:
+        """−/+ disattivati agli estremi dell'intervallo."""
+        v = self.spin.value()
+        self.dec_btn.setEnabled(v > self.spin.minimum())
+        self.inc_btn.setEnabled(v < self.spin.maximum())
+
+    def changeEvent(self, ev) -> None:  # noqa: N802 (API Qt)
+        super().changeEvent(ev)
+        # riabilitando il contenitore Qt riattiva anche i pulsanti: riapplica
+        # gli estremi dell'intervallo
+        if ev.type() == QEvent.Type.EnabledChange and self.isEnabled():
+            self._update_buttons()
 
     def _nudge(self, direction: int) -> None:
         # setValue borna da sola dentro l'intervallo [min, max]
@@ -78,6 +121,7 @@ class _NumberStepper(QWidget):
 
     def setRange(self, lo, hi) -> None:  # noqa: N802 (API Qt)
         self.spin.setRange(lo, hi)
+        self._update_buttons()
 
     def setSingleStep(self, step) -> None:  # noqa: N802 (API Qt)
         self.spin.setSingleStep(step)
@@ -99,14 +143,14 @@ class IntStepper(_NumberStepper):
     valueChanged = Signal(int)
 
     def __init__(self, parent=None):
-        super().__init__(QSpinBox(), parent)
+        super().__init__(_SpinBox(), parent)
 
 
 class FloatStepper(_NumberStepper):
     valueChanged = Signal(float)
 
     def __init__(self, parent=None):
-        super().__init__(QDoubleSpinBox(), parent)
+        super().__init__(_DoubleSpinBox(), parent)
 
     def setDecimals(self, n: int) -> None:  # noqa: N802 (API Qt)
         self.spin.setDecimals(n)

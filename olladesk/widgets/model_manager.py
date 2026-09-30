@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from ..ollama_client import ApiWorker, PostWorker, PullWorker
+from ..ollama_client import ApiWorker, PostWorker, PullWorker, shutdown_workers
 
 SUGGESTED_MODELS = [
     "llama3.2:3b", "llama3.1:8b", "qwen3:8b", "qwen2.5-coder:7b",
@@ -286,33 +286,12 @@ class ModelManagerDialog(QDialog):
             )
             if ret != QMessageBox.StandardButton.Yes:
                 return
-        self._shutdown_workers()
         super().reject()
 
-    def _shutdown_workers(self) -> None:
-        """Ferma tutti i worker e attende (con limite) la loro uscita.
-
-        Un QThread distrutto mentre è in esecuzione fa abortire il processo
-        con un core dump. Chi resta bloccato su un socket (es. connect non
-        ancora concluso, che `stop()` non può interrompere) viene sganciato
-        dal dialogo: esiterà da solo al suo timeout di rete e sarà liberato
-        dal `finished` → deleteLater già collegato.
-        """
-        workers = [
-            w for w in (
-                self._list_worker, self._pull_worker, self._delete_worker,
-                *self._cancelled_pulls,
-            ) if w is not None
-        ]
-        for w in workers:
-            stop = getattr(w, "stop", None)
-            if callable(stop):
-                try:
-                    stop()
-                except Exception:
-                    pass
-        for w in workers:
-            w.wait(1500)
-        for w in workers:
-            if w.isRunning():
-                w.setParent(None)
+    def done(self, r: int) -> None:
+        # chiusura per qualunque via (Chiudi, Esc, X): nessun worker deve
+        # sopravvivere legato al dialogo, che il chiamante poi distrugge
+        shutdown_workers(
+            [self._list_worker, self._pull_worker, self._delete_worker, *self._cancelled_pulls]
+        )
+        super().done(r)

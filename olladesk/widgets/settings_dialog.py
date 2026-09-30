@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (
 )
 
 from .. import config, secrets_store, updater
-from ..ollama_client import ApiWorker
+from ..ollama_client import ApiWorker, shutdown_workers
 from .model_params import ModelParamsTab
 from .steppers import IntStepper
 
@@ -57,6 +57,7 @@ class SettingsDialog(QDialog):
         self._check_worker: ApiWorker | None = None
         self._update_proc: QProcess | None = None
         self._download_worker = None
+        self._release_worker = None
 
         lay = QVBoxLayout(self)
         lay.setContentsMargins(12, 10, 12, 10)
@@ -295,6 +296,13 @@ class SettingsDialog(QDialog):
             )
         return box
 
+    def _clear_ref(self, attr: str, w):
+        """Slot per `finished`: azzera `attr` solo se punta ancora a `w`."""
+        def clear() -> None:
+            if getattr(self, attr, None) is w:
+                setattr(self, attr, None)
+        return clear
+
     def _set_check_busy(self, busy: bool) -> None:
         self.check_btn.setEnabled(not busy)
         self.check_btn.setText("⏳ Verifica…" if busy else "🔍  Verifica aggiornamenti")
@@ -311,13 +319,14 @@ class SettingsDialog(QDialog):
         self._check_worker.ready.connect(self._on_installed_version)
         self._check_worker.failed.connect(lambda _e: self._check_step())
         self._check_worker.finished.connect(self._check_worker.deleteLater)
-        self._check_worker.finished.connect(lambda: setattr(self, "_check_worker", None))
+        self._check_worker.finished.connect(self._clear_ref("_check_worker", self._check_worker))
         self._check_worker.start()
 
         self._release_worker = updater.UpdateCheckWorker(self)
         self._release_worker.ready.connect(self._on_latest_version)
         self._release_worker.failed.connect(self._on_latest_failed)
         self._release_worker.finished.connect(self._release_worker.deleteLater)
+        self._release_worker.finished.connect(self._clear_ref("_release_worker", self._release_worker))
         self._release_worker.start()
 
     def _on_installed_version(self, data: object) -> None:
@@ -379,6 +388,11 @@ class SettingsDialog(QDialog):
         self._download_worker.ready.connect(self._on_update_script_ready)
         self._download_worker.failed.connect(self._on_update_script_failed)
         self._download_worker.finished.connect(self._download_worker.deleteLater)
+        # senza azzeramento, _update_running() chiamerebbe isRunning() su un
+        # oggetto già distrutto da deleteLater (RuntimeError alla chiusura)
+        self._download_worker.finished.connect(
+            self._clear_ref("_download_worker", self._download_worker)
+        )
         self._download_worker.start()
 
     def _on_update_script_ready(self, script: bytes) -> None:
@@ -511,6 +525,12 @@ class SettingsDialog(QDialog):
             )
         self.applied.emit(settings)
         self.accept()
+
+    def done(self, r: int) -> None:
+        # il dialogo viene distrutto dal chiamante: nessun worker deve restarvi
+        # legato (un QThread distrutto in esecuzione fa abortire il processo)
+        shutdown_workers([self._check_worker, self._release_worker, self._download_worker])
+        super().done(r)
 
     # chiusura gestita: parametri non salvati o aggiornamento in corso
     def reject(self) -> None:
