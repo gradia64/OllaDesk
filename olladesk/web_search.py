@@ -94,7 +94,9 @@ def _parse_lite(page: str) -> list[tuple[str, str, str]]:
     snippets = re.findall(r'class="result-snippet"[^>]*>(.*?)</td>', page, re.S)
     out = []
     for i, (url, title) in enumerate(links):
-        if "duckduckgo.com" in url and "uddg=" not in url:
+        host = urllib.parse.urlparse(url).hostname or ""
+        is_duckduckgo = host == "duckduckgo.com" or host.endswith(".duckduckgo.com")
+        if is_duckduckgo and "uddg=" not in url:
             continue
         title = _clean(title)
         if not title:
