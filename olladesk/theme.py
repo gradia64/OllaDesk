@@ -196,6 +196,15 @@ def build_qss(theme_name: str) -> str:
     QPushButton#sendBtn {{ background: {accent}; color: #ffffff; border: none; border-radius: 14px; padding: 0; }}
     QPushButton#sendBtn:hover {{ background: {accent_hover}; }}
     QPushButton#sendBtn:disabled {{ background: {border}; }}
+    /* pulsanti tondi −/+ dei campi numerici (steppers.py) */
+    QPushButton#stepBtn {{
+        background: {surface}; color: {text};
+        border: 1px solid {border}; border-radius: 13px;
+        padding: 0; font-weight: 700;
+    }}
+    QPushButton#stepBtn:hover {{ background: {hover}; border-color: {dim}; }}
+    QPushButton#stepBtn:pressed {{ background: {accent}; border-color: {accent}; color: #ffffff; }}
+    QPushButton#stepBtn:disabled {{ background: transparent; color: {dim}; border-color: {border}; }}
     QToolButton {{ background: transparent; border: none; border-radius: 6px; padding: 4px; color: {dim}; }}
     QToolButton:hover {{ background: {hover}; color: {text}; }}
 

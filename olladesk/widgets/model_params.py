@@ -12,7 +12,6 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
-    QDoubleSpinBox,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -21,12 +20,12 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSizePolicy,
-    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
 
 from .. import config
+from .steppers import FloatStepper, IntStepper
 
 # ------------------------------------------------------------ definizioni
 
@@ -130,6 +129,11 @@ class ParamRow(QFrame):
         default = definition.get("default_display", definition["default"])
         self.default_label = QLabel(f"predefinito: {default}", self)
         self.default_label.setObjectName("metaLabel")
+        # anche da attivo (nota nascosta) lo spazio resta riservato: la
+        # colonna del campo non trasla quando si spunta la casella
+        sp = self.default_label.sizePolicy()
+        sp.setRetainSizeWhenHidden(True)
+        self.default_label.setSizePolicy(sp)
         lay.addWidget(self.default_label, 0)
 
         self.set_enabled(False)
@@ -138,18 +142,18 @@ class ParamRow(QFrame):
     def _build_value(self) -> QWidget:
         d = self.defn
         if d["type"] == "int":
-            w = QSpinBox(self)
+            w = IntStepper(self)
             w.setRange(d["lo"], d["hi"])
             w.setSingleStep(d["step"])
             w.setValue(int(d["default"]))
-            w.valueChanged.connect(lambda _v: self.changed.emit())
+            w.valueChanged.connect(self.changed)
         elif d["type"] == "float":
-            w = QDoubleSpinBox(self)
+            w = FloatStepper(self)
             w.setRange(d["lo"], d["hi"])
             w.setSingleStep(d["step"])
             w.setDecimals(2)
             w.setValue(float(d["default"]))
-            w.valueChanged.connect(lambda _v: self.changed.emit())
+            w.valueChanged.connect(self.changed)
         elif d["type"] == "combo":
             w = QComboBox(self)
             for value, text in d["choices"]:
@@ -269,6 +273,7 @@ class ModelParamsTab(QWidget):
             row.changed.connect(self._mark_dirty)
             self.rows.append(row)
             host_lay.addWidget(row)
+        self._align_columns()
         host_lay.addStretch(1)
         scroll.setWidget(host)
         lay.addWidget(scroll, 1)
@@ -292,6 +297,22 @@ class ModelParamsTab(QWidget):
         self.reload_models()
 
     # ------------------------------------------------------------------ API
+
+    def _align_columns(self) -> None:
+        """Stessa larghezza di campo e nota su tutte le righe: le colonne
+        (checkbox / etichetta / campo / «predefinito») restano allineate
+        anche se il testo delle note ha lunghezze diverse."""
+        note_w = max(r.default_label.sizeHint().width() for r in self.rows)
+        field_w = max(
+            r.value_widget.sizeHint().width()
+            for r in self.rows if r.defn["type"] != "strlist"
+        )
+        for r in self.rows:
+            # l'editor multiriga resta più largo (serve per le sequenze)
+            r.value_widget.setFixedWidth(
+                260 if r.defn["type"] == "strlist" else field_w
+            )
+            r.default_label.setFixedWidth(note_w)
 
     def reload_models(self) -> None:
         # ricaricare il profilo scarterebbe le modifiche in corso: chiedi prima

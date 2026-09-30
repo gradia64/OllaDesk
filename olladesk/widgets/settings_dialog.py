@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QFormLayout,
+    QFrame,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -20,7 +21,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
-    QSpinBox,
+    QScrollArea,
     QTabWidget,
     QVBoxLayout,
     QWidget,
@@ -29,6 +30,7 @@ from PySide6.QtWidgets import (
 from .. import config, secrets_store, updater
 from ..ollama_client import ApiWorker
 from .model_params import ModelParamsTab
+from .steppers import IntStepper
 
 
 class SettingsDialog(QDialog):
@@ -46,7 +48,9 @@ class SettingsDialog(QDialog):
     ):
         super().__init__(parent)
         self.setWindowTitle("Impostazioni — OllaDesk")
-        self.setMinimumSize(780, 600)
+        # la scroll area della scheda interfaccia rende sicure anche le
+        # dimensioni piccole: le schermate scorrono invece di sovrapporsi
+        self.setMinimumSize(720, 480)
         self._theme_name = theme_name
         self._installed_version = version
         self._latest_version: str | None = None
@@ -78,10 +82,23 @@ class SettingsDialog(QDialog):
     # ---------------------------------------------------- scheda interfaccia
 
     def _build_gui_tab(self, s: dict) -> QWidget:
+        # tutto il contenuto viaggia in una scroll area: se la finestra è più
+        # piccola dei contenuti compare la barra di scorrimento invece delle
+        # sovrapposizioni
+        page = QWidget()
+        outer = QVBoxLayout(page)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+        scroll = QScrollArea(page)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        outer.addWidget(scroll)
+
         w = QWidget()
-        outer = QVBoxLayout(w)
-        outer.setContentsMargins(16, 12, 16, 12)
-        outer.setSpacing(12)
+        scroll.setWidget(w)
+        lay = QVBoxLayout(w)
+        lay.setContentsMargins(16, 12, 16, 12)
+        lay.setSpacing(12)
 
         form = QFormLayout()
         form.setSpacing(10)
@@ -101,7 +118,7 @@ class SettingsDialog(QDialog):
         self.theme_combo.setCurrentIndex(max(0, idx))
         form.addRow("Tema:", self.theme_combo)
 
-        self.font_spin = QSpinBox(w)
+        self.font_spin = IntStepper(w)
         self.font_spin.setRange(8, 16)
         self.font_spin.setValue(int(s.get("font_size", 10)))
         self.font_spin.setSuffix(" pt")
@@ -119,14 +136,14 @@ class SettingsDialog(QDialog):
         self.ts_chk.setChecked(bool(s.get("show_timestamps", False)))
         form.addRow("Orario:", self.ts_chk)
 
-        self.hist_spin = QSpinBox(w)
+        self.hist_spin = IntStepper(w)
         self.hist_spin.setRange(0, 200)
         self.hist_spin.setValue(int(s.get("history_limit", 20)))
         self.hist_spin.setSuffix(" messaggi")
         self.hist_spin.setToolTip("Quanti messaggi precedenti vengono inviati al modello come contesto")
         form.addRow("Contesto inviato al modello:", self.hist_spin)
 
-        self.web_spin = QSpinBox(w)
+        self.web_spin = IntStepper(w)
         self.web_spin.setRange(3, 10)
         self.web_spin.setValue(int(s.get("web_results", 5)))
         self.web_spin.setSuffix(" risultati")
@@ -197,7 +214,7 @@ class SettingsDialog(QDialog):
         )
         form.addRow("Prompt di sistema:", self.sys_prompt)
 
-        outer.addLayout(form)
+        lay.addLayout(form)
 
         info = QLabel(
             f"Impostazioni, parametri e conversazioni sono salvati in:\n{config.config_dir()}",
@@ -205,12 +222,12 @@ class SettingsDialog(QDialog):
         )
         info.setObjectName("metaLabel")
         info.setWordWrap(True)
-        outer.addWidget(info)
-        outer.addStretch(1)
+        lay.addWidget(info)
+        lay.addStretch(1)
 
         self._update_provider_fields()
-        outer.addWidget(self._build_update_group(w))
-        return w
+        lay.addWidget(self._build_update_group(w))
+        return page
 
     def _update_provider_fields(self) -> None:
         """Mostra i campi del provider selezionato (chiave per Ollama, URL per SearXNG)."""
