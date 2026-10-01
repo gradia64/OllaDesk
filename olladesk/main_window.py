@@ -6,22 +6,24 @@ richiesta a Ollama).
 """
 from __future__ import annotations
 
+import html
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QGuiApplication, QKeySequence, QShortcut
+from PySide6.QtCore import Qt, QTimer, QUrl
+from PySide6.QtGui import QDesktopServices, QGuiApplication, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QComboBox,
     QFrame,
     QHBoxLayout,
     QLabel,
     QMainWindow,
+    QMessageBox,
     QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
-from . import config, context, secrets_store, theme, web_search
+from . import __version__, app_update, config, context, secrets_store, theme, web_search
 from .ollama_client import ApiWorker, ChatWorker, format_stats, shutdown_workers
 from .widgets.chat_area import ChatArea
 from .widgets.model_manager import ModelManagerDialog
@@ -43,6 +45,8 @@ class MainWindow(QMainWindow):
         self._search_worker: web_search.WebSearchWorker | None = None
         self._status_worker: ApiWorker | None = None
         self._models_worker: ApiWorker | None = None
+        self._app_update_worker: app_update.AppUpdateCheckWorker | None = None
+        self._app_update: dict | None = None   # release più recente trovata
         self._models: list[dict] = []
         self._online: bool | None = None
         self._preferred_model: str | None = None
@@ -78,6 +82,8 @@ class MainWindow(QMainWindow):
         self._status_timer.start()
         QTimer.singleShot(150, self._check_server)
         QTimer.singleShot(150, self._refresh_models)
+        # dopo l'avvio, per non rallentarlo: al massimo una volta al giorno
+        QTimer.singleShot(3000, self._maybe_check_app_update)
 
     # -------------------------------------------------------------------- UI
 
@@ -119,6 +125,12 @@ class MainWindow(QMainWindow):
         top_lay.addWidget(self.reload_models_btn)
 
         top_lay.addStretch(1)
+        # compare solo quando GitHub ha una versione più recente di OllaDesk
+        self.app_update_btn = QToolButton(top)
+        self.app_update_btn.setObjectName("appUpdateBtn")
+        self.app_update_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.app_update_btn.hide()
+        top_lay.addWidget(self.app_update_btn)
         self.status_dot = QLabel("●", top)
         self.status_dot.setProperty("status", "offline")
         self.status_label = QLabel("connessione…", top)
@@ -157,6 +169,7 @@ class MainWindow(QMainWindow):
 
         self.burger.clicked.connect(self._toggle_sidebar)
         self.reload_models_btn.clicked.connect(self._refresh_models)
+        self.app_update_btn.clicked.connect(self._show_app_update)
         self.model_combo.currentIndexChanged.connect(self._on_model_changed)
 
     def _shortcuts(self) -> None:
@@ -225,7 +238,9 @@ class MainWindow(QMainWindow):
         self._rerender_messages()
 
     def _rerender_messages(self) -> None:
-        if self.current_chat:
+        # durante la generazione la bolla aperta non è ancora in current_chat:
+        # ricrearla la distruggerebbe (refresh_theme ha già aggiornato i colori)
+        if self.current_chat and not self._busy():
             self.chat_area.clear_messages()
             for m in self.current_chat["messages"]:
                 self.chat_area.add_message(
@@ -252,7 +267,7 @@ class MainWindow(QMainWindow):
         was_online = self._online
         self._online = True
         self.status_dot.setProperty("status", "online")
-        self.status_label.setText(f"Ollama {version}")
+        self.status_label.setText(f"Ollama {html.escape(version)}")
         self._repolish(self.status_dot)
         if not was_online:
             self._refresh_models()
@@ -702,6 +717,63 @@ class MainWindow(QMainWindow):
         self.sidebar.set_busy(False)
         self.chat_area.focus_input()
 
+    # ------------------------------------------------ aggiornamenti OllaDesk
+
+    def _maybe_check_app_update(self) -> None:
+        if self._app_update_worker is not None or not app_update.due_for_check(self.settings):
+            return
+        w = app_update.AppUpdateCheckWorker(self)
+        w.ready.connect(self._on_app_release)
+        w.failed.connect(lambda _e: None)   # controllo silenzioso: si riprova al prossimo avvio
+        w.finished.connect(w.deleteLater)
+        w.finished.connect(self._clear_ref("_app_update_worker", w))
+        self._app_update_worker = w
+        self._track_worker(w)
+        w.start()
+
+    def _on_app_release(self, release: object) -> None:
+        self.settings["app_update_last_check"] = config.now()
+        config.save_settings(self.settings)
+        self._set_app_update(app_update.newer_release(release if isinstance(release, dict) else None))
+
+    def _set_app_update(self, release: dict | None) -> None:
+        """Mostra (o nasconde) l'avviso di nuova versione nella barra superiore."""
+        if release and release["version"] == self.settings.get("app_update_skip"):
+            release = None
+        self._app_update = release
+        if release:
+            self.app_update_btn.setText(f"⬆ OllaDesk {release['version']}")
+            self.app_update_btn.setToolTip(
+                f"È disponibile OllaDesk {release['version']} (in uso: {__version__})"
+            )
+        self.app_update_btn.setVisible(bool(release))
+
+    def _show_app_update(self) -> None:
+        release = self._app_update
+        if not release:
+            return
+        method = app_update.install_method()
+        box = QMessageBox(self)
+        box.setWindowTitle("Aggiornamento di OllaDesk")
+        box.setIcon(QMessageBox.Icon.Information)
+        box.setText(
+            f"È disponibile OllaDesk {release['version']} (in uso: {__version__})."
+        )
+        box.setInformativeText(app_update.update_hint(method, release["version"]))
+        open_btn = box.addButton("Apri la pagina di download", QMessageBox.ButtonRole.AcceptRole)
+        skip_btn = box.addButton("Salta questa versione", QMessageBox.ButtonRole.DestructiveRole)
+        box.addButton("Più tardi", QMessageBox.ButtonRole.RejectRole)
+        box.exec()
+        clicked = box.clickedButton()
+        box.deleteLater()
+        if clicked is open_btn:
+            url = release["url"] if method != "arch" else app_update.download_page(method)
+            QDesktopServices.openUrl(QUrl(url))
+        elif clicked is skip_btn:
+            self.settings["app_update_skip"] = release["version"]
+            config.save_settings(self.settings)
+            self._set_app_update(None)
+
     # ---------------------------------------------------------------- impostazioni
 
     def open_settings(self) -> None:
@@ -714,11 +786,15 @@ class MainWindow(QMainWindow):
             self.settings, self.model_names, self.settings["theme"], self._version, self
         )
         dlg.applied.connect(self._apply_settings)
+        # «Verifica ora» nelle impostazioni: l'esito aggiorna anche l'avviso
+        dlg.appReleaseChecked.connect(self._on_app_release)
         dlg.exec()
         dlg.deleteLater()
 
     def _apply_settings(self, s: dict) -> None:
         self.settings = dict(s)
+        if not s.get("app_update_check", True):
+            self._set_app_update(None)   # controllo disattivato: via l'avviso
         self._apply_theme_now()
         self.chat_area.set_send_on_enter(s["send_on_enter"])
         # ricontatta il server e ricarica i modelli

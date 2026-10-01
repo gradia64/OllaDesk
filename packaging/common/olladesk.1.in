@@ -1,0 +1,25 @@
+.TH OLLADESK 1 "@DATE@" "olladesk @VERSION@" "Manuale utente"
+.SH NOME
+olladesk \- client desktop per Ollama in stile ChatGPT
+.SH SINTASSI
+.B olladesk
+.SH DESCRIZIONE
+.B OllaDesk
+è un'interfaccia grafica (PySide6/Qt) per chattare con i modelli LLM locali
+serviti da un server Ollama: conversazioni salvate per file, allegati (testo,
+immagini, PDF), ricerca web (DuckDuckGo/SearXNG), gestione dei modelli
+(scaricamento ed eliminazione) e tema chiaro/scuro.
+.PP
+L'indirizzo del server e le preferenze sono configurati nell'app
+(CTRL+, oppure la voce «Impostazioni» della barra laterale) e salvati
+in ~/.config/olladesk/.
+.PP
+All'avvio, al massimo una volta al giorno, OllaDesk controlla su GitHub se
+è uscita una nuova versione e in quel caso mostra un avviso (nessun download
+automatico). Il controllo si disattiva in Impostazioni \(-> Interfaccia.
+.SH FILE
+.TP
+.I ~/.config/olladesk/
+Impostazioni, conversazioni e allegati incollati.
+.SH VEDI ANCHE
+https://github.com/gradia64/OllaDesk

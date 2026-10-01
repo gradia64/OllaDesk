@@ -50,6 +50,12 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   versione del server e l'ultima release su GitHub, con **aggiornamento in
   un clic** tramite lo script ufficiale (eseguito con `pkexec`, quindi con la
   password di amministratore di KDE).
+- **Aggiornamenti di OllaDesk**: all'avvio, al massimo una volta al giorno,
+  l'app controlla su GitHub se è uscita una nuova versione e, in quel caso,
+  mostra un avviso nella barra superiore con le istruzioni adatte a come è
+  stata installata (.deb, AUR, pip o sorgenti). Solo un avviso: nessun
+  download né installazione automatica. Si può saltare una versione, verificare
+  a mano o disattivare il controllo in Impostazioni → Interfaccia.
 - **Impostazioni → scheda «Interfaccia»**: URL del server Ollama, tema
   scuro/chiaro/**sistema** (segue KDE Plasma, anche a caldo quando lo cambi),
   dimensione del carattere, streaming on/off, invio con Invio, orario nei
@@ -69,6 +75,31 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
 - Python 3.10+ con PySide6
 - Un server Ollama in esecuzione (`ollama serve`) con almeno un modello
 
+## Installazione su Arch Linux (AUR)
+
+Il pacchetto [`olladesk`](https://aur.archlinux.org/packages/olladesk) è su
+AUR. Con un helper:
+
+```bash
+yay -S olladesk
+```
+
+oppure a mano:
+
+```bash
+git clone https://aur.archlinux.org/olladesk.git && cd olladesk
+curl -LO https://github.com/gradia64/OllaDesk/releases/latest/download/olladesk-release-key.asc
+gpg --import olladesk-release-key.asc   # impronta: vedi «Verifica delle firme»
+makepkg -si
+```
+
+makepkg verifica la firma GPG del tarball sorgente (`validpgpkeys` nel
+PKGBUILD): se la chiave di release non è nel tuo portachiavi la build si ferma.
+Importala dal file `olladesk-release-key.asc` allegato a ogni release
+(`gpg --import olladesk-release-key.asc`) dopo averne controllato l'impronta.
+Ogni release include anche il pacchetto già costruito
+(`olladesk-<versione>-1-any.pkg.tar.zst`, installabile con `sudo pacman -U`).
+
 ## Installazione su Debian
 
 ### Dal pacchetto .deb (consigliata)
@@ -85,6 +116,26 @@ sudo apt install ./olladesk_*_all.deb
 Il pacchetto installa il launcher `/usr/bin/olladesk`, la voce «OllaDesk»
 nel menu applicazioni con la relativa icona, la manpage e il changelog;
 la disinstallazione è `sudo apt remove olladesk`.
+
+### Verifica delle firme
+
+Dalla 0.2.3 ogni file della release ha una firma GPG staccata (`.sig`) fatta
+con la chiave di release del progetto, pubblicata come
+`olladesk-release-key.asc` nella release e in `packaging/` nel repository:
+
+```
+gradia (OllaDesk release signing) <gradia@disroot.org>
+ed25519  5B16 6C1B 4AD7 428C 74A0  7D5B A337 0987 A057 6694
+```
+
+Dopo l'import controlla che l'impronta mostrata da gpg coincida, poi:
+
+```bash
+gpg --import olladesk-release-key.asc
+gpg --verify olladesk_0.2.3_all.deb.sig olladesk_0.2.3_all.deb
+# oppure tutto in una volta:
+gpg --verify SHA256SUMS.sig SHA256SUMS && sha256sum -c --ignore-missing SHA256SUMS
+```
 
 Per costruire il pacchetto dai sorgenti (serve `dpkg-deb`, presente su
 qualunque Debian):
@@ -198,11 +249,14 @@ ricerca web, la rete) e non vengono raccolti da `pytest`, che esegue solo
 `tests/unit_test.py`. La configurazione di prova vive in una cartella
 temporanea nuova a ogni esecuzione.
 
-La CI (`.github/workflows/build-deb.yml`) esegue unit test e
-`repro_qthread_crash.py` a ogni push e pull request; sui tag `v*` verifica
-che il tag coincida con `__version__`, costruisce il `.deb` (riproducibile:
-le date vengono dall'ultimo commit), lo controlla con lintian e lo allega
-alla release.
+```bash
+python3 tests/offline_app_update.py   # controllo aggiornamenti con finto GitHub (senza rete)
+```
+
+La CI (`.github/workflows/release.yml`) esegue unit test e test offline a ogni
+push e pull request; sui tag `v*` costruisce tarball, `.deb` e pacchetto Arch,
+li firma e li pubblica (release GitHub e AUR). Dettagli per chi pubblica:
+[packaging/README.md](packaging/README.md).
 
 Per leggere i PDF come allegati:
 
@@ -221,7 +275,8 @@ olladesk/
   md.py                     Markdown → HTML (subset Qt rich text)
   context.py                allegati: testo/PDF/immagini come contesto
   web_search.py             ricerca web (DuckDuckGo/Ollama Cloud/SearXNG) + worker
-  updater.py                controllo release GitHub + comando di aggiornamento
+  updater.py                aggiornamenti di Ollama (release GitHub + pkexec)
+  app_update.py             aggiornamenti di OllaDesk (solo controllo e avviso)
   ollama_client.py          client API Ollama (stdlib) + worker QThread
   main_window.py            finestra principale e orchestrazione streaming
   widgets/
@@ -237,7 +292,10 @@ tests/gui_features.py       collaudo automatico offscreen (funzionalità extra)
 tests/gui_errors.py         collaudo percorsi di errore (offline)
 tests/unit_test.py          unit test delle funzioni pure
 tests/repro_qthread_crash.py regressione: dialoghi distrutti con worker bloccati
+tests/offline_app_update.py controllo aggiornamenti di OllaDesk (finto GitHub)
 olladesk.desktop            voce per il menu applicazioni di KDE
+packaging/                  file comuni .deb/Arch, modello PKGBUILD, chiave di release
+scripts/                    build (.deb, sorgenti, Arch), firma, pubblicazione AUR
 ```
 
 ## Licenza

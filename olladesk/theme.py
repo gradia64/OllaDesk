@@ -207,6 +207,12 @@ def build_qss(theme_name: str) -> str:
     QPushButton#stepBtn:disabled {{ background: transparent; color: {dim}; border-color: {border}; }}
     QToolButton {{ background: transparent; border: none; border-radius: 6px; padding: 4px; color: {dim}; }}
     QToolButton:hover {{ background: {hover}; color: {text}; }}
+    /* avviso «nuova versione di OllaDesk» nella barra superiore */
+    QToolButton#appUpdateBtn {{
+        color: {accent}; border: 1px solid {accent};
+        border-radius: 10px; padding: 2px 10px; font-weight: 600;
+    }}
+    QToolButton#appUpdateBtn:hover {{ background: {accent}; color: #ffffff; }}
 
     /* ---- bolle messaggi ---- */
     QFrame[bubble="user"] {{

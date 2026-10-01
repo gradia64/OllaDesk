@@ -331,6 +331,69 @@ def test_md_table_needs_matching_separator():
     assert "<table" in md_to_html("| a | b |\n|---|---|\n| 1 | 2 |")
 
 
+# ------------------------------------------------------------ app_update.py
+
+def test_app_update_parse_release():
+    from olladesk.app_update import parse_release
+    rel = parse_release({"tag_name": "v0.2.3", "html_url": "https://x/r/v0.2.3"})
+    assert rel == {"version": "0.2.3", "url": "https://x/r/v0.2.3"}
+    assert parse_release({"tag_name": "v0.3.0", "prerelease": True}) is None
+    assert parse_release({"tag_name": "v0.3.0", "draft": True}) is None
+    assert parse_release({"tag_name": ""}) is None
+    assert parse_release(["non", "un", "dict"]) is None
+
+
+def test_app_update_newer_release():
+    from olladesk.app_update import newer_release
+    rel = {"version": "0.2.3", "url": "u"}
+    assert newer_release(rel, "0.2.2") == rel
+    assert newer_release(rel, "0.2.3") is None
+    assert newer_release(rel, "0.10.0") is None       # confronto numerico, non testuale
+    assert newer_release(None, "0.2.2") is None
+
+
+def test_app_update_due_for_check():
+    from olladesk.app_update import CHECK_INTERVAL, due_for_check
+    now = 1_000_000.0
+    assert due_for_check({}, now)                                       # mai controllato
+    assert not due_for_check({"app_update_check": False}, now)
+    assert not due_for_check({"app_update_last_check": now - 60}, now)
+    assert due_for_check({"app_update_last_check": now - CHECK_INTERVAL}, now)
+    assert due_for_check({"app_update_last_check": now + 3600}, now)    # orologio indietro
+    assert due_for_check({"app_update_last_check": "rotto"}, now)
+
+
+def test_app_update_install_method_and_hint():
+    from olladesk import app_update
+    d = Path(tempfile.mkdtemp())
+    pkg = d / "olladesk"
+    pkg.mkdir()
+    assert app_update.install_method(pkg) == "pip"
+    (d / ".git").mkdir()
+    assert app_update.install_method(pkg) == "source"
+    for m in ("deb", "arch"):
+        (pkg / app_update.MARKER_NAME).write_text(m + "\n", encoding="utf-8")
+        assert app_update.install_method(pkg) == m
+    (pkg / app_update.MARKER_NAME).write_text("sconosciuto", encoding="utf-8")
+    assert app_update.install_method(pkg) == "source"
+    assert "olladesk_0.2.3_all.deb" in app_update.update_hint("deb", "0.2.3")
+    assert "AUR" in app_update.update_hint("arch", "0.2.3")
+    assert app_update.download_page("arch") == app_update.AUR_PAGE
+    assert app_update.download_page("deb") == app_update.RELEASES_PAGE
+
+
+def test_settings_keep_app_update_keys():
+    # le chiavi nuove devono sopravvivere al filtro di load_settings
+    from olladesk import config
+    with _isolated_config():
+        s = config.load_settings()
+        assert s["app_update_check"] is True and s["app_update_skip"] == ""
+        s.update(app_update_last_check=123.0, app_update_skip="0.2.3")
+        config.save_settings(s)
+        s2 = config.load_settings()
+        assert s2["app_update_last_check"] == 123.0 and s2["app_update_skip"] == "0.2.3"
+
+
 def test_is_local_host_debian_hostname():
     import socket
     assert is_local_host("http://127.0.1.1:11434")

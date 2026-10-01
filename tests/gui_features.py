@@ -24,6 +24,13 @@ from PySide6.QtWidgets import QApplication
 
 from olladesk import context, theme, web_search, updater
 from olladesk.main_window import MainWindow
+from olladesk import config as _cfg
+
+# il controllo aggiornamenti di OllaDesk (verso GitHub) ha il suo test
+# offline, tests/offline_app_update.py: qui resta spento
+_s = _cfg.load_settings()
+_s["app_update_check"] = False
+_cfg.save_settings(_s)
 from olladesk.widgets.model_manager import ModelManagerDialog
 from olladesk.widgets.settings_dialog import SettingsDialog
 

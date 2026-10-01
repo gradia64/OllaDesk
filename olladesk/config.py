@@ -28,6 +28,10 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "web_provider": "duckduckgo",   # "duckduckgo" | "ollama" | "searxng"
     "web_api_key": "",          # chiave API per il provider "ollama" (ollama.com)
     "web_searxng_url": "http://localhost:8888",  # istanza SearXNG personale
+    # aggiornamenti di OllaDesk (solo avviso): vedi app_update.py
+    "app_update_check": True,       # controllo automatico all'avvio (max 1 volta al giorno)
+    "app_update_last_check": 0.0,   # epoch dell'ultimo controllo riuscito
+    "app_update_skip": "",          # versione per cui l'utente ha scelto «Salta»
 }
 
 

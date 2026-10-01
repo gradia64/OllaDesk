@@ -10,6 +10,7 @@
 #   /usr/share/doc/olladesk/copyright
 #
 # La versione è letta da olladesk/__init__.py (unica fonte, come pyproject).
+# Launcher e manpage sono in packaging/common/, condivisi con il PKGBUILD Arch.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -43,26 +44,13 @@ mkdir -p "$PKG/usr/share/olladesk" \
 cp -r olladesk "$PKG/usr/share/olladesk/olladesk"
 find "$PKG/usr/share/olladesk" -type d -name __pycache__ -exec rm -rf {} +
 find "$PKG/usr/share/olladesk" -type f -name '*.pyc' -delete
+# marcatore letto da app_update.install_method(): suggerimenti di
+# aggiornamento specifici per il .deb
+printf 'deb\n' > "$PKG/usr/share/olladesk/olladesk/_packaging"
 
 # --- launcher -------------------------------------------------------------
-# NON `python3 -m olladesk`: con -m Python mette la cartella corrente in
-# sys.path[0], davanti a tutto. Un json.py (o un checkout di olladesk/) nella
-# cartella di avvio verrebbe importato al posto dei moduli veri. Eseguendo
-# uno script, sys.path[0] è la cartella dello script: /usr/share/olladesk.
-cat > "$PKG/usr/share/olladesk/launcher.py" <<'EOF'
-"""Avvio di OllaDesk installato dal pacchetto Debian."""
-import sys
-
-from olladesk.app import main
-
-sys.exit(main())
-EOF
-cat > "$PKG/usr/bin/olladesk" <<'EOF'
-#!/bin/sh
-# Launcher OllaDesk: esegue lo script di avvio in /usr/share/olladesk
-exec /usr/bin/python3 /usr/share/olladesk/launcher.py "$@"
-EOF
-chmod 755 "$PKG/usr/bin/olladesk"
+install -m 644 packaging/common/launcher.py "$PKG/usr/share/olladesk/launcher.py"
+install -m 755 packaging/common/olladesk.sh "$PKG/usr/bin/olladesk"
 
 # --- desktop e icona -------------------------------------------------------
 install -m 644 olladesk.desktop "$PKG/usr/share/applications/olladesk.desktop"
@@ -119,29 +107,9 @@ olladesk ($VERSION) unstable; urgency=medium
 EOF
 gzip -9n -c "$STAGE/changelog" > "$PKG/usr/share/doc/olladesk/changelog.gz"
 
-cat > "$STAGE/olladesk.1" <<EOF
-.TH OLLADESK 1 "$(date -u -d "@$SOURCE_DATE_EPOCH" +%Y-%m-%d)" "olladesk $VERSION" "Manuale utente"
-.SH NOME
-olladesk \\- client desktop per Ollama in stile ChatGPT
-.SH SINTASSI
-.B olladesk
-.SH DESCRIZIONE
-.B OllaDesk
-è un'interfaccia grafica (PySide6/Qt) per chattare con i modelli LLM locali
-serviti da un server Ollama: conversazioni salvate per file, allegati (testo,
-immagini, PDF), ricerca web (DuckDuckGo/SearXNG), gestione dei modelli
-(scaricamento ed eliminazione) e tema chiaro/scuro.
-.PP
-L'indirizzo del server e le preferenze sono configurati nell'app
-(CTRL+, oppure la voce «Impostazioni» della barra laterale) e salvati
-in ~/.config/olladesk/.
-.SH FILE
-.TP
-.I ~/.config/olladesk/
-Impostazioni, conversazioni e allegati incollati.
-.SH VEDI ANCHE
- https://github.com/gradia64/OllaDesk
-EOF
+sed -e "s/@VERSION@/$VERSION/" \
+    -e "s/@DATE@/$(date -u -d "@$SOURCE_DATE_EPOCH" +%Y-%m-%d)/" \
+    packaging/common/olladesk.1.in > "$STAGE/olladesk.1"
 gzip -9n -c "$STAGE/olladesk.1" > "$PKG/usr/share/man/man1/olladesk.1.gz"
 
 # permessi conforme a policy: file 644, directory 755 (gli eseguibili,

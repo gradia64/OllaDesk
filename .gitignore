@@ -5,3 +5,4 @@ venv/
 *.tmp
 .zcodeignore
 dist/
+build/

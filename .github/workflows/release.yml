@@ -1,0 +1,183 @@
+# Test a ogni push/PR. Sui tag v*: tarball sorgente, .deb e pacchetto Arch,
+# tutti firmati con la chiave GPG di release, allegati alla release GitHub e
+# PKGBUILD pubblicato su AUR. Le action sono fissate per SHA (commento = versione).
+#
+# Secret necessari (vedi packaging/README.md):
+#   GPG_PRIVATE_KEY, GPG_PASSPHRASE   firma (obbligatoria per ogni release)
+#   AUR_SSH_PRIVATE_KEY               push su AUR (se assente il passo è saltato)
+name: release
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read   # solo il job publish alza a write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Dipendenze di sistema (runtime Qt offscreen + validazione .desktop)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq desktop-file-utils libegl1 libgl1 \
+            libxkbcommon0 libdbus-1-3 libfontconfig1
+          desktop-file-validate olladesk.desktop
+
+      - name: Dipendenze test (PySide6 per i worker Qt)
+        run: python3 -m pip install --quiet PySide6
+
+      - name: Test unitari
+        run: python3 tests/unit_test.py
+        env:
+          QT_QPA_PLATFORM: offscreen
+
+      - name: Regressione ciclo di vita dei worker (nessuna rete)
+        run: python3 tests/repro_qthread_crash.py
+
+      - name: Controllo aggiornamenti di OllaDesk con finto GitHub (nessuna rete)
+        run: python3 tests/offline_app_update.py
+
+  dist:
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        with:
+          fetch-depth: 0   # SOURCE_DATE_EPOCH dall'ultimo commit
+
+      - name: Il tag corrisponde alla versione del codice
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          code="$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' olladesk/__init__.py)"
+          if [ "${GITHUB_REF_NAME#v}" != "$code" ]; then
+            echo "::error::tag $GITHUB_REF_NAME ma olladesk/__init__.py dice $code"
+            exit 1
+          fi
+
+      - name: Chiave pubblica di release presente
+        run: |
+          test -f packaging/olladesk-release-key.asc || {
+            echo "::error::manca packaging/olladesk-release-key.asc (scripts/gen-release-key.sh)"
+            exit 1
+          }
+
+      - name: Tarball sorgente e .deb
+        run: |
+          scripts/build-source.sh
+          scripts/build-deb.sh
+
+      - name: Lintian
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq lintian
+          lintian --fail-on error,warning dist/*.deb
+
+      # la firma del tarball serve già al job arch: makepkg la verifica
+      - name: Firma GPG
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          if [ -z "$GPG_PRIVATE_KEY" ]; then
+            echo "::error::secret GPG_PRIVATE_KEY mancante: le release devono essere firmate"
+            exit 1
+          fi
+          scripts/sign-release.sh dist
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: dist
+          path: dist/
+
+  arch:
+    needs: dist
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
+        with:
+          name: dist
+          path: dist/
+
+      # build con verifica della firma del tarball, check(), namcap,
+      # installazione di prova e avvio offscreen
+      - name: PKGBUILD e pacchetto Arch
+        run: |
+          scripts/prepare-aur.sh
+          scripts/build-arch.sh
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: arch
+          include-hidden-files: true   # .SRCINFO
+          path: |
+            dist/*.pkg.tar.zst
+            build/aur/PKGBUILD
+            build/aur/.SRCINFO
+
+  publish:
+    needs: arch
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # necessaria per creare la release e caricare i file
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
+        with:
+          name: dist
+          path: dist/
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
+        with:
+          name: arch
+          path: arch/
+
+      - name: Raccolta e firma di tutti gli artefatti
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          cp arch/dist/*.pkg.tar.zst dist/
+          mkdir -p build/aur
+          cp arch/build/aur/PKGBUILD arch/build/aur/.SRCINFO build/aur/
+          # rifirma tutto: SHA256SUMS copre anche il pacchetto Arch
+          rm -f dist/*.sig dist/SHA256SUMS
+          scripts/sign-release.sh dist
+          cp packaging/olladesk-release-key.asc dist/
+
+      - name: Allega alla release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${GITHUB_REF#refs/tags/}"
+          # se la release esiste già (creata a mano con le note) carica e basta
+          gh release create "$tag" dist/* --generate-notes --title "$tag" \
+            || gh release upload "$tag" dist/* --clobber
+
+      # dopo la release: il PKGBUILD scarica tarball e firma da lì
+      - name: Pubblica su AUR
+        env:
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        run: |
+          if [ -z "$AUR_SSH_PRIVATE_KEY" ]; then
+            echo "::notice::secret AUR_SSH_PRIVATE_KEY assente: pubblicazione su AUR saltata"
+            exit 0
+          fi
+          scripts/publish-aur.sh

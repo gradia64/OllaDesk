@@ -22,6 +22,13 @@ from PySide6.QtCore import QTimer, QEventLoop
 from PySide6.QtWidgets import QApplication
 
 from olladesk.main_window import MainWindow
+from olladesk import config as _cfg
+
+# il controllo aggiornamenti di OllaDesk (verso GitHub) ha il suo test
+# offline, tests/offline_app_update.py: qui resta spento
+_s = _cfg.load_settings()
+_s["app_update_check"] = False
+_cfg.save_settings(_s)
 from olladesk.widgets.settings_dialog import SettingsDialog
 
 SHOTS = "/tmp/olladesk_shots"
@@ -115,6 +122,20 @@ wait_ms(400)
 win.grab().save(f"{SHOTS}/7_light.png")
 win._apply_settings({**win.settings, "theme": "dark"})
 wait_ms(300)
+
+# --- regressione meta messaggi: orario e statistiche insieme ----------------
+from olladesk.widgets.message import MessageWidget
+
+mw = MessageWidget("assistant", "x", 1_000_000, True, "dark", parent=win)
+mw.finish("42 token · 8.3 tok/s", show_ts=True)
+meta = mw.meta.text()
+assert meta.split("  ·  ")[0].count(":") == 1 and "42 token" in meta, meta
+for _ in range(3):
+    mw.refresh_theme("light", True)
+    mw.refresh_theme("dark", True)
+assert mw.meta.text().count("42 token") == 1, mw.meta.text()   # niente accumulo
+mw.deleteLater()
+print("meta orario+statistiche OK")
 
 # --- verifica persistenza ---------------------------------------------------
 import json

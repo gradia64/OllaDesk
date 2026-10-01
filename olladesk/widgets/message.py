@@ -40,6 +40,10 @@ class MessageWidget(QFrame):
         self.ts = ts
         self.theme_name = theme_name
         self._anim_idx = 0
+        # le statistiche vivono qui, non nel testo della meta: rileggerle
+        # dall'etichetta accumulerebbe l'orario a ogni refresh del tema
+        self._stats: str | None = None
+        self._show_ts = show_ts
 
         self.setProperty("bubble", role)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
@@ -131,13 +135,17 @@ class MessageWidget(QFrame):
         self.stop_animation()
         if not self.raw:
             self.label.setText("(nessuna risposta)")
+        self._stats = stats
         self._update_meta(show_ts, stats)
-        if stats:
-            self.meta.setText(stats)
+
+    def set_stats(self, stats: str | None) -> None:
+        """Statistiche della risposta, mostrate nella meta insieme all'orario."""
+        self._stats = stats
+        self._update_meta(self._show_ts, stats)
 
     def refresh_theme(self, theme_name: str, show_ts: bool) -> None:
         self.theme_name = theme_name
-        self._update_meta(show_ts, stats=self.meta.text() if self.meta.text() else None)
+        self._update_meta(show_ts, self._stats)
         if self.raw:
             bg, fg, inline = theme.code_colors(theme_name)
             self.label.setText(md_to_html(self.raw, bg, fg, inline))

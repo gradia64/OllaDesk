@@ -318,7 +318,7 @@ class ChatArea(QWidget):
             role, text, ts, self.show_ts, self.theme_name, attachments, web, self
         )
         if stats:
-            w.meta.setText(stats)
+            w.set_stats(stats)
         self._apply_widths(w)
         self.msgs.addWidget(self._wrap_row(w, role), 0, Qt.AlignmentFlag.AlignTop)
         self.stack.setCurrentWidget(self.scroll)
@@ -375,6 +375,22 @@ class ChatArea(QWidget):
                 item.widget().deleteLater()
         self.stack.setCurrentWidget(self.welcome)
 
+    @staticmethod
+    def _row_widget(row: QWidget | None) -> QWidget | None:
+        """Il widget di una riga della chat.
+
+        Nelle righe utente il primo item del layout è lo stretch: il messaggio
+        va cercato tra gli item, non preso con itemAt(0).
+        """
+        lay = row.layout() if row is not None else None
+        if lay is None:
+            return None
+        for j in range(lay.count()):
+            w = lay.itemAt(j).widget()
+            if w is not None:
+                return w
+        return None
+
     def refresh_theme(self, theme_name: str, show_ts: bool) -> None:
         self.theme_name = theme_name
         self.show_ts = show_ts
@@ -383,30 +399,24 @@ class ChatArea(QWidget):
             row = self.msgs.itemAt(i).widget()
             if row is None:
                 continue
-            lay = row.layout()
-            if lay and lay.count():
-                w = lay.itemAt(0).widget()
-                if isinstance(w, MessageWidget):
-                    w.refresh_theme(theme_name, show_ts)
-                elif isinstance(w, SystemNoteWidget):
-                    w.setProperty("bubble", "error")
+            w = self._row_widget(row)
+            if isinstance(w, MessageWidget):
+                w.refresh_theme(theme_name, show_ts)
+            elif isinstance(w, SystemNoteWidget):
+                w.setProperty("bubble", "error")
         for i in range(self.msgs.count()):
             row = self.msgs.itemAt(i).widget()
-            lay = row.layout() if row else None
-            if lay and lay.count():
-                w = lay.itemAt(0).widget()
-                if isinstance(w, MessageWidget):
-                    self._apply_widths(w)
+            w = self._row_widget(row) if row is not None else None
+            if isinstance(w, MessageWidget):
+                self._apply_widths(w)
 
     def resizeEvent(self, ev) -> None:  # noqa: N802 (API Qt)
         super().resizeEvent(ev)
         for i in range(self.msgs.count()):
             row = self.msgs.itemAt(i).widget()
-            lay = row.layout() if row else None
-            if lay and lay.count():
-                w = lay.itemAt(0).widget()
-                if isinstance(w, MessageWidget):
-                    self._apply_widths(w)
+            w = self._row_widget(row) if row is not None else None
+            if isinstance(w, MessageWidget):
+                self._apply_widths(w)
 
     # -------------------------------------------------------------- scrolling
 

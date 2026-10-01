@@ -1,11 +1,14 @@
 """Finestra impostazioni con due schede: «Interfaccia» e «Parametri modelli».
 
-La scheda interfaccia include anche la sezione «Aggiornamenti Ollama»:
+La scheda interfaccia include anche «Aggiornamenti OllaDesk» (solo controllo
+e avviso, vedi app_update.py) e la sezione «Aggiornamenti Ollama»:
 controllo dell'ultima release su GitHub e aggiornamento tramite lo script
 ufficiale, scaricato in memoria e passato a sh via stdin (pkexec chiede la
 password di amministratore).
 """
 from __future__ import annotations
+
+import html
 
 from PySide6.QtCore import QProcess, Qt, Signal
 from PySide6.QtWidgets import (
@@ -27,7 +30,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .. import config, secrets_store, updater
+from .. import __version__, app_update, config, secrets_store, updater
 from ..ollama_client import ApiWorker, shutdown_workers
 from .model_params import ModelParamsTab
 from .steppers import IntStepper
@@ -37,6 +40,8 @@ class SettingsDialog(QDialog):
     """Emette `applied(settings)` quando l'utente conferma con «Salva»."""
 
     applied = Signal(dict)
+    # esito di «Verifica ora» per OllaDesk: dict {"version", "url"} o None
+    appReleaseChecked = Signal(object)
 
     def __init__(
         self,
@@ -58,6 +63,10 @@ class SettingsDialog(QDialog):
         self._update_proc: QProcess | None = None
         self._download_worker = None
         self._release_worker = None
+        self._app_check_worker: app_update.AppUpdateCheckWorker | None = None
+        # impostazioni non modificabili qui (es. data dell'ultimo controllo
+        # aggiornamenti): «Salva» deve conservarle, non riportarle ai default
+        self._base_settings = dict(settings)
 
         lay = QVBoxLayout(self)
         lay.setContentsMargins(12, 10, 12, 10)
@@ -227,6 +236,7 @@ class SettingsDialog(QDialog):
         lay.addStretch(1)
 
         self._update_provider_fields()
+        lay.addWidget(self._build_app_update_group(w, s))
         lay.addWidget(self._build_update_group(w))
         return page
 
@@ -245,6 +255,84 @@ class SettingsDialog(QDialog):
         self.web_key_edit.clear()
         self.web_key_edit.setPlaceholderText("la chiave verrà rimossa al salvataggio")
 
+    # ---------------------------------------------- aggiornamenti OllaDesk
+
+    def _build_app_update_group(self, parent: QWidget, s: dict) -> QGroupBox:
+        box = QGroupBox("Aggiornamenti OllaDesk", parent)
+        lay = QVBoxLayout(box)
+        lay.setSpacing(8)
+
+        self._install_method = app_update.install_method()
+        method_label = {
+            "deb": "pacchetto .deb", "arch": "pacchetto AUR",
+            "source": "sorgenti (git)", "pip": "pacchetto Python",
+        }[self._install_method]
+        row = QHBoxLayout()
+        row.addWidget(QLabel(f"Versione in uso: <b>{__version__}</b> ({method_label})", box))
+        row.addStretch(1)
+        self.app_check_btn = QPushButton("🔍  Verifica ora", box)
+        self.app_check_btn.clicked.connect(self._check_app_update)
+        row.addWidget(self.app_check_btn)
+        lay.addLayout(row)
+
+        self.app_update_chk = QCheckBox(
+            "Controlla automaticamente all'avvio (al massimo una volta al giorno)", box
+        )
+        self.app_update_chk.setChecked(bool(s.get("app_update_check", True)))
+        self.app_update_chk.setToolTip(
+            "Contatta solo api.github.com per leggere il numero dell'ultima release.\n"
+            "Nessun download né installazione automatica: solo un avviso."
+        )
+        lay.addWidget(self.app_update_chk)
+
+        self.app_update_status = QLabel("", box)
+        self.app_update_status.setObjectName("metaLabel")
+        self.app_update_status.setWordWrap(True)
+        self.app_update_status.setTextFormat(Qt.TextFormat.RichText)
+        self.app_update_status.setOpenExternalLinks(True)
+        lay.addWidget(self.app_update_status)
+        return box
+
+    def _check_app_update(self) -> None:
+        if self._app_check_worker is not None:
+            return
+        self.app_check_btn.setEnabled(False)
+        self.app_update_status.setText("Controllo l'ultima release su GitHub…")
+        w = app_update.AppUpdateCheckWorker(self)
+        w.ready.connect(self._on_app_release)
+        w.failed.connect(self._on_app_release_failed)
+        w.finished.connect(w.deleteLater)
+        w.finished.connect(self._clear_ref("_app_check_worker", w))
+        self._app_check_worker = w
+        w.start()
+
+    def _on_app_release(self, release: object) -> None:
+        self.app_check_btn.setEnabled(True)
+        release = release if isinstance(release, dict) else None
+        self._base_settings["app_update_last_check"] = config.now()
+        self.appReleaseChecked.emit(release)
+        newer = app_update.newer_release(release)
+        if release is None:
+            # GitHub risponde 404 sia senza release sia con repository privato
+            self.app_update_status.setText(
+                "Nessuna release pubblica trovata su GitHub "
+                "(repository privato o senza release)."
+            )
+        elif newer is None:
+            self.app_update_status.setText(f"✓ OllaDesk è aggiornato (ultima release: {release['version']}).")
+        else:
+            url = html.escape(app_update.download_page(self._install_method)
+                              if self._install_method == "arch" else newer["url"], quote=True)
+            hint = html.escape(app_update.update_hint(self._install_method, newer["version"]))
+            self.app_update_status.setText(
+                f"✦ Disponibile OllaDesk <b>{html.escape(newer['version'])}</b>. {hint}<br>"
+                f'<a href="{url}">Apri la pagina di download</a>'
+            )
+
+    def _on_app_release_failed(self, err: str) -> None:
+        self.app_check_btn.setEnabled(True)
+        self.app_update_status.setText(f"⚠ Verifica non riuscita: {html.escape(err)}")
+
     # ------------------------------------------------ aggiornamenti Ollama
 
     def _build_update_group(self, parent: QWidget) -> QGroupBox:
@@ -254,7 +342,7 @@ class SettingsDialog(QDialog):
 
         row1 = QHBoxLayout()
         self.ver_installed_label = QLabel(
-            f"Versione installata: <b>{self._installed_version}</b>", box
+            f"Versione installata: <b>{html.escape(self._installed_version)}</b>", box
         )
         row1.addWidget(self.ver_installed_label)
         row1.addStretch(1)
@@ -333,12 +421,12 @@ class SettingsDialog(QDialog):
         v = (data or {}).get("version") if isinstance(data, dict) else None
         if v:
             self._installed_version = v
-            self.ver_installed_label.setText(f"Versione installata: <b>{v}</b>")
+            self.ver_installed_label.setText(f"Versione installata: <b>{html.escape(v)}</b>")
         self._check_step()
 
     def _on_latest_version(self, tag: str) -> None:
         self._latest_version = tag
-        self.ver_latest_label.setText(f"Ultima versione disponibile: <b>{tag}</b>")
+        self.ver_latest_label.setText(f"Ultima versione disponibile: <b>{html.escape(tag)}</b>")
         self._check_step()
 
     def _on_latest_failed(self, _err: str) -> None:
@@ -462,6 +550,8 @@ class SettingsDialog(QDialog):
 
     def collect_settings(self) -> dict:
         return {
+            **self._base_settings,
+            "app_update_check": self.app_update_chk.isChecked(),
             "host": self._normalized_host(),
             "theme": self.theme_combo.currentData() or "dark",
             "font_size": self.font_spin.value(),
@@ -496,6 +586,11 @@ class SettingsDialog(QDialog):
         return self._download_worker is not None and self._download_worker.isRunning()
 
     def _on_save(self) -> None:
+        # come reject(): chiudere il dialogo ora distruggerebbe il QProcess
+        # dell'aggiornamento di Ollama ancora in corsa
+        if self._update_running():
+            QMessageBox.warning(self, "Aggiornamento in corso", "Attendi la fine dell'aggiornamento.")
+            return
         # «Salva» salva TUTTO: anche i parametri modificati nella seconda scheda
         if self.params_tab.is_dirty():
             self.params_tab.save_profile()
@@ -529,7 +624,10 @@ class SettingsDialog(QDialog):
     def done(self, r: int) -> None:
         # il dialogo viene distrutto dal chiamante: nessun worker deve restarvi
         # legato (un QThread distrutto in esecuzione fa abortire il processo)
-        shutdown_workers([self._check_worker, self._release_worker, self._download_worker])
+        shutdown_workers([
+            self._check_worker, self._release_worker, self._download_worker,
+            self._app_check_worker,
+        ])
         super().done(r)
 
     # chiusura gestita: parametri non salvati o aggiornamento in corso
