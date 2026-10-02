@@ -42,7 +42,13 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   su un'altra porta usa i modelli dell'utente (`~/.ollama/models`, non quelli
   del servizio) e carica in VRAM per conto suo. **Attenzione:** l'API di
   Ollama non prevede autenticazione — chi raggiunge la porta può usare i
-  modelli; per l'accesso da fuori casa usare una VPN o un tunnel SSH.
+  modelli; per l'accesso da fuori casa usare una VPN o un tunnel SSH. Se dal
+  telefono la porta non risponde, il colpevole più comune è il firewall:
+  serve una regola che accetti la porta **dalla sola rete locale** (es.
+  firewalld: `sudo firewall-cmd --permanent --add-rich-rule='rule family=ipv4
+  source address=192.168.1.0/24 port port=11434 protocol=tcp accept'` e
+  `sudo firewall-cmd --reload`; analogo con `ufw allow from 192.168.1.0/24
+  to any port 11434 proto tcp`).
 - **Icona nella tray**: la finestra si riduce nell'area di notifica e si
   ripristina con un clic sull'icona (menu: Mostra/nascondi, Esci);
   facoltativamente la chiusura (X) riduce nella tray invece di uscire,
