@@ -10,20 +10,23 @@ import html
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer, QUrl
-from PySide6.QtGui import QDesktopServices, QGuiApplication, QKeySequence, QShortcut
+from PySide6.QtGui import QAction, QDesktopServices, QGuiApplication, QIcon, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
+    QApplication,
     QComboBox,
     QFrame,
     QHBoxLayout,
     QLabel,
     QMainWindow,
+    QMenu,
     QMessageBox,
+    QSystemTrayIcon,
     QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
-from . import __version__, app_update, config, context, secrets_store, theme, web_search
+from . import __version__, app_update, config, context, secrets_store, server_share, theme, web_search
 from .ollama_client import ApiWorker, ChatWorker, format_stats, shutdown_workers
 from .widgets.chat_area import ChatArea
 from .widgets.model_manager import ModelManagerDialog
@@ -51,6 +54,7 @@ class MainWindow(QMainWindow):
         self._online: bool | None = None
         self._preferred_model: str | None = None
         self._pending_stream: str = ""
+        self._pending_think: str = ""   # ragionamento ricevuto nel turno corrente
         self._pending_user: dict | None = None
         self._chat_stopped = False     # scarta i segnali del worker dopo uno stop
         self._search_stopped = False
@@ -58,6 +62,12 @@ class MainWindow(QMainWindow):
         self._zombie_workers: list = []   # worker in arresto, non bloccano la UI
         self._version = "?"
         self._resolved_theme = theme.resolve_theme(self.settings["theme"])
+        self.tray: QSystemTrayIcon | None = None
+        self._really_quit = False      # True solo da «Esci» nel menu della tray
+        self._tray_hint_shown = False
+        self._share_note_shown = False   # la nota «external» vale una volta per sessione
+        self._share = server_share.SharedOllamaServer(self)
+        self._share.state_changed.connect(self._on_share_state)
 
         self._build_ui()
         self._connect_signals()
@@ -65,6 +75,7 @@ class MainWindow(QMainWindow):
 
         # il tema è già applicato da olladesk.app prima di creare la finestra
         self.chat_area.set_send_on_enter(self.settings["send_on_enter"])
+        self.chat_area.set_thinking(self.settings["thinking"])
 
         # segue il cambio tema scuro/chiaro del desktop (modalità "Sistema")
         try:
@@ -84,6 +95,9 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(150, self._refresh_models)
         # dopo l'avvio, per non rallentarlo: al massimo una volta al giorno
         QTimer.singleShot(3000, self._maybe_check_app_update)
+        # tray e condivisione API: attivati dopo il primo disegno
+        self._sync_tray()
+        QTimer.singleShot(800, self._sync_share)
 
     # -------------------------------------------------------------------- UI
 
@@ -125,6 +139,11 @@ class MainWindow(QMainWindow):
         top_lay.addWidget(self.reload_models_btn)
 
         top_lay.addStretch(1)
+        # indicatore della condivisione API in rete (visibile solo se attiva)
+        self.share_btn = QToolButton(top)
+        self.share_btn.setText("🔗")
+        self.share_btn.hide()
+        top_lay.addWidget(self.share_btn)
         # compare solo quando GitHub ha una versione più recente di OllaDesk
         self.app_update_btn = QToolButton(top)
         self.app_update_btn.setObjectName("appUpdateBtn")
@@ -166,10 +185,12 @@ class MainWindow(QMainWindow):
 
         self.chat_area.sendRequested.connect(self._on_send)
         self.chat_area.stopRequested.connect(self._on_stop)
+        self.chat_area.thinkingToggled.connect(self._on_thinking_toggled)
 
         self.burger.clicked.connect(self._toggle_sidebar)
         self.reload_models_btn.clicked.connect(self._refresh_models)
         self.app_update_btn.clicked.connect(self._show_app_update)
+        self.share_btn.clicked.connect(self._copy_share_urls)
         self.model_combo.currentIndexChanged.connect(self._on_model_changed)
 
     def _shortcuts(self) -> None:
@@ -246,6 +267,7 @@ class MainWindow(QMainWindow):
                 self.chat_area.add_message(
                     m["role"], m.get("display", m.get("content", "")), m.get("ts"),
                     m.get("attachments"), bool(m.get("web")), m.get("stats"),
+                    thinking=m.get("thinking", ""),
                 )
 
     # ------------------------------------------------------------- connessione
@@ -360,7 +382,7 @@ class MainWindow(QMainWindow):
                 "Attendi la fine della risposta (o premi ■ per interrompere) prima di gestire i modelli."
             )
             return
-        dlg = ModelManagerDialog(self.settings["host"], self)
+        dlg = ModelManagerDialog(self.settings["host"], self, self.current_model())
         dlg.exec()
         changed = dlg.changed
         # distrutto a ogni chiusura (prima restava figlio della finestra per
@@ -414,6 +436,7 @@ class MainWindow(QMainWindow):
             self.chat_area.add_message(
                 m["role"], m.get("display", m.get("content", "")), m.get("ts"),
                 m.get("attachments"), bool(m.get("web")), m.get("stats"),
+                thinking=m.get("thinking", ""),
             )
         # ripristina il modello con cui era nata la conversazione
         model = chat.get("model")
@@ -627,13 +650,19 @@ class MainWindow(QMainWindow):
             "stream": bool(s["stream"]),
             "options": options,
         }
+        # con il thinking attivo il campo si omette (vale il predefinito del
+        # server); solo quando l'utente lo disattiva si invia "think": false
+        if not s.get("thinking", True):
+            payload["think"] = False
 
         self._pending_stream = ""
+        self._pending_think = ""
         self._chat_stopped = False
         self.chat_area.begin_stream(config.now())
 
         self._worker = ChatWorker(self.settings["host"], payload, self)
         self._worker.chunk.connect(self._on_chunk)
+        self._worker.think_chunk.connect(self._on_think_chunk)
         self._worker.done.connect(self._on_done)
         self._worker.failed.connect(self._on_failed)
         self._worker.finished.connect(self._worker.deleteLater)
@@ -650,6 +679,12 @@ class MainWindow(QMainWindow):
         self._pending_stream += chunk
         self.chat_area.stream_text(chunk)
 
+    def _on_think_chunk(self, chunk: str) -> None:
+        if self._chat_stopped or self.sender() is not self._worker:
+            return
+        self._pending_think += chunk
+        self.chat_area.stream_thinking(chunk)
+
     def _on_done(self, done: dict) -> None:
         if self._chat_stopped or self.sender() is not self._worker:
             return
@@ -659,9 +694,13 @@ class MainWindow(QMainWindow):
         """Chiude la bolla, salva il testo prodotto e torna idle."""
         self.chat_area.end_stream(stats)
         text = self._pending_stream
+        thinking = self._pending_think
         self._pending_stream = ""
+        self._pending_think = ""
         if text and self.current_chat is not None:
             msg = {"role": "assistant", "content": text, "ts": config.now()}
+            if thinking:
+                msg["thinking"] = thinking
             if stats:
                 msg["stats"] = stats
             self.current_chat["messages"].append(msg)
@@ -675,17 +714,28 @@ class MainWindow(QMainWindow):
             return
         self.chat_area.end_stream(discard_empty=True)
         partial = self._pending_stream
+        partial_think = self._pending_think
         self._pending_stream = ""
+        self._pending_think = ""
         # se il modello aveva già prodotto testo, conservalo nella conversazione
         if partial and self.current_chat is not None:
-            self.current_chat["messages"].append(
-                {"role": "assistant", "content": partial, "ts": config.now()}
-            )
+            msg = {"role": "assistant", "content": partial, "ts": config.now()}
+            if partial_think:
+                msg["thinking"] = partial_think
+            self.current_chat["messages"].append(msg)
             self.current_chat["updated"] = config.now()
             self._persist_chat()
             self.sidebar.set_chats(self.chats, self.current_chat["id"])
+        extra = ""
+        if "think" in err.lower():
+            extra = (
+                "\n\nSuggerimento: il modello potrebbe non accettare il campo «think»: "
+                "riattiva il pulsante 🧠 nell'input."
+            )
         self.chat_area.add_system_note(
-            err + "\n\nSuggerimento: avvia Ollama con `ollama serve` e verifica l'URL nelle impostazioni (Ctrl+,)."
+            err + extra
+            + "\n\nSuggerimento: avvia Ollama con `ollama serve` e verifica l'URL "
+            "nelle impostazioni (Ctrl+,)."
         )
         self._set_idle()
 
@@ -709,6 +759,10 @@ class MainWindow(QMainWindow):
         if self._pending_stream and self.current_chat is not None:
             self._finalize_assistant(None)   # conserva il testo già prodotto
         else:
+            # scelta coerente con «niente contenuto, niente messaggio»: una
+            # generazione interrotta durante il solo ragionamento non lascia
+            # messaggio, quindi anche il pensiero va scartato
+            self._pending_think = ""
             self.chat_area.end_stream(discard_empty=True)
             self._set_idle()
 
@@ -716,6 +770,124 @@ class MainWindow(QMainWindow):
         self.chat_area.set_streaming(False)
         self.sidebar.set_busy(False)
         self.chat_area.focus_input()
+
+    # ------------------------------------------------------- thinking on/off
+
+    def _on_thinking_toggled(self, on: bool) -> None:
+        self.settings["thinking"] = on
+        config.save_settings(self.settings)
+
+    # --------------------------------------------------------------- tray
+
+    def _sync_tray(self) -> None:
+        """Crea o rimuove l'icona della tray in base alle impostazioni."""
+        if self.settings.get("tray_icon", True) and QSystemTrayIcon.isSystemTrayAvailable():
+            if self.tray is None:
+                self._build_tray()
+        elif self.tray is not None:
+            self.tray.hide()
+            self.tray.deleteLater()
+            self.tray = None
+
+    def _build_tray(self) -> None:
+        icon_path = Path(__file__).resolve().parent / "assets" / "olladesk.svg"
+        self.tray = QSystemTrayIcon(QIcon(str(icon_path)), self)
+        self.tray.setToolTip("OllaDesk")
+        menu = QMenu(self)
+        act_toggle = QAction("Mostra / nascondi", menu)
+        act_toggle.triggered.connect(self._toggle_from_tray)
+        menu.addAction(act_toggle)
+        menu.addSeparator()
+        act_quit = QAction("Esci", menu)
+        act_quit.triggered.connect(self._quit_from_tray)
+        menu.addAction(act_quit)
+        self.tray.setContextMenu(menu)
+        self.tray.activated.connect(self._on_tray_activated)
+        self.tray.show()
+
+    def _on_tray_activated(self, reason) -> None:
+        if reason in (
+            QSystemTrayIcon.ActivationReason.Trigger,
+            QSystemTrayIcon.ActivationReason.DoubleClick,
+            QSystemTrayIcon.ActivationReason.MiddleClick,
+        ):
+            self._toggle_from_tray()
+
+    def _toggle_from_tray(self) -> None:
+        if self.isVisible() and not self.isMinimized():
+            self.hide()
+            return
+        self.show()
+        self.setWindowState(self.windowState() & ~Qt.WindowState.WindowMinimized)
+        self.raise_()
+        self.activateWindow()
+
+    def _quit_from_tray(self) -> None:
+        self._really_quit = True
+        self.close()
+
+    # ------------------------------------------------- condivisione API rete
+
+    def _sync_share(self) -> None:
+        """Avvia o arresta il server Ollama condiviso secondo le impostazioni."""
+        if self.settings.get("share_api"):
+            self._share.start(self.settings["share_bind"], int(self.settings["share_port"]))
+        else:
+            self._share.stop()
+
+    def _on_share_state(self, state: str, detail: str) -> None:
+        port = int(self.settings.get("share_port", 11434))
+        if state == "running":
+            if self.settings.get("share_bind") == "127.0.0.1":
+                tip = f"API Ollama attiva\n{detail}"
+            else:
+                urls = server_share.lan_urls(port)
+                tip = (
+                    "API Ollama condivisa in rete\n"
+                    "Da smartphone/tablet usa uno di questi indirizzi:\n  "
+                    + "\n  ".join(urls)
+                    + f"\n(da questo PC: http://localhost:{port})"
+                    if urls else f"API Ollama condivisa\n{detail}"
+                )
+            self.share_btn.setToolTip(tip)
+            self.share_btn.show()
+        elif state == "external":
+            # il dettaglio del manager dice già se l'istanza esterna è davvero
+            # raggiungibile dalla LAN o solo in locale (bind 127.0.0.1)
+            self.share_btn.setToolTip(f"Condivisione API (istanza esterna)\n{detail}")
+            self.share_btn.show()
+            # nota in chat solo alla PRIMA segnalazione della sessione: con un
+            # Ollama di sistema sempre attivo sarebbe rumore a ogni avvio
+            if not self._share_note_shown:
+                self._share_note_shown = True
+                self.chat_area.add_system_note(f"⚠ Condivisione API: {detail}")
+        elif state == "starting":
+            self.share_btn.setToolTip(f"Condivisione API: {detail}")
+            self.share_btn.show()
+        elif state == "error":
+            self.share_btn.setToolTip(f"Condivisione API: errore\n{detail}")
+            self.share_btn.show()
+            self.chat_area.add_system_note(f"⚠ Condivisione API non riuscita:\n{detail}")
+        else:   # off
+            self.share_btn.hide()
+
+    def _copy_share_urls(self) -> None:
+        # copia solo indirizzi davvero raggiungibili dagli altri dispositivi:
+        # processo nostro in ascolto sulle interfacce di rete
+        if self._share.state() != "running" or self.settings.get("share_bind") == "127.0.0.1":
+            self.chat_area.add_system_note(
+                "⚠ Nessun indirizzo di rete valido da copiare:\n"
+                "la condivisione non è attiva in rete (processo non avviato da "
+                "OllaDesk o bind solo locale): vedi il tooltip di 🔗."
+            )
+            return
+        urls = server_share.lan_urls(int(self.settings.get("share_port", 11434)))
+        if not urls:
+            return
+        QGuiApplication.clipboard().setText("\n".join(urls))
+        self.chat_area.add_system_note(
+            "📋 Indirizzi dell'API copiati negli appunti:\n" + "\n".join(urls)
+        )
 
     # ------------------------------------------------ aggiornamenti OllaDesk
 
@@ -797,17 +969,51 @@ class MainWindow(QMainWindow):
             self._set_app_update(None)   # controllo disattivato: via l'avviso
         self._apply_theme_now()
         self.chat_area.set_send_on_enter(s["send_on_enter"])
+        self.chat_area.set_thinking(s.get("thinking", True))
         # ricontatta il server e ricarica i modelli
         self._online = None
         self._check_server()
         self._refresh_models()
+        # tray e condivisione possono essere cambiate nelle impostazioni
+        self._sync_tray()
+        self._sync_share()
 
     # -------------------------------------------------------------------- chiusura
 
     def closeEvent(self, ev) -> None:  # noqa: N802 (API Qt)
+        # con l'icona nella tray la chiusura riduce la finestra: l'app resta
+        # attiva (stream e condivisione API inclusi); si esce davvero solo
+        # con «Esci» dal menu della tray (o senza tray configurata)
+        if (
+            self.tray is not None
+            and self.settings.get("close_to_tray", True)
+            and not self._really_quit
+        ):
+            ev.ignore()
+            self.hide()
+            if not self._tray_hint_shown:
+                self._tray_hint_shown = True
+                self.tray.showMessage(
+                    "OllaDesk",
+                    "Resta attivo nella tray: clic sull'icona per mostrare o "
+                    "nascondere la finestra, «Esci» dal menu per chiudere.",
+                    QSystemTrayIcon.MessageIcon.Information,
+                    4000,
+                )
+            return
+        if self.tray is not None:
+            self.tray.hide()   # via l'icona subito: niente residui nel pannello        # arresta l'eventuale server condiviso avviato da noi: al prossimo
+        # avvio `_sync_share` lo riporta su se l'opzione è ancora attiva
+        self._share.stop()
         # ferma e attende (con limite) TUTTI i worker: un QThread distrutto
         # mentre è in esecuzione fa abortire il processo. Gli "zombie" bloccati
         # su un socket muoiono al loro timeout di rete.
         # un'unica scadenza per tutti: prima 1,5 s per OGNI worker in fila
         shutdown_workers(list(self._running_workers) + list(self._zombie_workers))
         super().closeEvent(ev)
+        # UNICO punto di uscita dell'app (quitOnLastWindowClosed è sempre
+        # False, vedi app.py): «Esci» dalla tray, SIGTERM/SIGINT, logout di
+        # sessione e X senza tray passano tutti di qui. Il quit è differito di
+        # un ciclo perché chiamato prima che il ciclo eventi parta non ha
+        # effetto (il gestore SIGTERM può chiudere prima di exec())
+        QTimer.singleShot(0, QApplication.quit)

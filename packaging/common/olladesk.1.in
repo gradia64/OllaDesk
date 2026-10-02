@@ -8,7 +8,11 @@ olladesk \- client desktop per Ollama in stile ChatGPT
 è un'interfaccia grafica (PySide6/Qt) per chattare con i modelli LLM locali
 serviti da un server Ollama: conversazioni salvate per file, allegati (testo,
 immagini, PDF), ricerca web (DuckDuckGo/SearXNG), gestione dei modelli
-(scaricamento ed eliminazione) e tema chiaro/scuro.
+(scaricamento ed eliminazione), ragionamento («thinking») dei modelli con il
+blocco «Pensiero» in chat e disattivazione tramite il pulsante 🧠, icona
+nell'area di notifica (tray) con riduzione a icona della finestra,
+condivisione dell'API Ollama in rete per smartphone e tablet, e tema
+chiaro/scuro.
 .PP
 L'indirizzo del server e le preferenze sono configurati nell'app
 (CTRL+, oppure la voce «Impostazioni» della barra laterale) e salvati

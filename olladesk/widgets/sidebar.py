@@ -13,6 +13,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .. import __version__
+
 
 class ChatSidebar(QWidget):
     newChatRequested = Signal()
@@ -36,6 +38,10 @@ class ChatSidebar(QWidget):
         title.setStyleSheet("font-weight: 700; font-size: 14px;")
         header.addWidget(title)
         header.addStretch(1)
+        version = QLabel(f"v{__version__}", self)
+        version.setObjectName("metaLabel")
+        version.setToolTip(f"Versione di OllaDesk: {__version__}")
+        header.addWidget(version)
         lay.addLayout(header)
 
         self.new_btn = QPushButton("＋  Nuova chat", self)

@@ -1,6 +1,8 @@
 """Gestione modelli Ollama: elenco installati, scaricamento (pull) ed eliminazione."""
 from __future__ import annotations
 
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QCompleter,
     QDialog,
@@ -40,11 +42,12 @@ class ModelManagerDialog(QDialog):
     può ricaricare l'elenco dei modelli alla chiusura.
     """
 
-    def __init__(self, host: str, parent=None):
+    def __init__(self, host: str, parent=None, current_model: str | None = None):
         super().__init__(parent)
         self.setWindowTitle("Gestione modelli — OllaDesk")
         self.setMinimumSize(680, 540)
         self.host = host
+        self.current_model = current_model   # modello selezionato nella chat
         self.changed = False
 
         self._pull_worker: PullWorker | None = None
@@ -133,16 +136,26 @@ class ModelManagerDialog(QDialog):
         self.refresh_btn.setEnabled(True)
         self.tree.clear()
         models = data.get("models", []) if isinstance(data, dict) else []
+        bold = QFont()
+        bold.setBold(True)
         for m in models:
             det = m.get("details", {})
+            name = m.get("name") or m.get("model") or "?"
             item = QTreeWidgetItem(
                 [
-                    m.get("name") or m.get("model") or "?",
+                    name,
                     human_size(m.get("size", 0)),
                     det.get("parameter_size", "—"),
                     det.get("quantization_level", "—"),
                 ]
             )
+            # nome pulito nel UserRole: il testo della colonna può avere il
+            # contrassegno «●» senza corrompere eliminazione e download
+            item.setData(0, Qt.ItemDataRole.UserRole, name)
+            if self.current_model and name == self.current_model:
+                item.setText(0, f"● {name}")
+                item.setFont(0, bold)
+                item.setToolTip(0, "Modello in uso nella conversazione corrente")
             self.tree.addTopLevelItem(item)
         self._update_buttons()
 
@@ -156,7 +169,9 @@ class ModelManagerDialog(QDialog):
 
     def _selected_model(self) -> str | None:
         item = self.tree.currentItem()
-        return item.text(0) if item and item.text(1) else None
+        if not item or not item.text(1):
+            return None
+        return item.data(0, Qt.ItemDataRole.UserRole) or item.text(0)
 
     def _update_buttons(self) -> None:
         self.delete_btn.setEnabled(self._selected_model() is not None and self._pull_worker is None)

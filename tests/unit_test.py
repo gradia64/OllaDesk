@@ -394,6 +394,101 @@ def test_settings_keep_app_update_keys():
         assert s2["app_update_last_check"] == 123.0 and s2["app_update_skip"] == "0.2.3"
 
 
+def test_settings_new_024_keys():
+    # 0.2.4: thinking, tray e condivisione API hanno predefiniti sensati
+    from olladesk import config
+    with _isolated_config():
+        s = config.load_settings()
+        assert s["thinking"] is True
+        assert s["tray_icon"] is True and s["close_to_tray"] is True
+        assert s["share_api"] is False
+        assert s["share_bind"] == "0.0.0.0" and s["share_port"] == 11434
+        # e sopravvivono al roundtrip su disco
+        s.update(thinking=False, share_api=True, share_port=11435)
+        config.save_settings(s)
+        s2 = config.load_settings()
+        assert s2["thinking"] is False
+        assert s2["share_api"] is True and s2["share_port"] == 11435
+
+
+def test_chat_column_side_margin():
+    # colonna messaggi centrata: sotto soglia margine minimo, sopra si centra
+    from olladesk.widgets.chat_area import COLUMN_MAX_W, ChatArea
+    assert ChatArea._side_margin(300) == 20
+    assert ChatArea._side_margin(COLUMN_MAX_W + 40) == 20
+    assert ChatArea._side_margin(COLUMN_MAX_W + 340) == 170
+
+
+def test_share_lan_url_filter():
+    # il filtro degli indirizzi di rete parte dalla stringa: loopback,
+    # link-local e IPv6 non sono utili al client su smartphone
+    from olladesk.server_share import _is_shareable_ip
+    assert _is_shareable_ip("192.168.1.20")
+    assert _is_shareable_ip("10.0.0.5")
+    assert not _is_shareable_ip("127.0.0.1")
+    assert not _is_shareable_ip("0.0.0.0")
+    assert not _is_shareable_ip("169.254.3.4")
+    assert not _is_shareable_ip("::1")
+    assert not _is_shareable_ip("fe80::1")
+
+
+def test_chat_worker_emits_thinking():
+    # il ChatWorker deve distinguere thinking da content, sia in risposta
+    # singola che in streaming NDJSON
+    import json as _json
+    from unittest.mock import patch
+
+    from olladesk import ollama_client
+    from olladesk.ollama_client import ChatWorker
+
+    single = _json.dumps({
+        "message": {"role": "assistant", "thinking": "ragiono…", "content": "risposta"},
+        "done": True,
+    }).encode("utf-8")
+
+    class FakeSingle:
+        def read(self):
+            return single
+
+        def close(self):
+            pass
+
+    w = ChatWorker("http://localhost:11434", {"stream": False})
+    got: list[tuple[str, str]] = []
+    w.think_chunk.connect(lambda t: got.append(("think", t)))
+    w.chunk.connect(lambda t: got.append(("chunk", t)))
+    w.done.connect(lambda d: got.append(("done", str(d.get("done")))))
+    with patch.object(ollama_client, "_open", return_value=FakeSingle()):
+        w.run()
+    assert ("think", "ragiono…") in got
+    assert ("chunk", "risposta") in got
+    assert any(k == "done" for k, _ in got)
+
+    lines = [
+        _json.dumps({"message": {"thinking": "penso "}}),
+        _json.dumps({"message": {"content": "ciao"}}),
+        _json.dumps({"done": True, "eval_count": 5}),
+    ]
+
+    class FakeStream:
+        def close(self):
+            pass
+
+        def __iter__(self):
+            return iter(("\n".join(lines)).encode("utf-8").splitlines())
+
+    w2 = ChatWorker("http://localhost:11434", {"stream": True})
+    got2: list[tuple[str, str]] = []
+    w2.think_chunk.connect(lambda t: got2.append(("think", t)))
+    w2.chunk.connect(lambda t: got2.append(("chunk", t)))
+    w2.done.connect(lambda d: got2.append(("done", str(d.get("done")))))
+    with patch.object(ollama_client, "_open", return_value=FakeStream()):
+        w2.run()
+    assert ("think", "penso ") in got2
+    assert ("chunk", "ciao") in got2
+    assert any(k == "done" for k, _ in got2)
+
+
 def test_is_local_host_debian_hostname():
     import socket
     assert is_local_host("http://127.0.1.1:11434")
@@ -454,6 +549,224 @@ def test_secrets_store_stub_and_fallback():
         assert secrets_store.save_api_key("x") is False
     finally:
         secrets_store._keyring = orig
+
+
+def _make_window():
+    """MainWindow offscreen con QApplication condivisa (per i test GUI).
+
+    Richiede l'ambiente già isolato (_isolated_config): nessun timer viene
+    eseguito perché non c'è event loop.
+    """
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+
+    QApplication.instance() or QApplication([])
+    from olladesk.main_window import MainWindow
+
+    return MainWindow()
+
+
+def _thinking_texts(win) -> list[str]:
+    from olladesk.widgets.message import MessageWidget
+
+    out: list[str] = []
+    for i in range(win.chat_area.msgs.count()):
+        row = win.chat_area.msgs.itemAt(i).widget()
+        if row is None:
+            continue
+        lay = row.layout()
+        for j in range(lay.count()):
+            it = lay.itemAt(j).widget()
+            if isinstance(it, MessageWidget):
+                out.append(it._thinking_raw)
+    return out
+
+
+def test_share_state_updates_indicator():
+    # B1: lo stato del server condiviso deve riflettersi sull'indicatore 🔗
+    with _isolated_config():
+        win = _make_window()
+        try:
+            assert not win.share_btn.isVisibleTo(win)
+            # emit diretto: verifica anche il collegamento state_changed → UI
+            win._share.state_changed.emit("running", "192.168.1.10")
+            assert win.share_btn.isVisibleTo(win)
+            assert win.share_btn.toolTip()
+            win._share.state_changed.emit("off", "")
+            assert not win.share_btn.isVisibleTo(win)
+            win._share.state_changed.emit("error", "collaudo")
+            assert win.share_btn.isVisibleTo(win)
+            assert "collaudo" in win.share_btn.toolTip()
+        finally:
+            win._really_quit = True
+            win.close()
+
+
+def test_reopen_and_rerender_keep_thinking():
+    # B4: il «Pensiero» salvato ricompare riaprendo la conversazione e
+    # anche dopo un re-render generale (cambio tema)
+    from olladesk import config
+
+    with _isolated_config():
+        chat = {
+            "id": "th1", "title": "T", "model": "m", "updated": 1,
+            "messages": [
+                {"role": "user", "content": "domanda", "display": "domanda"},
+                {"role": "assistant", "content": "risposta",
+                 "thinking": "ho riflettuto molto"},
+            ],
+        }
+        assert config.save_chat(chat)
+        win = _make_window()
+        try:
+            win._open_chat("th1")
+            assert "ho riflettuto molto" in _thinking_texts(win)
+            win._rerender_messages()
+            assert "ho riflettuto molto" in _thinking_texts(win)
+        finally:
+            win._really_quit = True
+            win.close()
+
+
+def _free_port() -> int:
+    import socket
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    port = s.getsockname()[1]
+    s.close()
+    return port
+
+
+def test_share_spawn_starts_process():
+    # regressione: QProcess.setChildProcessModifier non esiste in PySide6 e
+    # _spawn sollevava AttributeError lasciando lo stato «starting» per sempre.
+    # Gira in un processo a parte: l'event loop necessario alla sonda non deve
+    # ricevere anche gli eventi in sospeso delle finestre create dagli altri
+    # test della suite (già chiuse).
+    import subprocess
+
+    child = """
+import os, sys, stat, tempfile
+os.environ["QT_QPA_PLATFORM"] = "offscreen"
+os.environ["XDG_CONFIG_HOME"] = tempfile.mkdtemp()
+sys.path.insert(0, {root!r})
+from PySide6.QtCore import QEventLoop, QTimer
+from PySide6.QtWidgets import QApplication
+app = QApplication([])
+from olladesk import server_share
+
+import socket
+s = socket.socket(); s.bind(("127.0.0.1", 0)); port = s.getsockname()[1]; s.close()
+
+bindir = tempfile.mkdtemp()
+fake = os.path.join(bindir, "ollama")
+with open(fake, "w") as fh:
+    fh.write("#!/bin/sh\\nexec sleep 60\\n")
+os.chmod(fake, os.stat(fake).st_mode | stat.S_IEXEC)
+os.environ["PATH"] = bindir + os.pathsep + os.environ.get("PATH", "")
+
+srv = server_share.SharedOllamaServer()
+srv.start("127.0.0.1", port)
+loop = QEventLoop()
+QTimer.singleShot(2500, loop.quit)
+loop.exec()
+assert srv._proc is not None, "il processo non è mai stato avviato"
+assert srv.state() in ("starting", "running"), srv.state()
+srv.stop()
+assert srv._proc is None
+print("SPAWN CHILD OK")
+""".format(root=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+    r = subprocess.run(
+        [sys.executable, "-c", child],
+        capture_output=True, text=True, timeout=60,
+        cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    )
+    assert "SPAWN CHILD OK" in r.stdout, f"figlio fallito:\n{r.stdout}\n{r.stderr}"
+    assert r.returncode == 0, f"figlio uscito con {r.returncode}:\n{r.stderr}"
+
+
+def test_share_probe_replaced_while_in_flight():
+    # regressione: _start_probe usciva se una sonda era in volo, quindi una
+    # configurazione cambiata a caldo non veniva mai sondata
+    with _isolated_config():
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from PySide6.QtWidgets import QApplication
+
+        QApplication.instance() or QApplication([])
+        from olladesk import server_share
+
+        srv = server_share.SharedOllamaServer()
+        srv._cfg = ("127.0.0.1", _free_port())
+        srv._set_state("starting", "")
+        srv._start_probe("http://127.0.0.1:1/api/version", "external-local")
+        first = srv._probe
+        assert first is not None
+        srv._start_probe("http://127.0.0.1:2/api/version", "external-local")
+        assert srv._probe is not None and srv._probe is not first
+        # la sonda sostituita, finendo, non azzera il riferimento alla nuova
+        first.wait(2500)
+        assert srv._probe is not None
+        srv.stop()
+
+
+def test_thinking_stream_no_duplication():
+    # B1: _flush_thinking passa il buffer INTERO accumulato: il widget deve
+    # sostituire, non concatenare, altrimenti il pensiero si ripete
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+
+    QApplication.instance() or QApplication([])
+    from olladesk.widgets.message import MessageWidget
+
+    w = MessageWidget("assistant", "", None, False, "dark", None, False, None)
+    for chunk in ("Uno ", "Uno due ", "Uno due tre "):   # come i flush successivi
+        w.set_thinking_stream(chunk)
+    assert w._thinking_raw == "Uno due tre ", w._thinking_raw
+
+
+def test_quit_from_hidden_tray_exits_app():
+    # B2: finestra già ridotta nella tray → «Esci» deve far tornare app.exec().
+    # Gira in un processo a parte perché serve un vero ciclo eventi.
+    import subprocess
+
+    child = """
+import os, sys, tempfile
+os.environ["QT_QPA_PLATFORM"] = "offscreen"
+os.environ["XDG_CONFIG_HOME"] = tempfile.mkdtemp()
+os.environ["OLLADEK_CHILD"] = "1"
+sys.path.insert(0, {root!r})
+from PySide6.QtCore import QTimer
+from PySide6.QtWidgets import QApplication, QSystemTrayIcon
+app = QApplication([])
+from olladesk.main_window import MainWindow
+
+win = MainWindow()
+win.show()
+win.tray = QSystemTrayIcon()   # finta: offscreen non ha una tray di sistema
+win.close()                    # X → ridotta nella tray (finestra nascosta)
+assert win.isHidden(), "la finestra doveva ridursi nella tray"
+
+def _timeout():
+    print("QUIT TIMEOUT: app.exec() non è mai tornato", flush=True)
+    os._exit(1)
+
+QTimer.singleShot(8000, _timeout)
+win._quit_from_tray()          # «Esci» dal menu della tray
+code = app.exec()
+assert code == 0, code
+# flush prima di os._exit, che altrimenti scarterebbe il buffer dello stdout
+print("QUIT OK: app.exec() è tornato", flush=True)
+os._exit(0)
+""".format(root=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+    r = subprocess.run(
+        [sys.executable, "-c", child],
+        capture_output=True, text=True, timeout=60,
+        cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    )
+    assert "QUIT OK" in r.stdout, f"figlio fallito:\n{r.stdout}\n{r.stderr}"
+    assert r.returncode == 0, f"figlio uscito con {r.returncode}:\n{r.stderr}"
 
 
 def main() -> int:

@@ -15,13 +15,42 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
 - **Chat in stile ChatGPT**: bolle utente/assistente, risposta in *streaming*
   token per token, pulsante per interrompere la generazione, statistiche
   (token, tok/s, durata), rendering Markdown (blocchi di codice, elenchi,
-  grassetti, link…), pulsante di copia per ogni risposta.
-- **Cronologia conversazioni** nella barra laterale: nuova chat, selezione,
-  rinomina (tasto destro) ed eliminazione; persistenza su disco.
+  grassetti, link…), pulsante di copia per ogni risposta. La colonna dei
+  messaggi ha larghezza massima fissa e resta centrata anche quando la
+  sidebar è nascosta (Ctrl+B): il contenuto non si stira a tutta finestra.
+- **Cronologia conversazioni** nella barra laterale (con la versione di
+  OllaDesk nell'intestazione): nuova chat, selezione, rinomina (tasto destro)
+  ed eliminazione; persistenza su disco.
 - **Allegati come contesto** (📎 nell'input): file di testo e codice (inlinati
   nel messaggio), PDF (richiede il pacchetto opzionale `pypdf`) e immagini
   (inviate in base64 ai modelli visione: llava, llama3.2-vision, gemma3…).
   Gli allegati compaiono come chip sopra l'input e nella bolla del messaggio.
+- **Ragionamento (thinking)**: con i modelli che lo supportano (qwen3,
+  deepseek-r1…) il pulsante 🧠 dell'input abilita o disattiva il ragionamento
+  e il pensiero del modello compare nella bolla in un blocco «💭 Pensiero»
+  in streaming, richiudibile all'arrivo della risposta e salvato nella
+  conversazione. Finché il modello pensa non si vedono solo i puntini: la
+  bolla mostra «sta pensando…» e poi il testo del ragionamento.
+- **Condivisione in rete (stile LM Studio)** (Impostazioni → Interfaccia):
+  OllaDesk avvia/arresta `ollama serve` con bind e porta configurabili così
+  che smartphone e tablet sulla stessa rete possano usare i modelli puntando
+  un client Ollama a `http://<ip-del-pc>:<porta>`; l'indirizzo esatto compare
+  nel pulsante 🔗 della barra superiore (clic per copiarlo). Se è già attivo
+  il servizio di sistema, l'app lo rileva e verifica che sia raggiungibile
+  davvero dalla rete: la via consigliata resta riavviarlo con
+  `OLLAMA_HOST=0.0.0.0` (`sudo systemctl edit ollama`); una seconda istanza
+  su un'altra porta usa i modelli dell'utente (`~/.ollama/models`, non quelli
+  del servizio) e carica in VRAM per conto suo. **Attenzione:** l'API di
+  Ollama non prevede autenticazione — chi raggiunge la porta può usare i
+  modelli; per l'accesso da fuori casa usare una VPN o un tunnel SSH.
+- **Icona nella tray**: la finestra si riduce nell'area di notifica e si
+  ripristina con un clic sull'icona (menu: Mostra/nascondi, Esci);
+  facoltativamente la chiusura (X) riduce nella tray invece di uscire,
+  così le condivisioni e le generazioni in corso restano attive.
+- **Gestione modelli** (pulsante «Modelli» nella sidebar, Ctrl+M): elenco dei
+  modelli installati con dimensione/parametri/quantizzazione, **scaricamento**
+  di nuovi modelli con barra di avanzamento e annullamento, ed **eliminazione**.
+  Il modello selezionato per la conversazione è contrassegnato con «●».
 - **Ricerca web** (🌐 nell'input, grigia da spenta e blu da attiva): prima di
   rispondere, l'app cerca sul web e allega i risultati al contesto; la risposta
   cita le fonti. **Provider a scelta** nelle impostazioni:
@@ -43,9 +72,6 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   Come query viene usata solo la prima riga del messaggio (massimo 200
   caratteri), non l'intero testo. Il numero di risultati è configurabile. I modelli non chiamano il tool da
   soli: i risultati vengono iniettati nel prompt dalla GUI (verificato e2e).
-- **Gestione modelli** (pulsante «Modelli» nella sidebar, Ctrl+M): elenco dei
-  modelli installati con dimensione/parametri/quantizzazione, **scaricamento**
-  di nuovi modelli con barra di avanzamento e annullamento, ed **eliminazione**.
 - **Aggiornamenti Ollama** (Impostazioni → Interfaccia): confronto tra la
   versione del server e l'ultima release su GitHub, con **aggiornamento in
   un clic** tramite lo script ufficiale (eseguito con `pkexec`, quindi con la
@@ -59,8 +85,8 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
 - **Impostazioni → scheda «Interfaccia»**: URL del server Ollama, tema
   scuro/chiaro/**sistema** (segue KDE Plasma, anche a caldo quando lo cambi),
   dimensione del carattere, streaming on/off, invio con Invio, orario nei
-  messaggi, quantità di contesto inviata al modello, prompt di sistema
-  predefinito, risultati ricerca web.
+  messaggi, icona nella tray, condivisione API in rete, quantità di contesto
+  inviata al modello, prompt di sistema predefinito, risultati ricerca web.
 - **Impostazioni → scheda «Parametri modelli»**: profilo di parametri separato
   per ogni modello (temperatura, top_k, top_p, min_p, num_ctx, num_predict,
   penalità di ripetizione/presenza/frequenza, seed, sequenze di stop, mirostat,
@@ -278,6 +304,7 @@ olladesk/
   updater.py                aggiornamenti di Ollama (release GitHub + pkexec)
   app_update.py             aggiornamenti di OllaDesk (solo controllo e avviso)
   ollama_client.py          client API Ollama (stdlib) + worker QThread
+  server_share.py           condivisione API Ollama in rete (avvio `ollama serve`)
   main_window.py            finestra principale e orchestrazione streaming
   widgets/
     chat_area.py            area messaggi + input (allegati, ricerca web)

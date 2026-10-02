@@ -33,6 +33,7 @@ class MessageWidget(QFrame):
         attachments: list[str] | None = None,
         web: bool = False,
         parent=None,
+        thinking: str = "",
     ):
         super().__init__(parent)
         self.role = role
@@ -44,6 +45,11 @@ class MessageWidget(QFrame):
         # dall'etichetta accumulerebbe l'orario a ogni refresh del tema
         self._stats: str | None = None
         self._show_ts = show_ts
+        # ragionamento del modello (message.thinking): vuoto se assente
+        self._thinking_raw = thinking or ""
+        self._think_expanded = False
+        self._think_streaming = False
+        self._think_color = theme.palette_for(theme_name)["dim"]
 
         self.setProperty("bubble", role)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
@@ -51,6 +57,32 @@ class MessageWidget(QFrame):
         inner = QVBoxLayout(self)
         inner.setContentsMargins(14, 10, 14, 8)
         inner.setSpacing(4)
+
+        # -- blocco «Pensiero» richiudibile (sopra al contenuto) ---------
+        self.think_btn = QToolButton(self)
+        self.think_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.think_btn.setStyleSheet(
+            "QToolButton { border: none; background: transparent; "
+            f"color: {self._think_color}; padding: 0; }}"
+        )
+        self.think_btn.clicked.connect(self._on_think_toggle)
+        self.think_btn.hide()
+        self.think_label = QLabel(self)
+        self.think_label.setTextFormat(Qt.TextFormat.PlainText)
+        self.think_label.setWordWrap(True)
+        self.think_label.setStyleSheet(
+            f"color: {self._think_color}; font-style: italic;"
+        )
+        self.think_label.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+        )
+        self.think_label.hide()
+        inner.addWidget(self.think_btn, 0, Qt.AlignmentFlag.AlignLeft)
+        inner.addWidget(self.think_label)
+        if self._thinking_raw:
+            # riapertura di una conversazione salvata: blocco già richiuso
+            self.think_btn.show()
+            self._sync_think_widgets()
 
         chips = []
         if role == "user" and web:
@@ -119,6 +151,11 @@ class MessageWidget(QFrame):
         self.raw = raw
         if raw:
             self.stop_animation()
+            # primo contenuto dopo il ragionamento: richiudi il blocco
+            # (riapribile dal pulsante), come fanno le chat più note
+            if self._think_streaming:
+                self._think_streaming = False
+                self._auto_collapse_think()
         self.copy_btn.setVisible(bool(raw))
         bg, fg, inline = theme.code_colors(self.theme_name)
         if raw:
@@ -131,8 +168,49 @@ class MessageWidget(QFrame):
     def append_stream(self, full_text: str) -> None:
         self.set_text(full_text)
 
+    # ------------------------------------------------------------ pensiero
+
+    def set_thinking_stream(self, full_text: str) -> None:
+        """Imposta il ragionamento accumulato nella bolla in streaming.
+
+        Come append_stream per il testo, riceve il buffer COMPLETO dal chiamante
+        (che accumula i frammenti): sostituisce, non concatena — altrimenti ogni
+        flush riappenderebbe tutto il buffer duplicandolo.
+        """
+        self._thinking_raw = full_text
+        if not self.raw:
+            # finché non arriva contenuto lo stream resta visibile ed espanso
+            self._think_streaming = True
+            self._think_expanded = True
+        self.think_btn.show()
+        self._sync_think_widgets()
+
+    def _sync_think_widgets(self) -> None:
+        self.think_btn.setText(self._think_header())
+        self.think_label.setText(self._thinking_raw)
+        self.think_label.setVisible(self._think_expanded)
+
+    def _think_header(self) -> str:
+        arrow = "▾" if self._think_expanded else "▸"
+        label = "sta pensando…" if self._think_streaming else "Pensiero"
+        return f"💭 {label} {arrow}"
+
+    def _auto_collapse_think(self) -> None:
+        self._think_expanded = False
+        self._sync_think_widgets()
+
+    def _on_think_toggle(self) -> None:
+        if not self._thinking_raw:
+            return
+        self._think_expanded = not self._think_expanded
+        self._sync_think_widgets()
+
     def finish(self, stats: str | None = None, show_ts: bool = False) -> None:
         self.stop_animation()
+        if self._think_streaming:
+            # interrotto durante il ragionamento senza contenuto: richiudi
+            self._think_streaming = False
+            self._auto_collapse_think()
         if not self.raw:
             self.label.setText("(nessuna risposta)")
         self._stats = stats
@@ -145,6 +223,14 @@ class MessageWidget(QFrame):
 
     def refresh_theme(self, theme_name: str, show_ts: bool) -> None:
         self.theme_name = theme_name
+        self._think_color = theme.palette_for(theme_name)["dim"]
+        self.think_btn.setStyleSheet(
+            "QToolButton { border: none; background: transparent; "
+            f"color: {self._think_color}; padding: 0; }}"
+        )
+        self.think_label.setStyleSheet(
+            f"color: {self._think_color}; font-style: italic;"
+        )
         self._update_meta(show_ts, self._stats)
         if self.raw:
             bg, fg, inline = theme.code_colors(theme_name)

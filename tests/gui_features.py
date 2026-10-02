@@ -330,4 +330,61 @@ print("7b. verifica aggiornamenti:", dlg2.update_status.text())
 print("    installata:", dlg2._installed_version, "| più recente:", dlg2._latest_version)
 dlg2.close()
 
+# --- 8. thinking (🧠) ----------------------------------------------------------
+win._new_chat()
+think_models = [
+    m for m in chat_models
+    if any(k in m.lower() for k in ("qwen3", "deepseek", "gpt-oss"))
+]
+# preferisce i modelli pensanti «classici»: qwen3.5 può non ragionare su prompt semplici
+think_models.sort(key=lambda m: m.split(":")[0].lower() not in ("qwen3", "deepseek-r1", "gpt-oss"))
+if not think_models:
+    print("8. SKIP: nessun modello con thinking tra quelli installati")
+else:
+    win.model_combo.setCurrentIndex(win.model_combo.findData(think_models[0]))
+
+    # 8a. 🧠 spento: la richiesta porta think:false → risposta senza «Pensiero»
+    win.chat_area.think_btn.setChecked(False)   # click simulato: salva l'impostazione
+    assert win.settings["thinking"] is False
+    win.chat_area.set_input_text("Quanto fa 2+2? Rispondi con solo il numero.")
+    win.chat_area._emit_send()
+    t0 = time.time()
+    while win._busy() and time.time() - t0 < 90:
+        wait_ms(300)
+    app.processEvents()
+    last = win.current_chat["messages"][-1]
+    assert last["role"] == "assistant" and "thinking" not in last, (
+        "thinking inatteso con 🧠 spento", str(last.get("thinking", ""))[:80]
+    )
+    print("8a. thinking OFF: risposta senza blocco «Pensiero» OK")
+
+    # 8b. 🧠 attivo: se il modello ragiona, il pensiero deve comparire UNA volta
+    win.chat_area.think_btn.setChecked(True)
+    assert win.settings["thinking"] is True
+    win.chat_area.set_input_text("Perché il cielo è azzurro? Rispondi in una frase.")
+    win.chat_area._emit_send()
+    max_widget_think = 0
+    t0 = time.time()
+    while win._busy() and time.time() - t0 < 120:
+        wait_ms(250)
+        sw = win.chat_area._stream_widget
+        if sw is not None:
+            max_widget_think = max(max_widget_think, len(sw._thinking_raw))
+    app.processEvents()
+    win.grab().save(f"{SHOTS}/20_thinking.png")
+    last = win.current_chat["messages"][-1]
+    saved_think = len(last.get("thinking") or "")
+    if saved_think:
+        # regressione B1: il widget mostrava il buffer riappeso a ogni flush,
+        # crescendo molto più del pensiero realmente prodotto
+        assert max_widget_think <= saved_think + 80, (max_widget_think, saved_think)
+        print(f"8b. thinking ON: {saved_think} caratteri di pensiero, nessuna duplicazione")
+    else:
+        print("8b. thinking ON: il modello non ha ragionato su questo prompt (non bloccante)")
+
+# chiusura pulita: ferma i worker ancora in volo (es. il controllo stato dei
+# 30 s), altrimenti il teardown dell'interprete può core-dumppare
+win._really_quit = True
+win.close()
+
 print("FEATURE TEST OK")

@@ -22,12 +22,21 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "send_on_enter": True,
     "show_timestamps": False,
     "stream": True,
+    "thinking": True,           # False → invia "think": false (disattiva il ragionamento)
     "history_limit": 20,        # messaggi di cronologia inviati come contesto
     "system_prompt": "",
     "web_results": 5,           # risultati di ricerca web allegati al contesto
     "web_provider": "duckduckgo",   # "duckduckgo" | "ollama" | "searxng"
     "web_api_key": "",          # chiave API per il provider "ollama" (ollama.com)
     "web_searxng_url": "http://localhost:8888",  # istanza SearXNG personale
+    # icona nella tray: chiusura (X) ridotta a icona invece di uscire
+    "tray_icon": True,
+    "close_to_tray": True,
+    # condivisione dell'API Ollama in rete (stile LM Studio): OllaDesk avvia
+    # `ollama serve` con OLLAMA_HOST=<bind>:<porta> per smartphone/tablet
+    "share_api": False,
+    "share_bind": "0.0.0.0",    # "0.0.0.0" (tutte le interfacce) | "127.0.0.1"
+    "share_port": 11434,
     # aggiornamenti di OllaDesk (solo avviso): vedi app_update.py
     "app_update_check": True,       # controllo automatico all'avvio (max 1 volta al giorno)
     "app_update_last_check": 0.0,   # epoch dell'ultimo controllo riuscito

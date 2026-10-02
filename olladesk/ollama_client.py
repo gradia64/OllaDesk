@@ -144,6 +144,7 @@ class ChatWorker(QThread):
     """POST /api/chat con streaming NDJSON (o risposta singola)."""
 
     chunk = Signal(str)      # frammento di testo dell'assistente
+    think_chunk = Signal(str)   # frammento di ragionamento (message.thinking)
     done = Signal(dict)      # payload finale (statistiche)
     failed = Signal(str)
 
@@ -182,7 +183,11 @@ class ChatWorker(QThread):
                 if data.get("error"):
                     self.failed.emit(str(data["error"]))
                     return
-                content = (data.get("message") or {}).get("content", "")
+                msg = data.get("message") or {}
+                thinking = msg.get("thinking", "")
+                if thinking:
+                    self.think_chunk.emit(thinking)
+                content = msg.get("content", "")
                 if content:
                     self.chunk.emit(content)
                 self.done.emit(data if data.get("done") else {"done": True})
@@ -204,7 +209,13 @@ class ChatWorker(QThread):
                 if data.get("done"):
                     self.done.emit(data)
                     return
-                content = (data.get("message") or {}).get("content", "")
+                # i modelli «thinking» (qwen3, deepseek-r1…) mandano il
+                # ragionamento in message.thinking, distinto dal contenuto
+                msg = data.get("message") or {}
+                thinking = msg.get("thinking", "")
+                if thinking:
+                    self.think_chunk.emit(thinking)
+                content = msg.get("content", "")
                 if content:
                     self.chunk.emit(content)
             # stream chiuso senza "done": consideriamo comunque concluso

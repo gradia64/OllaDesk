@@ -9,7 +9,7 @@ from __future__ import annotations
 import uuid
 from pathlib import Path
 
-from PySide6.QtCore import QSize, Qt, QTimer, Signal
+from PySide6.QtCore import QEvent, QSize, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QFileDialog,
     QFrame,
@@ -31,6 +31,9 @@ from .message import MessageWidget, SystemNoteWidget
 
 ASSISTANT_MAX_W = 860
 USER_MAX_W = 620
+# larghezza massima della colonna messaggi: centrata quando la finestra è
+# più larga, così nascondere la sidebar non stira il contenuto (→ ROADMAP #7)
+COLUMN_MAX_W = 900
 
 FILE_FILTER = (
     "Documenti e immagini (*.txt *.md *.py *.json *.csv *.log *.yaml *.yml "
@@ -123,6 +126,7 @@ class ChatInput(QPlainTextEdit):
 class ChatArea(QWidget):
     sendRequested = Signal(str)
     stopRequested = Signal()
+    thinkingToggled = Signal(bool)
 
     def __init__(self, theme_name: str = "dark", show_ts: bool = False, parent=None):
         super().__init__(parent)
@@ -158,6 +162,10 @@ class ChatArea(QWidget):
         bar.rangeChanged.connect(self._on_range_changed)
         bar.valueChanged.connect(self._on_value_changed)
         self._stick_bottom = True
+        # il margine della colonna centrata segue la larghezza REALE del
+        # viewport (il resize di ChatArea arriva prima della disposizione
+        # della pagina dello stack: senza questo filtro il margine ritarda)
+        self.scroll.viewport().installEventFilter(self)
 
         # -- riga chip degli allegati ------------------------------------
         self.attach_row = QWidget(self)
@@ -171,6 +179,7 @@ class ChatArea(QWidget):
         # -- input -------------------------------------------------------
         input_row = QHBoxLayout()
         input_row.setContentsMargins(20, 4, 20, 10)
+        self._input_row = input_row   # margine allineato alla colonna centrata
         self.input_frame = QFrame(self)
         self.input_frame.setObjectName("inputFrame")
         self.input_frame.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
@@ -195,6 +204,33 @@ class ChatArea(QWidget):
         self.web_btn.toggled.connect(self._on_web_toggled)
         self._update_web_icon()
         fl.addWidget(self.web_btn)
+
+        # thinking: attivo (= comportamento predefinito del modello) o forzato
+        # a off inviando "think": false a /api/chat (modelli qwen3, deepseek-r1…)
+        self.think_btn = QToolButton(self.input_frame)
+        self.think_btn.setCheckable(True)
+        self.think_btn.setText("🧠")
+        self.think_btn.setToolTip(
+            "Ragionamento (thinking): spuntato, i modelli che sanno farlo "
+            "ragionano prima di rispondere e il pensiero è visibile in chat;\n"
+            "non spuntato, il ragionamento viene disattivato inviando "
+            "\"think\": false alla richiesta.\n"
+            "Nota: gpt-oss non accetta la disattivazione (Ollama accetta per "
+            "esso solo i livelli low/medium/high)."
+        )
+        self.think_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.think_btn.toggled.connect(self._on_think_toggled)
+        # lo stato acceso/spento deve vedersi: l'emoji non cambia colore, quindi
+        # il bordo/sfondo azzurro del :checked fa da indicatore (come il globo
+        # blu della ricerca web)
+        self.think_btn.setStyleSheet(
+            "QToolButton { border: 1px solid transparent; background: transparent;"
+            " border-radius: 5px; padding: 2px; }"
+            "QToolButton:checked {"
+            f" border: 1px solid {theme.WEB_ACTIVE_COLOR};"
+            " background: rgba(59,130,246,0.18); }"
+        )
+        fl.addWidget(self.think_btn)
 
         self.input = ChatInput(self.input_frame)
         self.input.sendPressed.connect(self._emit_send)
@@ -224,8 +260,37 @@ class ChatArea(QWidget):
         self._stream_timer.timeout.connect(self._flush_stream)
         self._stream_buffer = ""
 
+        # stesso throttling per lo stream del ragionamento
+        self._think_timer = QTimer(self)
+        self._think_timer.setSingleShot(True)
+        self._think_timer.setInterval(70)
+        self._think_timer.timeout.connect(self._flush_thinking)
+        self._think_buffer = ""
+
         # trascinamento file su tutta l'area chat (i messaggi o l'input)
         self.setAcceptDrops(True)
+
+    @staticmethod
+    def _side_margin(viewport_w: int) -> int:
+        """Margine laterale che centra la colonna messaggi (min 20 px)."""
+        return max(20, (viewport_w - COLUMN_MAX_W) // 2)
+
+    def _update_column(self) -> None:
+        """Centra la colonna messaggi e allinea input e chip allargati.
+
+        Con finestre strette il margine resta 20 px: come prima. Nascondere
+        la sidebar non cambia più la larghezza del blocco di conversazione.
+        """
+        vw = self.scroll.viewport().width()
+        side = self._side_margin(vw)
+        self.msgs.setContentsMargins(side, 12, side, 12)
+        self.attach_lay.setContentsMargins(side, 6, side, 0)
+        self._input_row.setContentsMargins(side, 4, side, 10)
+
+    def eventFilter(self, obj, ev) -> bool:
+        if obj is self.scroll.viewport() and ev.type() == QEvent.Type.Resize:
+            self._update_column()
+        return super().eventFilter(obj, ev)
 
     def dragEnterEvent(self, ev) -> None:  # noqa: N802 (API Qt)
         if ev.mimeData().hasUrls():
@@ -299,11 +364,13 @@ class ChatArea(QWidget):
         return row
 
     def _apply_widths(self, w: MessageWidget) -> None:
-        vw = self.scroll.viewport().width() - 40
+        vw = self.scroll.viewport().width()
+        side = self._side_margin(vw)
+        row_w = max(280, vw - 2 * side)
         if w.role == "user":
-            w.setMaximumWidth(min(USER_MAX_W, max(280, int(vw * 0.8))))
+            w.setMaximumWidth(min(USER_MAX_W, max(280, int(row_w * 0.8))))
         else:
-            w.setMaximumWidth(min(ASSISTANT_MAX_W, max(280, vw)))
+            w.setMaximumWidth(min(ASSISTANT_MAX_W, max(280, row_w)))
 
     def add_message(
         self,
@@ -313,9 +380,11 @@ class ChatArea(QWidget):
         attachments: list[str] | None = None,
         web: bool = False,
         stats: str | None = None,
+        thinking: str = "",
     ) -> MessageWidget:
         w = MessageWidget(
-            role, text, ts, self.show_ts, self.theme_name, attachments, web, self
+            role, text, ts, self.show_ts, self.theme_name, attachments, web, self,
+            thinking=thinking,
         )
         if stats:
             w.set_stats(stats)
@@ -334,6 +403,7 @@ class ChatArea(QWidget):
 
     def begin_stream(self, ts: float | None = None) -> MessageWidget:
         self._stream_buffer = ""  # evita di trascinare testo della risposta precedente
+        self._think_buffer = ""
         w = self.add_message("assistant", "", ts)
         w.start_animation()
         self._stream_widget = w
@@ -350,13 +420,26 @@ class ChatArea(QWidget):
             self._stream_timer.setInterval(min(400, 70 + n // 100))
             self._stream_timer.start()
 
+    def stream_thinking(self, chunk: str) -> None:
+        self._think_buffer += chunk
+        if not self._think_timer.isActive():
+            n = len(self._think_buffer)
+            self._think_timer.setInterval(min(400, 70 + n // 100))
+            self._think_timer.start()
+
     def _flush_stream(self) -> None:
         if self._stream_widget is not None and self._stream_buffer:
             self._stream_widget.append_stream(self._stream_buffer)
             QTimer.singleShot(0, self._scroll_to_bottom)
 
+    def _flush_thinking(self) -> None:
+        if self._stream_widget is not None and self._think_buffer:
+            self._stream_widget.set_thinking_stream(self._think_buffer)
+            QTimer.singleShot(0, self._scroll_to_bottom)
+
     def end_stream(self, stats: str | None = None, discard_empty: bool = False) -> None:
         self._flush_stream()
+        self._flush_thinking()
         w, self._stream_widget = self._stream_widget, None
         if w is None:
             return
@@ -412,6 +495,7 @@ class ChatArea(QWidget):
 
     def resizeEvent(self, ev) -> None:  # noqa: N802 (API Qt)
         super().resizeEvent(ev)
+        self._update_column()
         for i in range(self.msgs.count()):
             row = self.msgs.itemAt(i).widget()
             w = self._row_widget(row) if row is not None else None
@@ -512,6 +596,21 @@ class ChatArea(QWidget):
 
     def set_web_search(self, on: bool) -> None:
         self.web_btn.setChecked(on)
+
+    # ------------------------------------------------------------- thinking
+
+    def _on_think_toggled(self, checked: bool) -> None:
+        self.thinkingToggled.emit(checked)
+
+    def set_thinking(self, on: bool) -> None:
+        # senza blocco dei segnali, il setChecked all'avvio (o al cambio
+        # tema/impostazioni) emetterebbe toggled e riscriverebbe settings.json
+        self.think_btn.blockSignals(True)
+        self.think_btn.setChecked(on)
+        self.think_btn.blockSignals(False)
+
+    def thinking_active(self) -> bool:
+        return self.think_btn.isChecked()
 
     # ----------------------------------------------------------------- input
 

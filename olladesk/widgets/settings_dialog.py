@@ -146,6 +146,29 @@ class SettingsDialog(QDialog):
         self.ts_chk.setChecked(bool(s.get("show_timestamps", False)))
         form.addRow("Orario:", self.ts_chk)
 
+        self.tray_chk = QCheckBox(
+            "Mostra l'icona di OllaDesk nell'area di notifica (tray)", w
+        )
+        self.tray_chk.setChecked(bool(s.get("tray_icon", True)))
+        self.tray_chk.setToolTip(
+            "L'icona nella tray permette di mostrare/nascondere la finestra con un clic."
+        )
+        form.addRow("Tray:", self.tray_chk)
+
+        self.close_tray_chk = QCheckBox(
+            "La chiusura (X) riduce nella tray invece di uscire", w
+        )
+        self.close_tray_chk.setChecked(bool(s.get("close_to_tray", True)))
+        self.close_tray_chk.setToolTip(
+            "Per uscire davvero: icona nella tray → tasto destro → «Esci».\n"
+            "Con la finestra nascosta la condivisione API resta attiva."
+        )
+        form.addRow("", self.close_tray_chk)
+        # ha senso solo con l'icona in tray: il collegamento va fatto DOPO la
+        # creazione di entrambe le caselle
+        self.tray_chk.toggled.connect(self.close_tray_chk.setEnabled)
+        self.close_tray_chk.setEnabled(self.tray_chk.isChecked())
+
         self.hist_spin = IntStepper(w)
         self.hist_spin.setRange(0, 200)
         self.hist_spin.setValue(int(s.get("history_limit", 20)))
@@ -226,6 +249,8 @@ class SettingsDialog(QDialog):
 
         lay.addLayout(form)
 
+        lay.addWidget(self._build_share_group(w, s))
+
         info = QLabel(
             f"Impostazioni, parametri e conversazioni sono salvati in:\n{config.config_dir()}",
             w,
@@ -248,6 +273,72 @@ class SettingsDialog(QDialog):
             return
         form.setRowVisible(self._key_row, provider == "ollama")
         form.setRowVisible(self.searxng_edit, provider == "searxng")
+
+    # ------------------------------------------- condivisione API in rete
+
+    def _build_share_group(self, parent: QWidget, s: dict) -> QGroupBox:
+        """Sezione «server di rete» stile LM Studio (vedi server_share.py)."""
+        box = QGroupBox("Condivisione in rete (API Ollama per smartphone e tablet)", parent)
+        lay = QVBoxLayout(box)
+        lay.setSpacing(8)
+
+        self.share_chk = QCheckBox(
+            "Condividi i modelli in rete: OllaDesk avvia `ollama serve` su questa porta", box
+        )
+        self.share_chk.setChecked(bool(s.get("share_api", False)))
+        self.share_chk.toggled.connect(self._update_share_fields)
+        lay.addWidget(self.share_chk)
+
+        row = QHBoxLayout()
+        row.addWidget(QLabel("Interfaccia:", box))
+        self.share_bind_combo = QComboBox(box)
+        self.share_bind_combo.addItem("Tutte le interfacce (0.0.0.0)", "0.0.0.0")
+        self.share_bind_combo.addItem("Solo questo PC (127.0.0.1)", "127.0.0.1")
+        idx = self.share_bind_combo.findData(s.get("share_bind", "0.0.0.0"))
+        self.share_bind_combo.setCurrentIndex(max(0, idx))
+        row.addWidget(self.share_bind_combo, 1)
+        row.addWidget(QLabel("Porta:", box))
+        self.share_port_spin = IntStepper(box)
+        self.share_port_spin.setRange(1024, 65535)
+        self.share_port_spin.setValue(int(s.get("share_port", 11434)))
+        row.addWidget(self.share_port_spin)
+        lay.addLayout(row)
+
+        self.share_warn = QLabel(
+            "⚠ L'API di Ollama non prevede autenticazione: chiunque raggiunga la porta "
+            "può usare i modelli (e la GPU). Non aprire la porta sul router: per l'accesso "
+            "da fuori casa usa una VPN (es. Tailscale) o un tunnel SSH.",
+            box,
+        )
+        self.share_warn.setObjectName("metaLabel")
+        self.share_warn.setWordWrap(True)
+        lay.addWidget(self.share_warn)
+
+        self.share_hint = QLabel(
+            "Sul telefono/tablet punta un client Ollama a http://<IP-del-PC>:<porta> "
+            "(l'indirizzo esatto compare nel pulsante 🔗 della barra superiore, clic per copiarlo). "
+            "Se non hai nessun altro server Ollama, usa la stessa porta anche nel campo "
+            "«Server Ollama» qui sopra.\n"
+            "Se è già attivo il servizio di sistema, la via consigliata è riavviarlo in rete "
+            "(`sudo systemctl edit ollama`, poi `Environment=OLLAMA_HOST=0.0.0.0` e riavvio): "
+            "una seconda istanza avviata da OllaDesk su un'altra porta funziona, ma usa i "
+            "modelli dell'utente (~/.ollama/models, NON quelli del servizio in "
+            "/usr/share/ollama/.ollama/models) e carica i modelli in VRAM per conto suo.",
+            box,
+        )
+        self.share_hint.setObjectName("metaLabel")
+        self.share_hint.setWordWrap(True)
+        lay.addWidget(self.share_hint)
+
+        self._update_share_fields()
+        return box
+
+    def _update_share_fields(self) -> None:
+        on = self.share_chk.isChecked()
+        self.share_bind_combo.setEnabled(on)
+        self.share_port_spin.setEnabled(on)
+        self.share_warn.setVisible(on)
+        self.share_hint.setVisible(on)
 
     def _clear_api_key(self) -> None:
         """Segna la chiave per la rimozione (effettiva con «Salva»)."""
@@ -558,6 +649,11 @@ class SettingsDialog(QDialog):
             "stream": self.stream_chk.isChecked(),
             "send_on_enter": self.enter_chk.isChecked(),
             "show_timestamps": self.ts_chk.isChecked(),
+            "tray_icon": self.tray_chk.isChecked(),
+            "close_to_tray": self.close_tray_chk.isChecked(),
+            "share_api": self.share_chk.isChecked(),
+            "share_bind": self.share_bind_combo.currentData() or "0.0.0.0",
+            "share_port": self.share_port_spin.value(),
             "history_limit": self.hist_spin.value(),
             "web_results": self.web_spin.value(),
             "web_provider": self.web_provider_combo.currentData() or "duckduckgo",
