@@ -856,9 +856,11 @@ class MainWindow(QMainWindow):
             # raggiungibile dalla LAN o solo in locale (bind 127.0.0.1)
             self.share_btn.setToolTip(f"Condivisione API (istanza esterna)\n{detail}")
             self.share_btn.show()
-            # nota in chat solo alla PRIMA segnalazione della sessione: con un
-            # Ollama di sistema sempre attivo sarebbe rumore a ogni avvio
-            if not self._share_note_shown:
+            # nota in chat solo se c'è qualcosa da sistemare (istanza non
+            # raggiungibile dalla rete), e una sola volta per sessione: se è
+            # già tutto in ascolto sulle interfacce il tooltip di 🔗 basta,
+            # una nota a ogni avvio è solo rumore
+            if not self._share.lan_shared and not self._share_note_shown:
                 self._share_note_shown = True
                 self.chat_area.add_system_note(f"⚠ Condivisione API: {detail}")
         elif state == "starting":

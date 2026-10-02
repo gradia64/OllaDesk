@@ -830,6 +830,41 @@ def test_share_copy_respects_lan_shared():
             win.close()
 
 
+def test_share_external_note_only_when_actionable():
+    # la nota «external» in chat non deve comparire quando è tutto a posto
+    # (istanza già in ascolto sulle interfacce): resta solo per il caso da
+    # sistemare, e una volta per sessione
+    with _isolated_config():
+        win = _make_window()
+        try:
+            from olladesk.widgets.message import SystemNoteWidget
+
+            def note_count() -> int:
+                n = 0
+                for i in range(win.chat_area.msgs.count()):
+                    row = win.chat_area.msgs.itemAt(i).widget()
+                    lay = row.layout() if row is not None else None
+                    if lay is not None and any(
+                        isinstance(lay.itemAt(j).widget(), SystemNoteWidget)
+                        for j in range(lay.count())
+                    ):
+                        n += 1
+                return n
+
+            win._share.lan_shared = True   # Ollama di sistema già in rete
+            win._on_share_state("external", "già attivo e in ascolto su tutte le interfacce")
+            assert note_count() == 0, "nota inutile nello stato buono"
+
+            win._share.lan_shared = False  # bind 127.0.0.1: da sistemare
+            win._on_share_state("external", "risponde solo su questo PC")
+            assert note_count() == 1
+            win._on_share_state("external", "risponde solo su questo PC")
+            assert note_count() == 1   # una sola volta per sessione
+        finally:
+            win._really_quit = True
+            win.close()
+
+
 def main() -> int:
     failed = 0
     for name, fn in sorted(globals().items()):
