@@ -17,6 +17,9 @@ incluso).
 | 4 | Pulsante ✕ per chiudere le note di sistema in chat | collaudo 0.2.4 | ☑ |
 | 5 | Icona thinking come il globo della ricerca web: tinta grigia da spento/blu da attivo, senza cornice, stessa dimensione ottica (`theme.brain_icon` con ritaglio del glifo e fallback disegnato) | collaudo 0.2.4 | ☑ |
 
+Rilasciate nella 0.2.5; i test offline e i collaudi reali con Ollama
+(gui_smoke, gui_features con thinking e2e) passano.
+
 ## Residui tecnici dalla 0.2.4
 
 | # | Voce | Note | Stato |
