@@ -129,4 +129,7 @@ chmod 644 "$PKG/DEBIAN/md5sums"
 find "$PKG" -exec touch -h -d "@$SOURCE_DATE_EPOCH" {} +
 
 mkdir -p dist
-dpkg-deb --build --root-owner-group "$PKG" "dist/olladesk_${VERSION}_all.deb"
+# compressione esplicita: il default di dpkg-deb cambia tra distribuzioni
+# (xz su Debian, zstd su Ubuntu e quindi sui runner della CI): così il .deb
+# pubblicato ha lo stesso formato di quello costruito in locale
+dpkg-deb --build --root-owner-group -Zxz "$PKG" "dist/olladesk_${VERSION}_all.deb"

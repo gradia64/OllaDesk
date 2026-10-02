@@ -922,6 +922,31 @@ def test_share_copy_respects_lan_shared():
             win.close()
 
 
+def test_share_copy_without_lan_urls_explains():
+    # regressione: condivisione raggiungibile ma nessun indirizzo LAN
+    # rilevato → prima il clic su 🔗 non faceva nulla, in silenzio
+    from unittest.mock import patch
+
+    with _isolated_config():
+        win = _make_window()
+        try:
+            from PySide6.QtGui import QGuiApplication
+
+            from olladesk import server_share
+
+            notes: list[str] = []
+            QGuiApplication.clipboard().setText("")
+            win._share.lan_shared = True
+            with patch.object(server_share, "lan_urls", return_value=[]), \
+                    patch.object(win.chat_area, "add_system_note", notes.append):
+                win._copy_share_urls()
+            assert QGuiApplication.clipboard().text() == ""
+            assert len(notes) == 1 and "Nessun indirizzo di rete" in notes[0], notes
+        finally:
+            win._really_quit = True
+            win.close()
+
+
 def test_share_external_note_only_when_actionable():
     # la nota «external» in chat non deve comparire quando è tutto a posto
     # (istanza già in ascolto sulle interfacce): resta solo per il caso da

@@ -888,6 +888,12 @@ class MainWindow(QMainWindow):
             return
         urls = server_share.lan_urls(int(self.settings.get("share_port", 11434)))
         if not urls:
+            # condivisione attiva ma nessuna interfaccia LAN utile (Wi-Fi/cavo
+            # scollegati dopo l'avvio): spiegarlo invece di non fare nulla
+            self.chat_area.add_system_note(
+                "⚠ Nessun indirizzo di rete rilevato da copiare:\n"
+                "controlla che il PC sia collegato alla rete (Wi-Fi o cavo)."
+            )
             return
         QGuiApplication.clipboard().setText("\n".join(urls))
         self.chat_area.add_system_note(
@@ -1007,7 +1013,8 @@ class MainWindow(QMainWindow):
                 )
             return
         if self.tray is not None:
-            self.tray.hide()   # via l'icona subito: niente residui nel pannello        # arresta l'eventuale server condiviso avviato da noi: al prossimo
+            self.tray.hide()   # via l'icona subito: niente residui nel pannello
+        # arresta l'eventuale server condiviso avviato da noi: al prossimo
         # avvio `_sync_share` lo riporta su se l'opzione è ancora attiva
         self._share.stop()
         # ferma e attende (con limite) TUTTI i worker: un QThread distrutto

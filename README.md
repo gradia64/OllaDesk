@@ -141,7 +141,7 @@ Ogni release include anche il pacchetto già costruito
 Scarica `olladesk_<versione>_all.deb` dall'ultima
 [release su GitHub](https://github.com/gradia64/OllaDesk/releases/latest)
 e installalo: apt risolve da solo le dipendenze (Python 3.10+ e i moduli
-PySide6 di Qt core/gui/widgets):
+PySide6 di Qt core/gui/widgets/network):
 
 ```bash
 sudo apt install ./olladesk_*_all.deb
