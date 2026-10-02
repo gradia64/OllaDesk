@@ -1,8 +1,8 @@
 """Finestra principale: sidebar + area chat + barra modelli/stato.
 
-Gestisce l'invio con allegati (testo/PDF inlinati, immagini in base64) e la
-ricerca web opzionale (i risultati vengono allegati al contesto prima della
-richiesta a Ollama).
+Conversazioni, invio e generazione sono del `ChatEngine` (engine.py): la
+finestra raccoglie l'input (testo, allegati, ricerca web, modello) e mostra
+gli eventi del motore che riguardano la conversazione visualizzata.
 """
 from __future__ import annotations
 
@@ -26,12 +26,14 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from . import __version__, app_update, config, context, secrets_store, server_share, theme, web_search
-from .ollama_client import ApiWorker, ChatWorker, format_stats, shutdown_workers
+from . import __version__, app_update, config, server_share, theme
+from .engine import ChatEngine
+from .ollama_client import ApiWorker, shutdown_workers
 from .widgets.chat_area import ChatArea
 from .widgets.model_manager import ModelManagerDialog
 from .widgets.settings_dialog import SettingsDialog
 from .widgets.sidebar import ChatSidebar
+from .workers import WorkerRegistry
 
 
 class MainWindow(QMainWindow):
@@ -42,10 +44,10 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(860, 560)
 
         self.settings = config.load_settings()
-        self.chats: list[dict] = config.load_chats()
-        self.current_chat: dict | None = None
-        self._worker: ChatWorker | None = None
-        self._search_worker: web_search.WebSearchWorker | None = None
+        self.engine = ChatEngine(self.settings, self)
+        # conversazione visualizzata: None = pagina di benvenuto; un id non
+        # ancora salvato è una conversazione nuova (nasce al primo messaggio)
+        self._view_id: str | None = None
         self._status_worker: ApiWorker | None = None
         self._models_worker: ApiWorker | None = None
         self._app_update_worker: app_update.AppUpdateCheckWorker | None = None
@@ -53,13 +55,7 @@ class MainWindow(QMainWindow):
         self._models: list[dict] = []
         self._online: bool | None = None
         self._preferred_model: str | None = None
-        self._pending_stream: str = ""
-        self._pending_think: str = ""   # ragionamento ricevuto nel turno corrente
-        self._pending_user: dict | None = None
-        self._chat_stopped = False     # scarta i segnali del worker dopo uno stop
-        self._search_stopped = False
-        self._running_workers: list = []
-        self._zombie_workers: list = []   # worker in arresto, non bloccano la UI
+        self._workers = WorkerRegistry()
         self._version = "?"
         self._resolved_theme = theme.resolve_theme(self.settings["theme"])
         self.tray: QSystemTrayIcon | None = None
@@ -85,7 +81,7 @@ class MainWindow(QMainWindow):
 
         # avvio: pagina predefinita di benvenuto; le conversazioni salvate si
         # aprono solo se l'utente le sceglie dalla colonna di sinistra
-        self.sidebar.set_chats(self.chats, None)
+        self.sidebar.set_chats(self.engine.chats(), None)
 
         self._status_timer = QTimer(self)
         self._status_timer.setInterval(30_000)
@@ -193,6 +189,18 @@ class MainWindow(QMainWindow):
         self.share_btn.clicked.connect(self._copy_share_urls)
         self.model_combo.currentIndexChanged.connect(self._on_model_changed)
 
+        e = self.engine
+        e.chats_changed.connect(self._on_chats_changed)
+        e.user_message_added.connect(self._on_user_message)
+        e.busy_changed.connect(self._on_busy_changed)
+        e.search_started.connect(self._on_search_started)
+        e.search_finished.connect(self._on_search_finished)
+        e.generation_started.connect(self._on_generation_started)
+        e.text_chunk.connect(self._on_text_chunk)
+        e.think_chunk.connect(self._on_think_chunk)
+        e.generation_finished.connect(self._on_generation_finished)
+        e.notice.connect(self._on_notice)
+
     def _shortcuts(self) -> None:
         for seq, fn in (
             ("Ctrl+N", self._new_chat),
@@ -204,47 +212,6 @@ class MainWindow(QMainWindow):
             sc.activated.connect(fn)
 
     # ------------------------------------------------------------------- tema
-
-    def _track_worker(self, w) -> None:
-        """Tiene registro dei worker attivi per chiuderli tutti alla chiusura."""
-        self._running_workers.append(w)
-        w.finished.connect(lambda: self._untrack_worker(w))
-
-    def _clear_ref(self, attr: str, w):
-        """Slot per `finished`: azzera `attr` solo se punta ancora a `w`.
-
-        Un worker annullato può terminare DOPO che ne è partito uno nuovo:
-        un azzeramento incondizionato scollegherebbe quello nuovo.
-        """
-        def clear() -> None:
-            if getattr(self, attr, None) is w:
-                setattr(self, attr, None)
-        return clear
-
-    def _untrack_worker(self, w) -> None:
-        try:
-            self._running_workers.remove(w)
-        except ValueError:
-            pass
-
-    def _retire_worker(self, w) -> None:
-        """Sgancia un worker in arresto: la UI non attende più la sua morte.
-
-        Il thread può restare bloccato su un socket finché scatta il timeout
-        di rete: gli signal emessi in ritardo vengono scartati e la UI è
-        subito libera di fare nuove richieste.
-        """
-        if w is None:
-            return
-        self._untrack_worker(w)
-        self._zombie_workers.append(w)
-        w.finished.connect(lambda: self._forget_zombie(w))
-
-    def _forget_zombie(self, w) -> None:
-        try:
-            self._zombie_workers.remove(w)
-        except ValueError:
-            pass
 
     def _on_scheme_changed(self, *_a) -> None:
         if self.settings["theme"] == "system":
@@ -261,14 +228,9 @@ class MainWindow(QMainWindow):
     def _rerender_messages(self) -> None:
         # durante la generazione la bolla aperta non è ancora in current_chat:
         # ricrearla la distruggerebbe (refresh_theme ha già aggiornato i colori)
-        if self.current_chat and not self._busy():
-            self.chat_area.clear_messages()
-            for m in self.current_chat["messages"]:
-                self.chat_area.add_message(
-                    m["role"], m.get("display", m.get("content", "")), m.get("ts"),
-                    m.get("attachments"), bool(m.get("web")), m.get("stats"),
-                    thinking=m.get("thinking", ""),
-                )
+        chat = self.current_chat
+        if chat and not self._busy():
+            self._render_chat(chat)
 
     # ------------------------------------------------------------- connessione
 
@@ -279,8 +241,8 @@ class MainWindow(QMainWindow):
         self._status_worker.ready.connect(self._on_server_ok)
         self._status_worker.failed.connect(self._on_server_fail)
         self._status_worker.finished.connect(self._status_worker.deleteLater)
-        self._status_worker.finished.connect(self._clear_ref("_status_worker", self._status_worker))
-        self._track_worker(self._status_worker)
+        self._status_worker.finished.connect(self._workers.clear_ref(self, "_status_worker", self._status_worker))
+        self._workers.track(self._status_worker)
         self._status_worker.start()
 
     def _on_server_ok(self, data: object) -> None:
@@ -320,8 +282,8 @@ class MainWindow(QMainWindow):
         self._models_worker.ready.connect(self._on_models)
         self._models_worker.failed.connect(self._on_models_fail)
         self._models_worker.finished.connect(self._models_worker.deleteLater)
-        self._models_worker.finished.connect(self._clear_ref("_models_worker", self._models_worker))
-        self._track_worker(self._models_worker)
+        self._models_worker.finished.connect(self._workers.clear_ref(self, "_models_worker", self._models_worker))
+        self._workers.track(self._models_worker)
         self._models_worker.start()
 
     def _on_models(self, data: object) -> None:
@@ -393,44 +355,15 @@ class MainWindow(QMainWindow):
 
     # -------------------------------------------------------------- conversazioni
 
-    def _persist_chat(self) -> None:
-        """Salva la conversazione corrente (file dedicato + indice)."""
-        c = self.current_chat
-        if c is None:
-            return
-        if not config.save_chat(c):
-            self.chat_area.add_system_note(
-                "⚠ Impossibile salvare la conversazione su disco "
-                f"({config.chats_dir()}): spazio esaurito o permessi mancanti?"
-            )
-        # tiene allineato l'elenco in memoria (ordine e titolo nella sidebar)
-        entry = {"id": c["id"], "title": c.get("title", "Conversazione"),
-                 "model": c.get("model", ""), "updated": c.get("updated", 0)}
-        self.chats = [e for e in self.chats if e["id"] != c["id"]] + [entry]
+    @property
+    def current_chat(self) -> dict | None:
+        """Conversazione visualizzata (None se nuova o pagina di benvenuto)."""
+        return self.engine.chat(self._view_id)
 
-    def _new_chat(self) -> None:
-        if self._busy():
-            return
-        self.current_chat = None
-        self.chat_area.clear_messages()
-        self.sidebar.set_chats(self.chats, None)
-        self.chat_area.focus_input()
+    def _viewing(self, chat_id: str) -> bool:
+        return chat_id == "" or chat_id == self._view_id
 
-    def _open_chat(self, chat_id: str) -> None:
-        if self._busy():
-            return
-        chat = config.load_chat(chat_id)
-        if chat is None:
-            # elencata ma il file è mancante: ripulisci l'indice
-            config.delete_chat(chat_id)
-            self.chats = [c for c in self.chats if c["id"] != chat_id]
-            if self.current_chat and self.current_chat["id"] == chat_id:
-                self.current_chat = None
-                self.chat_area.clear_messages()
-            self.sidebar.set_chats(self.chats, self.current_chat["id"] if self.current_chat else None)
-            self.chat_area.add_system_note("⚠ Conversazione non leggibile dal disco: rimossa dall'elenco.")
-            return
-        self.current_chat = chat
+    def _render_chat(self, chat: dict) -> None:
         self.chat_area.clear_messages()
         for m in chat["messages"]:
             self.chat_area.add_message(
@@ -438,31 +371,49 @@ class MainWindow(QMainWindow):
                 m.get("attachments"), bool(m.get("web")), m.get("stats"),
                 thinking=m.get("thinking", ""),
             )
+
+    def _new_chat(self) -> None:
+        if self._busy():
+            return
+        self._view_id = None
+        self.chat_area.clear_messages()
+        self.sidebar.set_chats(self.engine.chats(), None)
+        self.chat_area.focus_input()
+
+    def _open_chat(self, chat_id: str) -> None:
+        if self._busy():
+            return
+        chat = self.engine.chat(chat_id)
+        if chat is None:
+            # elencata ma il file è mancante: ripulisci l'indice
+            self.engine.delete_chat(chat_id)
+            if self._view_id == chat_id:
+                self._view_id = None
+                self.chat_area.clear_messages()
+            self.sidebar.set_chats(self.engine.chats(), self._view_id)
+            self.chat_area.add_system_note("⚠ Conversazione non leggibile dal disco: rimossa dall'elenco.")
+            return
+        self._view_id = chat_id
+        self._render_chat(chat)
         # ripristina il modello con cui era nata la conversazione
         model = chat.get("model")
         if model and self.model_combo.isEnabled():
             idx = self.model_combo.findData(model)
             if idx >= 0:
                 self.model_combo.setCurrentIndex(idx)
-        self.sidebar.set_chats(self.chats, chat_id)
+        self.sidebar.set_chats(self.engine.chats(), chat_id)
         self.chat_area.focus_input()
 
     def _rename_chat(self, chat_id: str, title: str) -> None:
-        if self.current_chat and self.current_chat["id"] == chat_id:
-            self.current_chat["title"] = title.strip()
-            self._persist_chat()
-        else:
-            config.rename_chat(chat_id, title.strip())
-        self.chats = config.load_chats()
-        self.sidebar.set_chats(self.chats, chat_id)
+        self.engine.rename_chat(chat_id, title)
+        self.sidebar.set_chats(self.engine.chats(), chat_id)
 
     def _delete_chat(self, chat_id: str) -> None:
-        config.delete_chat(chat_id)
-        self.chats = [c for c in self.chats if c["id"] != chat_id]
-        if self.current_chat and self.current_chat["id"] == chat_id:
-            self.current_chat = None
+        self.engine.delete_chat(chat_id)
+        if self._view_id == chat_id:
+            self._view_id = None
             self.chat_area.clear_messages()
-        self.sidebar.set_chats(self.chats, None)
+        self.sidebar.set_chats(self.engine.chats(), None)
 
     def _toggle_sidebar(self) -> None:
         self.sidebar.setVisible(not self.sidebar.isVisible())
@@ -470,10 +421,7 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------- invio/stream
 
     def _busy(self) -> bool:
-        for w in (self._worker, self._search_worker):
-            if w is not None and w.isRunning():
-                return True
-        return False
+        return self.engine.busy()
 
     def _on_send(self, text: str) -> None:
         if self._busy():
@@ -485,247 +433,69 @@ class MainWindow(QMainWindow):
                 "Scaricalo dalla sezione «Modelli» (Ctrl+M) o controlla che Ollama sia avviato."
             )
             return
-
         atts = self.chat_area.attachments()
         web_on = self.chat_area.web_search_active()
-
-        # validazione rapida: il contenuto dei file viene letto alla generazione
-        meta, warnings = [], []
-        for a in atts:
-            p = Path(a["path"])
-            if not p.exists():
-                warnings.append(f"file non leggibile: {a['name']}")
-                continue
-            meta.append({"path": str(p), "name": a["name"], "kind": a["kind"]})
-        if warnings:
-            self.chat_area.add_system_note("⚠ " + "\n⚠ ".join(warnings))
-
-        self._pending_user = {
-            "display": text,
-            "attachments_meta": meta,
-            "attachments": [a["name"] for a in meta],
-            "image_paths": [a["path"] for a in meta if a["kind"] == "image"],
-            "web": web_on,
-            "model": model,
-        }
         self.chat_area.clear_attachments()
-
-        if web_on and not web_search.make_query(text):
-            self.chat_area.add_system_note(
-                "⚠ Ricerca web saltata: scrivi una domanda insieme agli allegati."
-            )
-            web_on = self._pending_user["web"] = False
-        if web_on:
-            self._start_web_search()
-        else:
-            self._commit_user_message()
-
-    # ----------------------------------------------------------- ricerca web
-
-    def _start_web_search(self) -> None:
-        self._search_stopped = False
-        self.chat_area.set_streaming(True)
-        self.sidebar.set_busy(True)
-        placeholder = self.chat_area.begin_stream(config.now())
-        placeholder.show_status("🌐 Ricerca web in corso…")
-
-        self._search_worker = web_search.WebSearchWorker(
-            web_search.make_query(self._pending_user["display"]),
-            int(self.settings.get("web_results", 5)),
-            provider=self.settings.get("web_provider", "duckduckgo"),
-            api_key=secrets_store.load_api_key() or self.settings.get("web_api_key", ""),
-            searxng_url=self.settings.get("web_searxng_url", ""),
-            parent=self,
+        if self._view_id is None:
+            self._view_id = self.engine.new_chat_id()
+        self.engine.send(
+            self._view_id, text, model, attachments=atts, web=web_on,
+            think=bool(self.settings.get("thinking", True)),
         )
-        self._search_worker.ready.connect(self._on_web_results)
-        self._search_worker.failed.connect(self._on_web_failed)
-        self._search_worker.finished.connect(self._search_worker.deleteLater)
-        self._search_worker.finished.connect(self._clear_ref("_search_worker", self._search_worker))
-        self._track_worker(self._search_worker)
-        self._search_worker.start()
 
-    def _on_web_results(self, block: str, _query: str) -> None:
-        if self._search_stopped or self.sender() is not self._search_worker:
+    def _on_stop(self) -> None:
+        self.engine.stop()
+
+    # ------------------------------------------------- eventi del motore
+
+    def _on_chats_changed(self) -> None:
+        self.sidebar.set_chats(self.engine.chats(), self._view_id)
+
+    def _on_user_message(self, chat_id: str, msg: dict) -> None:
+        if not self._viewing(chat_id):
             return
-        self.chat_area.end_stream(discard_empty=True)
-        if self._pending_user is not None:
-            self._pending_user["web_block"] = block
-            self._commit_user_message()
-
-    def _on_web_failed(self, err: str) -> None:
-        if self._search_stopped or self.sender() is not self._search_worker:
-            return
-        self.chat_area.end_stream(discard_empty=True)
-        self.chat_area.add_system_note(
-            f"⚠ Ricerca web non riuscita ({err}).\nProcedo senza i risultati web."
-        )
-        if self._pending_user is not None:
-            self._commit_user_message()
-
-    # ------------------------------------------------------------------ commit
-
-    def _commit_user_message(self) -> None:
-        p, self._pending_user = self._pending_user, None
-        if p is None:
-            return
-        model = p["model"]
-        if self.current_chat is None:
-            title = p["display"][:48] + ("…" if len(p["display"]) > 48 else "")
-            self.current_chat = {
-                "id": config.new_chat_id(),
-                "title": title or "Allegati",
-                "model": model,
-                "updated": config.now(),
-                "messages": [],
-            }
-
-        ts = config.now()
-        msg = {
-            "role": "user",
-            "display": p["display"],
-            "ts": ts,
-            "attachments": p["attachments"],
-            "attachments_meta": p["attachments_meta"],
-            "web": p["web"],
-        }
-        if p.get("web_block"):
-            msg["web_block"] = p["web_block"]
-        if p["image_paths"]:
-            msg["image_paths"] = p["image_paths"]
-        self.current_chat["messages"].append(msg)
-        self.current_chat["model"] = model
-        self.current_chat["updated"] = ts
         self.chat_area.add_message(
-            "user", p["display"], ts, p["attachments"] or None, p["web"]
+            "user", msg["display"], msg["ts"], msg["attachments"] or None, msg["web"]
         )
         self.chat_area.clear_input()
-        self._persist_chat()
-        self.sidebar.set_chats(self.chats, self.current_chat["id"])
-        self._start_generation()
 
-    def _start_generation(self) -> None:
-        model = self.current_chat["model"]
-        s = self.settings
+    def _on_busy_changed(self, busy: bool) -> None:
+        self.chat_area.set_streaming(busy)
+        self.sidebar.set_busy(busy)
+        if not busy:
+            self.chat_area.focus_input()
 
-        messages: list[dict] = []
-        warnings: list[str] = []
-        if s["system_prompt"]:
-            messages.append({"role": "system", "content": s["system_prompt"]})
-        history = context.history_window(self.current_chat["messages"], s["history_limit"])
-        last_idx = len(history) - 1
-        for i, m in enumerate(history):
-            if m["role"] == "assistant":
-                messages.append({"role": "assistant", "content": m.get("content", "")})
-                continue
-            # il contenuto completo di allegati/ricerca web viaggia solo con
-            # l'ultimo turno utente: i precedenti lasciano un segnaposto
-            full = i == last_idx
-            content, w = context.build_api_content(m, include_full=full)
-            warnings.extend(w)
-            entry = {"role": "user", "content": content}
-            if full and m.get("image_paths"):
-                imgs = []
-                for p in m["image_paths"]:
-                    b64, note = context.image_to_b64(p)
-                    if note:
-                        warnings.append(note)
-                    if b64:
-                        imgs.append(b64)
-                if imgs:
-                    entry["images"] = imgs
-            messages.append(entry)
+    def _on_search_started(self, chat_id: str) -> None:
+        if self._viewing(chat_id):
+            placeholder = self.chat_area.begin_stream(config.now())
+            placeholder.show_status("🌐 Ricerca web in corso…")
 
-        from .widgets.model_params import options_for_model
+    def _on_search_finished(self, chat_id: str) -> None:
+        if self._viewing(chat_id):
+            self.chat_area.end_stream(discard_empty=True)
 
-        options = options_for_model(model)
-        note = context.context_overflow_note(messages, options.get("num_ctx"))
-        if note:
-            warnings.append(note)
-        if warnings:
-            self.chat_area.add_system_note("⚠ " + "\n⚠ ".join(warnings))
+    def _on_generation_started(self, chat_id: str) -> None:
+        if self._viewing(chat_id):
+            self.chat_area.begin_stream(config.now())
 
-        payload = {
-            "model": model,
-            "messages": messages,
-            "stream": bool(s["stream"]),
-            "options": options,
-        }
-        # con il thinking attivo il campo si omette (vale il predefinito del
-        # server); solo quando l'utente lo disattiva si invia "think": false
-        if not s.get("thinking", True):
-            payload["think"] = False
+    def _on_text_chunk(self, chat_id: str, chunk: str) -> None:
+        if self._viewing(chat_id):
+            self.chat_area.stream_text(chunk)
 
-        self._pending_stream = ""
-        self._pending_think = ""
-        self._chat_stopped = False
-        self.chat_area.begin_stream(config.now())
+    def _on_think_chunk(self, chat_id: str, chunk: str) -> None:
+        if self._viewing(chat_id):
+            self.chat_area.stream_thinking(chunk)
 
-        self._worker = ChatWorker(self.settings["host"], payload, self)
-        self._worker.chunk.connect(self._on_chunk)
-        self._worker.think_chunk.connect(self._on_think_chunk)
-        self._worker.done.connect(self._on_done)
-        self._worker.failed.connect(self._on_failed)
-        self._worker.finished.connect(self._worker.deleteLater)
-        self._worker.finished.connect(self._clear_ref("_worker", self._worker))
-        self._track_worker(self._worker)
-        self._worker.start()
-
-        self.chat_area.set_streaming(True)
-        self.sidebar.set_busy(True)
-
-    def _on_chunk(self, chunk: str) -> None:
-        if self._chat_stopped or self.sender() is not self._worker:
+    def _on_generation_finished(self, chat_id: str, outcome: str, stats: str, err: str) -> None:
+        if not self._viewing(chat_id):
             return
-        self._pending_stream += chunk
-        self.chat_area.stream_text(chunk)
-
-    def _on_think_chunk(self, chunk: str) -> None:
-        if self._chat_stopped or self.sender() is not self._worker:
+        if outcome == "done":
+            self.chat_area.end_stream(stats or None)
             return
-        self._pending_think += chunk
-        self.chat_area.stream_thinking(chunk)
-
-    def _on_done(self, done: dict) -> None:
-        if self._chat_stopped or self.sender() is not self._worker:
-            return
-        self._finalize_assistant(format_stats(done))
-
-    def _finalize_assistant(self, stats: str | None) -> None:
-        """Chiude la bolla, salva il testo prodotto e torna idle."""
-        self.chat_area.end_stream(stats)
-        text = self._pending_stream
-        thinking = self._pending_think
-        self._pending_stream = ""
-        self._pending_think = ""
-        if text and self.current_chat is not None:
-            msg = {"role": "assistant", "content": text, "ts": config.now()}
-            if thinking:
-                msg["thinking"] = thinking
-            if stats:
-                msg["stats"] = stats
-            self.current_chat["messages"].append(msg)
-            self.current_chat["updated"] = config.now()
-            self._persist_chat()
-            self.sidebar.set_chats(self.chats, self.current_chat["id"])
-        self._set_idle()
-
-    def _on_failed(self, err: str) -> None:
-        if self._chat_stopped or self.sender() is not self._worker:
-            return
+        # interrotta o fallita: la bolla resta solo se ha ricevuto testo
         self.chat_area.end_stream(discard_empty=True)
-        partial = self._pending_stream
-        partial_think = self._pending_think
-        self._pending_stream = ""
-        self._pending_think = ""
-        # se il modello aveva già prodotto testo, conservalo nella conversazione
-        if partial and self.current_chat is not None:
-            msg = {"role": "assistant", "content": partial, "ts": config.now()}
-            if partial_think:
-                msg["thinking"] = partial_think
-            self.current_chat["messages"].append(msg)
-            self.current_chat["updated"] = config.now()
-            self._persist_chat()
-            self.sidebar.set_chats(self.chats, self.current_chat["id"])
+        if outcome != "failed":
+            return
         extra = ""
         if "think" in err.lower():
             extra = (
@@ -737,39 +507,10 @@ class MainWindow(QMainWindow):
             + "\n\nSuggerimento: avvia Ollama con `ollama serve` e verifica l'URL "
             "nelle impostazioni (Ctrl+,)."
         )
-        self._set_idle()
 
-    def _on_stop(self) -> None:
-        if self._search_worker is not None and self._search_worker.isRunning():
-            # ripristino immediato della UI: i segnali del worker annullato
-            # verranno scartati da _search_stopped
-            self._search_stopped = True
-            self._search_worker.stop()
-            self._retire_worker(self._search_worker)
-            self._search_worker = None
-            self.chat_area.end_stream(discard_empty=True)
-            self._pending_user = None
-            self._set_idle()
-            return
-        if self._worker is not None:
-            self._chat_stopped = True
-            self._worker.stop()   # chiude la connessione: il worker termina subito
-            self._retire_worker(self._worker)
-            self._worker = None
-        if self._pending_stream and self.current_chat is not None:
-            self._finalize_assistant(None)   # conserva il testo già prodotto
-        else:
-            # scelta coerente con «niente contenuto, niente messaggio»: una
-            # generazione interrotta durante il solo ragionamento non lascia
-            # messaggio, quindi anche il pensiero va scartato
-            self._pending_think = ""
-            self.chat_area.end_stream(discard_empty=True)
-            self._set_idle()
-
-    def _set_idle(self) -> None:
-        self.chat_area.set_streaming(False)
-        self.sidebar.set_busy(False)
-        self.chat_area.focus_input()
+    def _on_notice(self, chat_id: str, text: str) -> None:
+        if self._viewing(chat_id):
+            self.chat_area.add_system_note(text)
 
     # ------------------------------------------------------- thinking on/off
 
@@ -903,9 +644,9 @@ class MainWindow(QMainWindow):
         w.ready.connect(self._on_app_release)
         w.failed.connect(lambda _e: None)   # controllo silenzioso: si riprova al prossimo avvio
         w.finished.connect(w.deleteLater)
-        w.finished.connect(self._clear_ref("_app_update_worker", w))
+        w.finished.connect(self._workers.clear_ref(self, "_app_update_worker", w))
         self._app_update_worker = w
-        self._track_worker(w)
+        self._workers.track(w)
         w.start()
 
     def _on_app_release(self, release: object) -> None:
@@ -970,6 +711,7 @@ class MainWindow(QMainWindow):
 
     def _apply_settings(self, s: dict) -> None:
         self.settings = dict(s)
+        self.engine.set_settings(self.settings)
         if not s.get("app_update_check", True):
             self._set_app_update(None)   # controllo disattivato: via l'avviso
         self._apply_theme_now()
@@ -1007,14 +749,15 @@ class MainWindow(QMainWindow):
                 )
             return
         if self.tray is not None:
-            self.tray.hide()   # via l'icona subito: niente residui nel pannello        # arresta l'eventuale server condiviso avviato da noi: al prossimo
+            self.tray.hide()   # via l'icona subito: niente residui nel pannello
+        # arresta l'eventuale server condiviso avviato da noi: al prossimo
         # avvio `_sync_share` lo riporta su se l'opzione è ancora attiva
         self._share.stop()
         # ferma e attende (con limite) TUTTI i worker: un QThread distrutto
         # mentre è in esecuzione fa abortire il processo. Gli "zombie" bloccati
         # su un socket muoiono al loro timeout di rete.
         # un'unica scadenza per tutti: prima 1,5 s per OGNI worker in fila
-        shutdown_workers(list(self._running_workers) + list(self._zombie_workers))
+        shutdown_workers(self._workers.all() + self.engine.shutdown())
         super().closeEvent(ev)
         # UNICO punto di uscita dell'app (quitOnLastWindowClosed è sempre
         # False, vedi app.py): «Esci» dalla tray, SIGTERM/SIGINT, logout di

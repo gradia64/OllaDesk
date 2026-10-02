@@ -49,6 +49,9 @@ jobs:
       - name: Controllo aggiornamenti di OllaDesk con finto GitHub (nessuna rete)
         run: python3 tests/offline_app_update.py
 
+      - name: Motore di chat con finto Ollama (nessuna rete)
+        run: python3 tests/engine_test.py
+
   dist:
     needs: test
     if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'

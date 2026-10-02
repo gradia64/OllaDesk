@@ -497,18 +497,18 @@ def test_is_local_host_debian_hostname():
 
 def test_clear_ref_keeps_newer_worker():
     # regressione: il `finished` di un worker annullato azzerava il nuovo
-    from olladesk.main_window import MainWindow
+    from olladesk.workers import WorkerRegistry
 
     class Host:
         _worker = None
 
     h = Host()
     old, new = object(), object()
-    clear_old = MainWindow._clear_ref(h, "_worker", old)
+    clear_old = WorkerRegistry.clear_ref(h, "_worker", old)
     h._worker = new
     clear_old()
     assert h._worker is new
-    MainWindow._clear_ref(h, "_worker", new)()
+    WorkerRegistry.clear_ref(h, "_worker", new)()
     assert h._worker is None
 
 

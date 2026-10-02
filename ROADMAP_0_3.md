@@ -6,7 +6,7 @@ Piano delle funzionalità per la versione 0.3: la **companion web**, che permett
 
 | # | Funzionalità | Fattibilità | Stato |
 |---|---|---|---|
-| 0 | Motore di chat separato dalla finestra (`ChatEngine`, QObject senza widget): stato delle conversazioni, generazione, worker e persistenza. Finestra e server web ne diventano client | alta (refactoring) | ☐ |
+| 0 | Motore di chat separato dalla finestra (`ChatEngine`, QObject senza widget): stato delle conversazioni, generazione, worker e persistenza. Finestra e server web ne diventano client | alta (refactoring) | ☑ |
 | 1 | Server companion in LAN (`ThreadingHTTPServer` in un thread), spento di default, attivabile dalle impostazioni | media | ☐ |
 | 2 | Abbinamento del dispositivo: codice di 6 cifre monouso valido 2 minuti, scambiato con un token in cookie; QR code (URL + codice) se è installato `python3-qrcode` | media | ☐ |
 | 3 | Lettura delle chat dal telefono: elenco e apertura, Markdown reso dal server con `md.py` | facile | ☐ |

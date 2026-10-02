@@ -46,12 +46,8 @@ app.processEvents()
 win.grab().save("/tmp/olladesk_shots/8_no_models.png")
 
 # generazione verso un server inesistente → nota di errore
-win.current_chat = {
-    "id": "t1", "title": "t", "model": "test", "updated": 0,
-    "messages": [{"role": "user", "content": "ciao", "ts": 0}],
-}
-win.chat_area.add_message("user", "ciao", 0)
-win._start_generation()
+win._view_id = win.engine.new_chat_id()
+assert win.engine.send(win._view_id, "ciao", "test") == win._view_id
 wait_ms(3000)
 app.processEvents()
 assert not win._busy(), "il worker non è fallito come previsto"
