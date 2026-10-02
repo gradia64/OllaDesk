@@ -865,6 +865,60 @@ def test_share_external_note_only_when_actionable():
             win.close()
 
 
+def test_system_note_dismiss():
+    # il pulsante ✕ delle note di sistema le rimuove dalla chat. Gira in un
+    # processo a parte: il processEvents che smalta la deleteLater non deve
+    # ricevere anche i timer in scadenza delle finestre degli altri test
+    import subprocess
+
+    child = """
+import os, sys, tempfile
+os.environ["QT_QPA_PLATFORM"] = "offscreen"
+os.environ["XDG_CONFIG_HOME"] = tempfile.mkdtemp()
+sys.path.insert(0, {root!r})
+from PySide6.QtCore import QEventLoop, QTimer
+from PySide6.QtWidgets import QApplication
+app = QApplication([])
+from olladesk.main_window import MainWindow
+from olladesk.widgets.message import SystemNoteWidget
+
+win = MainWindow()
+win.chat_area.add_system_note("avviso di prova")
+win.chat_area.add_system_note("secondo avviso")
+
+def notes():
+    out = []
+    for i in range(win.chat_area.msgs.count()):
+        row = win.chat_area.msgs.itemAt(i).widget()
+        lay = row.layout() if row is not None else None
+        for j in range(lay.count() if lay is not None else 0):
+            w = lay.itemAt(j).widget()
+            if isinstance(w, SystemNoteWidget):
+                out.append(w)
+    return out
+
+assert len(notes()) == 2
+notes()[0].close_btn.click()
+# la deleteLater serve un vero ciclo eventi: processEvents da solo può non
+# smaltire i DeferredDelete postati fuori dal ciclo
+loop = QEventLoop()
+QTimer.singleShot(120, loop.quit)
+loop.exec()
+remaining = notes()
+assert len(remaining) == 1, remaining
+assert remaining[0].label.text() == "secondo avviso"
+print("NOTE DISMISS OK", flush=True)
+""".format(root=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+    r = subprocess.run(
+        [sys.executable, "-c", child],
+        capture_output=True, text=True, timeout=60,
+        cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    )
+    assert "NOTE DISMISS OK" in r.stdout, f"figlio fallito:\n{r.stdout}\n{r.stderr}"
+    assert r.returncode == 0, f"figlio uscito con {r.returncode}:\n{r.stderr}"
+
+
 def main() -> int:
     failed = 0
     for name, fn in sorted(globals().items()):

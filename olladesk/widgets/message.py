@@ -277,16 +277,42 @@ class MessageWidget(QFrame):
 
 
 class SystemNoteWidget(QFrame):
-    """Nota informativa centrata (es. nessun modello disponibile)."""
+    """Nota informativa centrata (es. nessun modello disponibile).
+
+    Il pulsante ✕ la rimuove dalla chat: è un avviso transitorio, non parte
+    della conversazione (e non viene nemmeno salvato su disco).
+    """
 
     def __init__(self, text: str, parent=None):
         super().__init__(parent)
         self.setProperty("bubble", "error")
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
-        lay = QVBoxLayout(self)
-        lay.setContentsMargins(14, 8, 14, 8)
-        lab = QLabel(text, self)
-        lab.setProperty("error", True)
-        lab.setWordWrap(True)
-        lab.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        lay.addWidget(lab)
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(14, 8, 10, 8)
+        lay.setSpacing(8)
+        self.label = QLabel(text, self)
+        self.label.setProperty("error", True)
+        self.label.setWordWrap(True)
+        self.label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        lay.addWidget(self.label, 1)
+        self.close_btn = QToolButton(self)
+        self.close_btn.setText("✕")
+        self.close_btn.setToolTip("Nascondi questa nota")
+        self.close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.close_btn.setStyleSheet(
+            "QToolButton { border: none; background: transparent; padding: 0; }"
+        )
+        self.close_btn.clicked.connect(self._dismiss)
+        lay.addWidget(self.close_btn, 0, Qt.AlignmentFlag.AlignTop)
+
+    def _dismiss(self) -> None:
+        # la nota vive dentro la riga creata da ChatArea._wrap_row: eliminando
+        # la riga sparisce anche il buco che lascerebbe nella chat. Se per
+        # qualche motivo non è in una riga, si elimina da sola (mai il parent,
+        # che potrebbe essere l'area chat stessa)
+        row = self.parentWidget()
+        lay = row.layout() if row is not None else None
+        if lay is not None and lay.indexOf(self) >= 0:
+            row.deleteLater()
+        else:
+            self.deleteLater()
