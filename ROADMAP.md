@@ -16,8 +16,9 @@ dell'API Ollama, streaming NDJSON in `ChatWorker`).
 | 6 | Mostrare cosa sta facendo il modello in chat: blocco «Pensiero» in streaming (oggi i token di thinking vengono scartati) + stato | media | ☑ |
 | 7 | Colonna chat centrata a larghezza massima fissa (~900 px): nascondendo la sidebar il contenuto non si stira e la bolla utente resta allineata al bordo della colonna, non della finestra | media | ☑ |
 
-Implementate nel ramo di lavoro corrente; i test offline (unit, app update,
-QThread, percorsi d'errore GUI) passano. Copertura e2e: `tests/gui_smoke.py`
+Rilasciate nella 0.2.4; i test offline (unit, app update, QThread, percorsi
+d'errore GUI) e i collaudi reali (gui_smoke, gui_features con thinking e2e)
+passano. Copertura e2e: `tests/gui_smoke.py`
 verifica la chat base con Ollama reale; `tests/gui_features.py` include il
 thinking (sezione 8, se è installato un modello che lo supporta). La
 condivisione API non ha test e2e automatici: va provata a mano (toggle nelle
