@@ -164,6 +164,9 @@ class SharedOllamaServer(QObject):
         self._generation += 1
         self._cfg = cfg
         self._stderr_tail = ""
+        # anche ripartendo da "external" (dove stop() non passa): la
+        # raggiungibilità della configurazione precedente non vale per la nuova
+        self.lan_shared = False
         self._state = "starting"
         self.state_changed.emit(self._state, f"Avvio di Ollama su {bind}:{port}…")
         # prima una sola prova su 127.0.0.1: se risponde già qualcosa non si
@@ -346,5 +349,10 @@ class SharedOllamaServer(QObject):
             )
 
     def _set_state(self, state: str, detail: str) -> None:
+        # solo "running"/"external" possono essere raggiungibili dalla rete
+        # (i rami delle sonde impostano il flag prima di chiamare qui): un
+        # errore o un arresto non deve lasciare 🔗 a copiare indirizzi morti
+        if state not in ("running", "external"):
+            self.lan_shared = False
         self._state = state
         self.state_changed.emit(state, detail)

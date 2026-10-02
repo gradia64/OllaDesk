@@ -15,7 +15,7 @@ incluso).
 | 2 | Niente nota «⚠ Condivisione API» all'avvio quando l'istanza esterna è già in ascolto sulle interfacce (resta solo nel tooltip; nota solo se c'è da sistemare, una volta per sessione) | collaudo 0.2.4 | ☑ |
 | 3 | Icona dell'app a piena dimensione nella tray (viewBox ritagliato sui bordi del disegno) | collaudo 0.2.4 | ☑ |
 | 4 | Pulsante ✕ per chiudere le note di sistema in chat | collaudo 0.2.4 | ☑ |
-| 5 | Icona thinking come il globo della ricerca web: tinta grigia da spento/blu da attivo, senza cornice, stessa dimensione ottica (`theme.brain_icon` con ritaglio del glifo e fallback disegnato) | collaudo 0.2.4 | ☑ |
+| 5 | Icona thinking come il globo della ricerca web: tinta grigia da spento/blu da attivo, senza cornice, stessa dimensione ottica (`theme.brain_icon` disegnata con QPainter, senza dipendere dal font emoji; stato corretto già all'avvio) | collaudo 0.2.4 | ☑ |
 
 Rilasciate nella 0.2.5; i test offline e i collaudi reali con Ollama
 (gui_smoke, gui_features con thinking e2e) passano.

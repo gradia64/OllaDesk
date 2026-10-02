@@ -804,6 +804,35 @@ def test_share_lan_shared_flag():
     assert srv.lan_shared is False
 
 
+def test_share_lan_shared_reset_on_error_and_restart():
+    # regressione M1 (revisione 0.2.5): il flag restava True dopo la morte
+    # del processo condiviso e dopo un cambio di porta partendo da "external"
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+
+    QApplication.instance() or QApplication([])
+    from olladesk import server_share
+
+    srv = server_share.SharedOllamaServer()
+    srv._cfg = ("0.0.0.0", 11434)
+    srv._state = "running"
+    srv.lan_shared = True
+    srv._on_proc_finished(1, None)           # il processo condiviso muore
+    assert srv.state() == "error"
+    assert srv.lan_shared is False
+
+    srv2 = server_share.SharedOllamaServer()
+    srv2._cfg = ("0.0.0.0", 11434)
+    srv2._state = "external"
+    srv2.lan_shared = True
+    srv2.start("0.0.0.0", _free_port())      # nuova porta: va risondata
+    try:
+        assert srv2.state() == "starting"
+        assert srv2.lan_shared is False
+    finally:
+        srv2.stop()
+
+
 def test_share_copy_respects_lan_shared():
     # regressione I4: con l'Ollama di sistema già raggiungibile in rete il
     # clic su 🔗 deve COPIARE gli indirizzi, non rifiutare
@@ -920,26 +949,64 @@ print("NOTE DISMISS OK", flush=True)
 
 
 def test_brain_icon_tinted_and_sized():
-    # il toggle thinking usa un'icona tinta (grigia/blu) come il globo: il
-    # glifo deve riempire il riquadro e il fallback deve comunque produrre
-    # un'icona valida
+    # il toggle thinking usa un'icona disegnata (grigia/blu) come il globo:
+    # tratto visibile, del colore richiesto, e ingombro simile al globo
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtGui import QColor
     from PySide6.QtWidgets import QApplication
 
     QApplication.instance() or QApplication([])
     from olladesk import theme
 
+    def opaque_box(icon):
+        img = icon.pixmap(18, 18).toImage()
+        pts = [(x, y) for x in range(18) for y in range(18)
+               if img.pixelColor(x, y).alpha() > 8]
+        xs, ys = [p[0] for p in pts], [p[1] for p in pts]
+        return img, pts, max(xs) - min(xs) + 1, max(ys) - min(ys) + 1
+
     for color in ("#9b9b9b", theme.WEB_ACTIVE_COLOR):
-        img = theme.brain_icon(color).pixmap(18, 18).toImage()
-        opaque = sum(
+        img, pts, w, h = opaque_box(theme.brain_icon(color))
+        assert len(pts) > 18 * 18 * 0.2, (color, len(pts))   # tratto presente
+        want = QColor(color)
+        assert any(
+            img.pixelColor(x, y).alpha() > 200
+            and abs(img.pixelColor(x, y).blue() - want.blue()) < 8
+            and abs(img.pixelColor(x, y).red() - want.red()) < 8
+            for x, y in pts
+        ), color
+        _, _, gw, gh = opaque_box(theme.globe_icon(color))
+        assert abs(w - gw) <= 2 and abs(h - gh) <= 3, (w, h, gw, gh)
+
+
+def test_think_icon_matches_state_at_startup():
+    # regressione B1 (revisione 0.2.5): set_thinking() blocca i segnali, quindi
+    # l'icona restava grigia all'avvio con il thinking attivo
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtGui import QColor
+    from PySide6.QtWidgets import QApplication
+
+    QApplication.instance() or QApplication([])
+    from olladesk import theme
+    from olladesk.widgets.chat_area import ChatArea
+
+    blue = QColor(theme.WEB_ACTIVE_COLOR)
+
+    def blue_pixels(ca) -> int:
+        img = ca.think_btn.icon().pixmap(18, 18).toImage()
+        return sum(
             1 for x in range(18) for y in range(18)
-            if img.pixelColor(x, y).alpha() > 8
+            if img.pixelColor(x, y).alpha() > 200
+            and abs(img.pixelColor(x, y).blue() - blue.blue()) < 8
+            and abs(img.pixelColor(x, y).red() - blue.red()) < 8
         )
-        assert opaque > 18 * 18 * 0.2, (color, opaque)   # glifo presente
-    fb = theme._brain_fallback_icon("#9b9b9b", 18).pixmap(18, 18).toImage()
-    assert any(
-        fb.pixelColor(x, y).alpha() > 8 for x in range(18) for y in range(18)
-    )
+
+    ca = ChatArea("dark")
+    ca.set_thinking(True)
+    assert ca.think_btn.isChecked() and blue_pixels(ca) > 0
+    ca.set_thinking(False)
+    assert not ca.think_btn.isChecked() and blue_pixels(ca) == 0
+    ca.deleteLater()
 
 
 def main() -> int:
