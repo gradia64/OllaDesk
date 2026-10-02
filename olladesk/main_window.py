@@ -26,11 +26,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from . import __version__, app_update, config, server_share, theme
+from . import __version__, app_update, companion, config, server_share, theme
 from .engine import ChatEngine
 from .ollama_client import ApiWorker, shutdown_workers
 from .widgets.chat_area import ChatArea
 from .widgets.model_manager import ModelManagerDialog
+from .widgets.pairing_dialog import PairingDialog
 from .widgets.settings_dialog import SettingsDialog
 from .widgets.sidebar import ChatSidebar
 from .workers import WorkerRegistry
@@ -64,6 +65,8 @@ class MainWindow(QMainWindow):
         self._share_note_shown = False   # la nota «external» vale una volta per sessione
         self._share = server_share.SharedOllamaServer(self)
         self._share.state_changed.connect(self._on_share_state)
+        self._companion = companion.CompanionServer(self.engine, self)
+        self._companion.state_changed.connect(self._on_companion_state)
 
         self._build_ui()
         self._connect_signals()
@@ -94,6 +97,7 @@ class MainWindow(QMainWindow):
         # tray e condivisione API: attivati dopo il primo disegno
         self._sync_tray()
         QTimer.singleShot(800, self._sync_share)
+        QTimer.singleShot(800, self._sync_companion)
 
     # -------------------------------------------------------------------- UI
 
@@ -140,6 +144,11 @@ class MainWindow(QMainWindow):
         self.share_btn.setText("🔗")
         self.share_btn.hide()
         top_lay.addWidget(self.share_btn)
+        # companion web attiva: clic per abbinare un telefono
+        self.companion_btn = QToolButton(top)
+        self.companion_btn.setText("📱")
+        self.companion_btn.hide()
+        top_lay.addWidget(self.companion_btn)
         # compare solo quando GitHub ha una versione più recente di OllaDesk
         self.app_update_btn = QToolButton(top)
         self.app_update_btn.setObjectName("appUpdateBtn")
@@ -187,6 +196,7 @@ class MainWindow(QMainWindow):
         self.reload_models_btn.clicked.connect(self._refresh_models)
         self.app_update_btn.clicked.connect(self._show_app_update)
         self.share_btn.clicked.connect(self._copy_share_urls)
+        self.companion_btn.clicked.connect(self._open_pairing)
         self.model_combo.currentIndexChanged.connect(self._on_model_changed)
 
         e = self.engine
@@ -635,6 +645,40 @@ class MainWindow(QMainWindow):
             "📋 Indirizzi dell'API copiati negli appunti:\n" + "\n".join(urls)
         )
 
+    # ------------------------------------------------------ companion web
+
+    def _sync_companion(self) -> None:
+        """Avvia o arresta il server companion secondo le impostazioni."""
+        if self.settings.get("companion"):
+            self._companion.start(int(self.settings.get("companion_port", 8765)))
+        else:
+            self._companion.stop()
+
+    def _on_companion_state(self, state: str, detail: str) -> None:
+        if state == "running":
+            urls = self._companion.urls()
+            where = "\n  ".join(urls) if urls else "(nessun indirizzo di rete trovato)"
+            self.companion_btn.setToolTip(
+                f"Companion web attiva, sul telefono apri:\n  {where}\n"
+                "Clic per abbinare un dispositivo"
+            )
+            self.companion_btn.show()
+        elif state == "error":
+            self.companion_btn.hide()
+            self.chat_area.add_system_note(
+                f"⚠ Companion web non avviata: {detail}.\n"
+                "Scegli un'altra porta nelle impostazioni (Ctrl+,)."
+            )
+        else:
+            self.companion_btn.hide()
+
+    def _open_pairing(self) -> None:
+        if self._companion.state() != "running":
+            return
+        dlg = PairingDialog(self._companion, self)
+        dlg.exec()
+        dlg.deleteLater()
+
     # ------------------------------------------------ aggiornamenti OllaDesk
 
     def _maybe_check_app_update(self) -> None:
@@ -724,6 +768,7 @@ class MainWindow(QMainWindow):
         # tray e condivisione possono essere cambiate nelle impostazioni
         self._sync_tray()
         self._sync_share()
+        self._sync_companion()
 
     # -------------------------------------------------------------------- chiusura
 
@@ -753,6 +798,7 @@ class MainWindow(QMainWindow):
         # arresta l'eventuale server condiviso avviato da noi: al prossimo
         # avvio `_sync_share` lo riporta su se l'opzione è ancora attiva
         self._share.stop()
+        self._companion.stop()
         # ferma e attende (con limite) TUTTI i worker: un QThread distrutto
         # mentre è in esecuzione fa abortire il processo. Gli "zombie" bloccati
         # su un socket muoiono al loro timeout di rete.

@@ -17,6 +17,7 @@ optdepends=(
   'python-pypdf: testo dei PDF allegati'
   'python-keyring: chiave API della ricerca web nel portachiavi (KWallet)'
   'qt6-svg: icona SVG della finestra'
+  'python-qrcode: QR code per abbinare il telefono alla companion web'
 )
 # tarball e firma pubblicati nella release GitHub da .github/workflows/release.yml
 source=("$url/releases/download/v$pkgver/$pkgname-$pkgver.tar.gz"{,.sig})

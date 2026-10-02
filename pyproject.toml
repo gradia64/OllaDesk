@@ -33,4 +33,4 @@ packages = ["olladesk", "olladesk.widgets"]
 version = { attr = "olladesk.__version__" }   # unica fonte: olladesk/__init__.py
 
 [tool.setuptools.package-data]
-olladesk = ["assets/*.svg"]
+olladesk = ["assets/*.svg", "web/*"]

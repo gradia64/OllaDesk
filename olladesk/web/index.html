@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="referrer" content="no-referrer">
+<title>OllaDesk</title>
+<link rel="stylesheet" href="app.css">
+<script src="app.js" defer></script>
+</head>
+<body>
+<header class="bar">
+  <button id="back" class="icon" type="button" aria-label="Indietro" hidden>‹</button>
+  <h1 id="title">OllaDesk</h1>
+  <button id="refresh" class="icon" type="button" aria-label="Aggiorna" hidden>↻</button>
+</header>
+
+<main>
+  <section id="view-loading" class="view">
+    <p class="muted center">Connessione…</p>
+  </section>
+
+  <section id="view-pair" class="view" hidden>
+    <form id="pair-form" class="card" autocomplete="off">
+      <h2>Abbina questo dispositivo</h2>
+      <p class="muted">Sul PC apri OllaDesk, premi 📱 nella barra in alto e scrivi qui il codice di 6 cifre.</p>
+      <input id="pair-code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6"
+             placeholder="000000" aria-label="Codice di abbinamento" required>
+      <button type="submit" class="primary">Abbina</button>
+      <p id="pair-error" class="error" role="alert" hidden></p>
+    </form>
+  </section>
+
+  <section id="view-list" class="view" hidden>
+    <ul id="chat-list" class="list"></ul>
+    <p id="list-empty" class="muted center" hidden>Nessuna conversazione salvata.</p>
+  </section>
+
+  <section id="view-chat" class="view" hidden>
+    <p id="chat-model" class="muted center small"></p>
+    <div id="messages"></div>
+  </section>
+
+  <p id="net-error" class="error center" role="alert" hidden></p>
+</main>
+</body>
+</html>

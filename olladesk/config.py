@@ -37,6 +37,9 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "share_api": False,
     "share_bind": "0.0.0.0",    # "0.0.0.0" (tutte le interfacce) | "127.0.0.1"
     "share_port": 11434,
+    # companion web: OllaDesk dal telefono nella rete locale (companion.py)
+    "companion": False,
+    "companion_port": 8765,
     # aggiornamenti di OllaDesk (solo avviso): vedi app_update.py
     "app_update_check": True,       # controllo automatico all'avvio (max 1 volta al giorno)
     "app_update_last_check": 0.0,   # epoch dell'ultimo controllo riuscito

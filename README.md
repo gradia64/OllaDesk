@@ -49,6 +49,19 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   source address=192.168.1.0/24 port port=11434 protocol=tcp accept'` e
   `sudo firewall-cmd --reload`; analogo con `ufw allow from 192.168.1.0/24
   to any port 11434 proto tcp`).
+- **Companion web** (Impostazioni → Interfaccia, spenta di default): una
+  pagina per smartphone e tablet nella rete locale, che mostra le stesse
+  conversazioni del PC (per ora in sola lettura). Si abbina un dispositivo
+  dal pulsante 📱 della barra superiore: compaiono l'indirizzo, un codice di
+  6 cifre valido 2 minuti e una sola volta e, se è installato
+  `python3-qrcode` (`python-qrcode` su Arch), un QR code da inquadrare. Il
+  telefono riceve un cookie di sessione; «Revoca dispositivi» li scollega
+  tutti. Nessuna risorsa esterna: la pagina funziona anche senza internet.
+  **Limite noto:** il collegamento è HTTP in chiaro, quindi chi è sulla
+  stessa Wi-Fi può intercettare il cookie. Va bene su una rete domestica
+  protetta (WPA2/WPA3); non aprire la porta sul router. Il firewall deve
+  accettare la porta (predefinita 8765) dalla sola rete locale, come per la
+  condivisione dell'API qui sopra.
 - **Icona nella tray**: la finestra si riduce nell'area di notifica e si
   ripristina con un clic sull'icona (menu: Mostra/nascondi, Esci);
   facoltativamente la chiusura (X) riduce nella tray invece di uscire,
@@ -283,6 +296,8 @@ temporanea nuova a ogni esecuzione.
 
 ```bash
 python3 tests/offline_app_update.py   # controllo aggiornamenti con finto GitHub (senza rete)
+python3 tests/engine_test.py          # motore di chat con finto Ollama (senza rete)
+python3 tests/companion_test.py       # companion web: server, abbinamento, lettura (senza rete)
 ```
 
 La CI (`.github/workflows/release.yml`) esegue unit test e test offline a ogni
@@ -311,7 +326,11 @@ olladesk/
   app_update.py             aggiornamenti di OllaDesk (solo controllo e avviso)
   ollama_client.py          client API Ollama (stdlib) + worker QThread
   server_share.py           condivisione API Ollama in rete (avvio `ollama serve`)
-  main_window.py            finestra principale e orchestrazione streaming
+  engine.py                 motore di chat: conversazioni, generazione, salvataggio
+  workers.py                registro dei worker QThread attivi e in arresto
+  companion.py              companion web: server HTTP in LAN e abbinamento
+  web/                      pagina mobile della companion (HTML, CSS, JS)
+  main_window.py            finestra principale, client del motore di chat
   widgets/
     chat_area.py            area messaggi + input (allegati, ricerca web)
     message.py              bolle dei messaggi
@@ -320,12 +339,15 @@ olladesk/
     steppers.py             campi numerici con pulsanti tondi −/+
     model_manager.py        dialog scaricamento/eliminazione modelli
     settings_dialog.py      finestra impostazioni (2 schede + aggiornamenti)
+    pairing_dialog.py       abbinamento di un dispositivo (codice e QR code)
 tests/gui_smoke.py          collaudo automatico offscreen (base)
 tests/gui_features.py       collaudo automatico offscreen (funzionalità extra)
 tests/gui_errors.py         collaudo percorsi di errore (offline)
 tests/unit_test.py          unit test delle funzioni pure
 tests/repro_qthread_crash.py regressione: dialoghi distrutti con worker bloccati
 tests/offline_app_update.py controllo aggiornamenti di OllaDesk (finto GitHub)
+tests/engine_test.py        motore di chat (finto Ollama)
+tests/companion_test.py     companion web (server, abbinamento, lettura)
 olladesk.desktop            voce per il menu applicazioni di KDE
 packaging/                  file comuni .deb/Arch, modello PKGBUILD, chiave di release
 scripts/                    build (.deb, sorgenti, Arch), firma, pubblicazione AUR

@@ -52,6 +52,9 @@ jobs:
       - name: Motore di chat con finto Ollama (nessuna rete)
         run: python3 tests/engine_test.py
 
+      - name: Companion web su porta casuale (nessuna rete)
+        run: python3 tests/companion_test.py
+
   dist:
     needs: test
     if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
