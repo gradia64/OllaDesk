@@ -55,7 +55,12 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   nuova o si continua una esistente: si sceglie il modello, si accende o
   spegne il ragionamento (🧠) e la risposta arriva in streaming, con il
   pulsante ■ per interromperla. Il PC genera una risposta alla volta: se
-  sta già rispondendo, il telefono lo segnala e attende. Si abbina un dispositivo
+  sta già rispondendo, il telefono lo segnala e attende. PC e telefono
+  restano sincronizzati dal vivo: un messaggio scritto da una parte compare
+  sull'altra, l'elenco delle chat sul telefono si aggiorna da solo e un
+  pallino indica la conversazione che sta rispondendo. Durante una risposta
+  il PC resta libero di aprire altre conversazioni: la risposta continua in
+  background e si ritrova riaprendo la sua chat. Si abbina un dispositivo
   dal pulsante 📱 della barra superiore: compaiono l'indirizzo, un codice di
   6 cifre valido 2 minuti e una sola volta e, se è installato
   `python3-qrcode` (`python-qrcode` su Arch), un QR code da inquadrare. Il
@@ -303,6 +308,7 @@ python3 tests/offline_app_update.py   # controllo aggiornamenti con finto GitHub
 python3 tests/engine_test.py          # motore di chat con finto Ollama (senza rete)
 python3 tests/companion_test.py       # companion web: server, abbinamento, lettura (senza rete)
 python3 tests/companion_send_test.py  # companion web: invio e streaming SSE (senza rete)
+python3 tests/sync_test.py            # sincronizzazione telefono-PC dal vivo (senza rete)
 ```
 
 La CI (`.github/workflows/release.yml`) esegue unit test e test offline a ogni
@@ -354,7 +360,9 @@ tests/offline_app_update.py controllo aggiornamenti di OllaDesk (finto GitHub)
 tests/engine_test.py        motore di chat (finto Ollama)
 tests/companion_test.py     companion web (server, abbinamento, lettura)
 tests/companion_send_test.py companion web (invio, streaming SSE, stop)
+tests/sync_test.py          sincronizzazione telefono-PC dal vivo
 tests/fake_ollama.py        finto server Ollama per i test offline
+tests/companion_client.py   client HTTP/SSE per i test della companion
 olladesk.desktop            voce per il menu applicazioni di KDE
 packaging/                  file comuni .deb/Arch, modello PKGBUILD, chiave di release
 scripts/                    build (.deb, sorgenti, Arch), firma, pubblicazione AUR

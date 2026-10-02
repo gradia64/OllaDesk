@@ -237,11 +237,13 @@ class MainWindow(QMainWindow):
         self._rerender_messages()
 
     def _rerender_messages(self) -> None:
-        # durante la generazione la bolla aperta non è ancora in current_chat:
-        # ricrearla la distruggerebbe (refresh_theme ha già aggiornato i colori)
+        # la risposta in corso non è ancora in current_chat: dopo i messaggi
+        # salvati si ricrea la sua bolla dal testo già ricevuto
         chat = self.current_chat
-        if chat and not self._busy():
+        if chat:
             self._render_chat(chat)
+            if self._viewing_active():
+                self._show_partial()
 
     # ------------------------------------------------------------- connessione
 
@@ -348,17 +350,17 @@ class MainWindow(QMainWindow):
                 thinking=m.get("thinking", ""),
             )
 
+    # durante una generazione si può navigare: la risposta continua in
+    # background e si ritrova riaprendo la sua conversazione
+
     def _new_chat(self) -> None:
-        if self._busy():
-            return
         self._view_id = None
         self.chat_area.clear_messages()
         self.sidebar.set_chats(self.engine.chats(), None)
+        self._sync_busy_ui()
         self.chat_area.focus_input()
 
     def _open_chat(self, chat_id: str) -> None:
-        if self._busy():
-            return
         chat = self.engine.chat(chat_id)
         if chat is None:
             # elencata ma il file è mancante: ripulisci l'indice
@@ -371,6 +373,9 @@ class MainWindow(QMainWindow):
             return
         self._view_id = chat_id
         self._render_chat(chat)
+        if self._viewing_active():
+            self._show_partial()
+        self._sync_busy_ui()
         # ripristina il modello con cui era nata la conversazione
         model = chat.get("model")
         if model and self.model_combo.isEnabled():
@@ -399,8 +404,35 @@ class MainWindow(QMainWindow):
     def _busy(self) -> bool:
         return self.engine.busy()
 
+    def _viewing_active(self) -> bool:
+        """La conversazione visualizzata è quella in elaborazione."""
+        return (self.engine.busy() and self._view_id is not None
+                and self.engine.active_chat_id() == self._view_id)
+
+    def _sync_busy_ui(self) -> None:
+        # ■ solo sulla conversazione che sta rispondendo: dalle altre il
+        # pulsante resta ➤ e l'invio spiega perché non parte
+        self.chat_area.set_streaming(self._viewing_active())
+
+    def _show_partial(self) -> None:
+        """Bolla della risposta in corso, ricostruita dal testo già ricevuto."""
+        if self.engine.phase() == "search":
+            self.chat_area.begin_stream(config.now()).show_status("🌐 Ricerca web in corso…")
+            return
+        self.chat_area.begin_stream(config.now())
+        text, think = self.engine.partial()
+        if think:
+            self.chat_area.stream_thinking(think)
+        if text:
+            self.chat_area.stream_text(text)
+
     def _on_send(self, text: str) -> None:
         if self._busy():
+            if not self._viewing_active():
+                self.chat_area.add_system_note(
+                    "Il PC sta già rispondendo in un'altra conversazione (forse dal "
+                    "telefono): attendi la fine oppure aprila e premi ■."
+                )
             return
         model = self.current_model()
         if not model:
@@ -439,8 +471,7 @@ class MainWindow(QMainWindow):
             self.chat_area.clear_input()
 
     def _on_busy_changed(self, busy: bool) -> None:
-        self.chat_area.set_streaming(busy)
-        self.sidebar.set_busy(busy)
+        self._sync_busy_ui()
         if not busy:
             self._clear_input_for = None
             self.chat_area.focus_input()

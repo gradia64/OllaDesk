@@ -328,3 +328,6 @@ body.composing main { padding-bottom: 170px; }
 }
 
 @keyframes blink { to { visibility: hidden; } }
+
+.list .badge { display: none; color: var(--accent); }
+.list a.active .badge { display: inline; }

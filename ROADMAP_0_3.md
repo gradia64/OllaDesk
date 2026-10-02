@@ -11,7 +11,7 @@ Piano delle funzionalità per la versione 0.3: la **companion web**, che permett
 | 2 | Abbinamento del dispositivo: codice di 6 cifre monouso valido 2 minuti, scambiato con un token in cookie; QR code (URL + codice) se è installato `python3-qrcode` | media | ☑ |
 | 3 | Lettura delle chat dal telefono: elenco e apertura, Markdown reso dal server con `md.py` | facile | ☑ |
 | 4 | Invio dal telefono: streaming via Server-Sent Events, nuova chat, scelta del modello, pulsante 🧠 | media | ☑ |
-| 5 | Sincronizzazione dal vivo: un messaggio scritto dal telefono compare nella finestra desktop, e viceversa | media | ☐ |
+| 5 | Sincronizzazione dal vivo: un messaggio scritto dal telefono compare nella finestra desktop, e viceversa | media | ☑ |
 | 6 | Pagina mobile unica (HTML + JavaScript senza build) con manifest PWA per l'installazione sulla schermata home | facile | ☐ |
 | 7 | Rimozione della condivisione dell'API (#3 della 0.2.4) | facile | ☐ |
 

@@ -94,6 +94,10 @@ class ChatEngine(QObject):
         """Elaborazione in corso: None, "search" (ricerca web) o "chat"."""
         return self._phase
 
+    def partial(self) -> tuple[str, str]:
+        """Testo e ragionamento già ricevuti nella risposta in corso."""
+        return self._pending_stream, self._pending_think
+
     # ------------------------------------------------- server Ollama e modelli
 
     def online(self) -> bool | None:

@@ -178,15 +178,20 @@ ANSWER_INTERVAL = 0.35     # secondi tra due rese Markdown durante lo streaming
 PING_INTERVAL = 15.0       # commento SSE che tiene viva la connessione
 
 
-def chat_index(engine) -> list[dict]:
-    """Thread principale: elenco delle conversazioni, dalla più recente."""
+def chat_index(engine, hub) -> dict:
+    """Thread principale: elenco delle conversazioni, dalla più recente.
+
+    `seq` è l'ultimo evento già compreso: lo stream globale riparte da lì.
+    `active` è la conversazione che sta rispondendo, se c'è.
+    """
     items = [
         {"id": c["id"], "title": c.get("title", ""), "model": c.get("model", ""),
          "updated": c.get("updated", 0)}
         for c in engine.chats()
     ]
     items.sort(key=lambda c: c["updated"], reverse=True)
-    return items
+    return {"chats": items, "seq": hub.seq(),
+            "active": engine.active_chat_id() if engine.busy() else None}
 
 
 def chat_snapshot(engine, hub, chat_id: str) -> dict | None:
@@ -302,7 +307,9 @@ class EventHub(QObject):
         self._seq = 0
         self._backlog: list[tuple] = []
         self._subs: set[queue.Queue] = set()
+        self._engine = engine
         self._busy = engine.busy()
+        self._active = engine.active_chat_id() or ""
         e = engine
         e.busy_changed.connect(self._on_busy)
         e.user_message_added.connect(
@@ -319,11 +326,14 @@ class EventHub(QObject):
         e.chats_changed.connect(lambda: self._push("", "chats", {}))
 
     def _on_busy(self, busy: bool) -> None:
+        # con busy=True il motore ha già fissato la conversazione attiva
+        active = (self._engine.active_chat_id() or "") if busy else ""
         with self._lock:
             self._busy = busy
+            self._active = active
             if busy:
                 self._backlog = []   # nuova elaborazione: il backlog riparte
-        self._push("", "busy", {"busy": busy})
+        self._push("", "busy", {"busy": busy, "chat_id": active})
 
     def _push(self, chat_id: str, kind: str, data) -> None:
         with self._lock:
@@ -337,12 +347,12 @@ class EventHub(QObject):
         with self._lock:
             return self._seq
 
-    def subscribe(self) -> tuple[queue.Queue, list[tuple], bool]:
+    def subscribe(self) -> tuple[queue.Queue, list[tuple], dict]:
         """Coda degli eventi futuri, backlog attuale e stato occupato."""
         q: queue.Queue = queue.Queue()
         with self._lock:
             self._subs.add(q)
-            return q, list(self._backlog), self._busy
+            return q, list(self._backlog), {"busy": self._busy, "chat_id": self._active}
 
     def unsubscribe(self, q: queue.Queue) -> None:
         with self._lock:
@@ -483,9 +493,13 @@ class _Handler(BaseHTTPRequestHandler):
         if path == "/api/chats":
             if not self._authed():
                 return
-            ok, items = self._main(chat_index, self.ctx.engine)
+            ok, data = self._main(chat_index, self.ctx.engine, self.ctx.hub)
             if ok:
-                self._json(200, {"chats": items})
+                self._json(200, data)
+            return
+        if path == "/api/events":
+            if self._authed():
+                self._stream(None)   # solo eventi generali: elenco e occupato
             return
         if path == "/api/models":
             if not self._authed():
@@ -631,8 +645,11 @@ class _Handler(BaseHTTPRequestHandler):
             data = render_message(data)
         self._sse(kind, data, seq)
 
-    def _stream(self, chat_id: str) -> None:
+    def _stream(self, chat_id: str | None) -> None:
         """GET /api/chats/<id>/events: eventi della conversazione in SSE.
+
+        Con `chat_id` None (GET /api/events) passano solo gli eventi
+        generali: elenco cambiato e stato occupato.
 
         `after` (query o Last-Event-ID) è l'ultimo evento già noto al
         client: quelli successivi del backlog vengono rispediti. Il testo
@@ -657,7 +674,7 @@ class _Handler(BaseHTTPRequestHandler):
             self.send_header("Connection", "close")
             self.end_headers()
             self.wfile.write(b"retry: 3000\n\n")
-            self._sse("busy", {"busy": busy})
+            self._sse("busy", busy)
             for ev in backlog:
                 self._handle_event(ev, chat_id, after, st)
             if st.active and st.dirty:

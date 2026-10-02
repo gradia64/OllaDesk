@@ -106,21 +106,65 @@ $("pair-form").addEventListener("submit", (ev) => {
 
 // --------------------------------------------------------------- elenco
 
-async function showList() {
-  const data = await api("/api/chats");
+let listActive = null;     // conversazione che sta rispondendo (elenco)
+let listTimer = null;
+
+function renderList(data) {
   const ul = $("chat-list");
   ul.replaceChildren();
   for (const c of data.chats) {
     const a = el("a");
     a.href = "#/c/" + encodeURIComponent(c.id);
-    a.append(el("span", "t", c.title || "Conversazione"));
+    a.dataset.id = c.id;
+    const t = el("span", "t", c.title || "Conversazione");
+    t.prepend(el("span", "badge", "● "));
+    a.append(t);
     a.append(el("span", "m", [c.model, fmtTime(c.updated)].filter(Boolean).join(" · ")));
     const li = el("li");
     li.append(a);
     ul.append(li);
   }
   $("list-empty").hidden = data.chats.length > 0;
+  listActive = data.active;
+  markActive();
+}
+
+function markActive() {
+  // pallino sulla conversazione che sta rispondendo (anche dal PC)
+  for (const a of $("chat-list").querySelectorAll("a")) {
+    a.classList.toggle("active", a.dataset.id === listActive);
+  }
+}
+
+async function showList() {
+  const data = await api("/api/chats");
+  renderList(data);
   show("list");
+  openListStream(data.seq);
+}
+
+function openListStream(after) {
+  if (stream) stream.close();
+  const es = new EventSource("/api/events?after=" + after);
+  stream = es;
+  es.addEventListener("busy", (ev) => {
+    if (stream !== es) return;
+    const d = JSON.parse(ev.data);
+    listActive = d.busy ? d.chat_id : null;
+    markActive();
+  });
+  es.addEventListener("chats", () => {
+    if (stream !== es) return;
+    // più modifiche ravvicinate (salvataggi durante una risposta): un solo ricaricamento
+    clearTimeout(listTimer);
+    listTimer = setTimeout(async () => {
+      if (stream !== es) return;
+      try { renderList(await api("/api/chats")); } catch (e) { /* riprova al prossimo evento */ }
+    }, 300);
+  });
+  es.onerror = () => {
+    if (es.readyState === EventSource.CLOSED && stream === es) route();
+  };
 }
 
 // ---------------------------------------------------------- messaggi

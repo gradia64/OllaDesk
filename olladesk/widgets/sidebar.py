@@ -86,10 +86,6 @@ class ChatSidebar(QWidget):
                 self.list.setCurrentItem(item)
         self.list.blockSignals(False)
 
-    def set_busy(self, busy: bool) -> None:
-        self.list.setEnabled(not busy)
-        self.new_btn.setEnabled(not busy)
-
     # -------------------------------------------------------------- interni
 
     @staticmethod
