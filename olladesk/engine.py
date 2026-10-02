@@ -14,7 +14,7 @@ from pathlib import Path
 from PySide6.QtCore import QObject, Signal
 
 from . import config, context, secrets_store, web_search
-from .ollama_client import ChatWorker, format_stats
+from .ollama_client import ApiWorker, ChatWorker, format_stats
 from .workers import WorkerRegistry
 
 
@@ -32,6 +32,10 @@ class ChatEngine(QObject):
     # chat_id, esito ("done" | "failed" | "stopped"), statistiche, errore
     generation_finished = Signal(str, str, str, str)
     notice = Signal(str, str)                 # chat_id ("" = generale), testo di avviso
+    # --- server Ollama e modelli
+    status_changed = Signal(bool, str)        # online, versione
+    models_loading = Signal(bool)             # elenco modelli in caricamento
+    models_changed = Signal(list)             # nomi da mostrare ([] = nessun modello)
 
     def __init__(self, settings: dict, parent=None):
         super().__init__(parent)
@@ -49,6 +53,11 @@ class ChatEngine(QObject):
         self._chat_stopped = False            # scarta i segnali del worker dopo uno stop
         self._search_stopped = False
         self._closed = False
+        self._status_worker: ApiWorker | None = None
+        self._models_worker: ApiWorker | None = None
+        self._models: list[dict] = []
+        self._online: bool | None = None
+        self._version = "?"
 
     def set_settings(self, settings: dict) -> None:
         """Le impostazioni si leggono a ogni invio: valgono dal prossimo."""
@@ -80,6 +89,89 @@ class ChatEngine(QObject):
 
     def active_chat_id(self) -> str | None:
         return self._active_id
+
+    def phase(self) -> str | None:
+        """Elaborazione in corso: None, "search" (ricerca web) o "chat"."""
+        return self._phase
+
+    # ------------------------------------------------- server Ollama e modelli
+
+    def online(self) -> bool | None:
+        """True/False dopo il primo controllo, None se ancora da verificare."""
+        return self._online
+
+    def version(self) -> str:
+        return self._version
+
+    def models(self) -> list[dict]:
+        """Modelli installati: nome, dettagli e dimensione, in ordine alfabetico."""
+        return self._models
+
+    def model_names(self) -> list[str]:
+        return [m["name"] for m in self._models]
+
+    def reset_status(self) -> None:
+        """Host cambiato: il prossimo controllo riuscito ricarica i modelli."""
+        self._online = None
+
+    def check_server(self) -> None:
+        if self._status_worker is not None or self._closed:
+            return
+        w = ApiWorker(self.settings["host"], "/api/version", self)
+        w.ready.connect(self._on_server_ok)
+        w.failed.connect(self._on_server_fail)
+        w.finished.connect(w.deleteLater)
+        w.finished.connect(self._workers.clear_ref(self, "_status_worker", w))
+        self._status_worker = w
+        self._workers.track(w)
+        w.start()
+
+    def _on_server_ok(self, data: object) -> None:
+        version = (data or {}).get("version", "?") if isinstance(data, dict) else "?"
+        self._version = version
+        was_online = self._online
+        self._online = True
+        self.status_changed.emit(True, version)
+        if not was_online:
+            self.refresh_models()
+
+    def _on_server_fail(self, _err: str) -> None:
+        self._online = False
+        self.status_changed.emit(False, self._version)
+        if not self._models:
+            self.models_changed.emit([])
+
+    def refresh_models(self) -> None:
+        if self._models_worker is not None or self._closed:
+            return
+        self.models_loading.emit(True)
+        w = ApiWorker(self.settings["host"], "/api/tags", self)
+        w.ready.connect(self._on_models)
+        w.failed.connect(self._on_models_fail)
+        w.finished.connect(w.deleteLater)
+        w.finished.connect(self._workers.clear_ref(self, "_models_worker", w))
+        self._models_worker = w
+        self._workers.track(w)
+        w.start()
+
+    def _on_models(self, data: object) -> None:
+        self.models_loading.emit(False)
+        if not isinstance(data, dict):
+            return
+        self._models = [
+            {
+                "name": m.get("name") or m.get("model") or "?",
+                "details": m.get("details", {}),
+                "size": m.get("size", 0),
+            }
+            for m in data.get("models", [])
+        ]
+        self._models.sort(key=lambda m: m["name"].lower())
+        self.models_changed.emit(self.model_names())
+
+    def _on_models_fail(self, _err: str) -> None:
+        self.models_loading.emit(False)
+        self.models_changed.emit([])
 
     # ---------------------------------------------------------- conversazioni
 

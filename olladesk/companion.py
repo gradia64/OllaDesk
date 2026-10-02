@@ -27,6 +27,7 @@ import secrets
 import socket
 import threading
 import time
+import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -40,7 +41,7 @@ MAX_ATTEMPTS = 5          # tentativi errati che invalidano il codice
 MAX_DEVICES = 20          # token conservati (i più vecchi escono)
 COOKIE = "olladesk_session"
 COOKIE_MAX_AGE = 365 * 24 * 3600
-MAX_BODY = 4096
+MAX_BODY = 256 * 1024     # un messaggio lungo, in UTF-8
 BRIDGE_TIMEOUT = 5.0
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
@@ -50,7 +51,9 @@ STATIC = {
     "/app.css": ("app.css", "text/css; charset=utf-8"),
 }
 
-_CHAT_URL_RE = re.compile(r"^/api/chats/([A-Za-z0-9_-]{1,64})$")
+_CHAT_ID = r"[A-Za-z0-9_-]{1,64}"
+_CHAT_URL_RE = re.compile(rf"^/api/chats/({_CHAT_ID})$")
+_EVENTS_URL_RE = re.compile(rf"^/api/chats/({_CHAT_ID})/events$")
 
 # colori del Markdown reso: il foglio di stile della pagina li ridefinisce
 # per il tema chiaro/scuro (le regole CSS battono gli attributi HTML)
@@ -170,6 +173,11 @@ class _Bridge(QObject):
 
 # ------------------------------------------------------- dati per il browser
 
+MAX_TEXT = 64_000          # caratteri massimi di un messaggio dal telefono
+ANSWER_INTERVAL = 0.35     # secondi tra due rese Markdown durante lo streaming
+PING_INTERVAL = 15.0       # commento SSE che tiene viva la connessione
+
+
 def chat_index(engine) -> list[dict]:
     """Thread principale: elenco delle conversazioni, dalla più recente."""
     items = [
@@ -181,43 +189,182 @@ def chat_index(engine) -> list[dict]:
     return items
 
 
-def chat_snapshot(engine, chat_id: str) -> dict | None:
-    """Thread principale: copia della conversazione, da rendere altrove."""
+def chat_snapshot(engine, hub, chat_id: str) -> dict | None:
+    """Thread principale: copia della conversazione, da rendere altrove.
+
+    `seq` è l'ultimo evento già compreso nella copia: lo stream SSE riparte
+    da lì. `state` dice se questa conversazione è in elaborazione.
+    """
     c = engine.chat(chat_id)
-    return copy.deepcopy(c) if c is not None else None
+    active = engine.active_chat_id() == chat_id
+    if c is None and not active:
+        return None
+    snap = copy.deepcopy(c) if c is not None else {"id": chat_id, "messages": []}
+    snap["seq"] = hub.seq()
+    snap["state"] = engine.phase() if active else None
+    return snap
 
 
-def render_chat(chat: dict) -> dict:
-    """Thread HTTP: conversazione per il browser, con il Markdown già reso.
+def models_info(engine) -> dict:
+    """Thread principale: modelli installati e stato del server."""
+    return {
+        "models": [
+            {"name": m["name"],
+             "details": {k: m.get("details", {}).get(k, "")
+                         for k in ("parameter_size", "quantization_level")}}
+            for m in engine.models()
+        ],
+        "online": bool(engine.online()),
+        "version": engine.version(),
+        "busy": engine.busy(),
+        "thinking": bool(engine.settings.get("thinking", True)),
+    }
+
+
+def web_send(engine, hub, chat_id: str | None, text: str, model: str, think: bool):
+    """Thread principale: invio dal telefono.
+
+    Restituisce (chat_id, seq) oppure un messaggio d'errore. `seq` precede
+    gli eventi di questo invio: lo stream SSE li riceve tutti.
+    """
+    if engine.busy():
+        return "occupato: il PC sta già rispondendo, riprova alla fine"
+    if model not in engine.model_names():
+        return f"modello non disponibile: {model}"
+    seq = hub.seq()
+    cid = engine.send(chat_id or engine.new_chat_id(), text, model, think=think)
+    if cid is None:
+        return "occupato: il PC sta già rispondendo, riprova alla fine"
+    return cid, seq
+
+
+def web_stop(engine, chat_id: str) -> bool:
+    """Thread principale: il telefono ferma solo la conversazione che guarda."""
+    if engine.busy() and engine.active_chat_id() == chat_id:
+        engine.stop()
+        return True
+    return False
+
+
+def render_message(m: dict) -> dict | None:
+    """Messaggio per il browser, con il Markdown già reso.
 
     Escono solo i campi mostrati: niente percorsi degli allegati, niente
     risultati web completi né immagini.
     """
-    msgs = []
-    for m in chat.get("messages", []):
-        role = m.get("role")
-        if role not in ("user", "assistant"):
-            continue
-        text = m.get("display", m.get("content", "")) if role == "user" else m.get("content", "")
-        out = {
-            "role": role,
-            "html": md_to_html(text, *_MD_COLORS),
-            "ts": m.get("ts", 0),
-        }
-        if role == "user":
-            out["attachments"] = [str(a) for a in m.get("attachments") or []]
-            out["web"] = bool(m.get("web"))
-        else:
-            if m.get("thinking"):
-                out["thinking_html"] = md_to_html(m["thinking"], *_MD_COLORS)
-            if m.get("stats"):
-                out["stats"] = m["stats"]
-        msgs.append(out)
-    return {
+    role = m.get("role")
+    if role not in ("user", "assistant"):
+        return None
+    text = m.get("display", m.get("content", "")) if role == "user" else m.get("content", "")
+    out = {
+        "role": role,
+        "html": md_to_html(text, *_MD_COLORS),
+        "ts": m.get("ts", 0),
+    }
+    if role == "user":
+        out["attachments"] = [str(a) for a in m.get("attachments") or []]
+        out["web"] = bool(m.get("web"))
+    else:
+        if m.get("thinking"):
+            out["thinking_html"] = md_to_html(m["thinking"], *_MD_COLORS)
+        if m.get("stats"):
+            out["stats"] = m["stats"]
+    return out
+
+
+def render_chat(chat: dict) -> dict:
+    """Thread HTTP: conversazione per il browser."""
+    msgs = [r for r in map(render_message, chat.get("messages", [])) if r is not None]
+    out = {
         "id": chat.get("id"), "title": chat.get("title", ""),
         "model": chat.get("model", ""), "updated": chat.get("updated", 0),
         "messages": msgs,
     }
+    for k in ("seq", "state"):
+        if k in chat:
+            out[k] = chat[k]
+    return out
+
+
+# --------------------------------------------------------------- eventi
+
+class EventHub(QObject):
+    """Raccoglie gli eventi del motore (thread principale) per gli stream SSE.
+
+    Ogni evento ha un numero progressivo. Il backlog conserva gli eventi
+    dell'elaborazione in corso (o dell'ultima): un telefono che si collega
+    a metà risposta ricostruisce il testo già generato.
+    """
+
+    def __init__(self, engine, parent=None):
+        super().__init__(parent)
+        self._lock = threading.Lock()
+        self._seq = 0
+        self._backlog: list[tuple] = []
+        self._subs: set[queue.Queue] = set()
+        self._busy = engine.busy()
+        e = engine
+        e.busy_changed.connect(self._on_busy)
+        e.user_message_added.connect(
+            lambda cid, msg: self._push(cid, "user", copy.deepcopy(msg)))
+        e.search_started.connect(lambda cid: self._push(cid, "search", {}))
+        e.search_finished.connect(lambda cid: self._push(cid, "search_done", {}))
+        e.generation_started.connect(lambda cid: self._push(cid, "start", {}))
+        e.text_chunk.connect(lambda cid, t: self._push(cid, "text", t))
+        e.think_chunk.connect(lambda cid, t: self._push(cid, "think", t))
+        e.generation_finished.connect(
+            lambda cid, outcome, stats, err: self._push(
+                cid, "done", {"outcome": outcome, "stats": stats, "error": err}))
+        e.notice.connect(lambda cid, text: self._push(cid, "notice", {"text": text}))
+        e.chats_changed.connect(lambda: self._push("", "chats", {}))
+
+    def _on_busy(self, busy: bool) -> None:
+        with self._lock:
+            self._busy = busy
+            if busy:
+                self._backlog = []   # nuova elaborazione: il backlog riparte
+        self._push("", "busy", {"busy": busy})
+
+    def _push(self, chat_id: str, kind: str, data) -> None:
+        with self._lock:
+            self._seq += 1
+            ev = (self._seq, chat_id, kind, data)
+            self._backlog.append(ev)
+            for q in self._subs:
+                q.put(ev)
+
+    def seq(self) -> int:
+        with self._lock:
+            return self._seq
+
+    def subscribe(self) -> tuple[queue.Queue, list[tuple], bool]:
+        """Coda degli eventi futuri, backlog attuale e stato occupato."""
+        q: queue.Queue = queue.Queue()
+        with self._lock:
+            self._subs.add(q)
+            return q, list(self._backlog), self._busy
+
+    def unsubscribe(self, q: queue.Queue) -> None:
+        with self._lock:
+            self._subs.discard(q)
+
+    def close_all(self) -> None:
+        """Chiude tutti gli stream (arresto del server)."""
+        with self._lock:
+            for q in self._subs:
+                q.put(None)
+            self._subs = set()
+
+
+class _StreamState:
+    """Risposta in costruzione vista da uno stream SSE."""
+
+    def __init__(self) -> None:
+        self.active = False
+        self.text = ""
+        self.think = ""
+        self.dirty = False
+        self.last_sent = 0.0
 
 
 def host_allowed(host_header: str | None) -> bool:
@@ -340,11 +487,23 @@ class _Handler(BaseHTTPRequestHandler):
             if ok:
                 self._json(200, {"chats": items})
             return
+        if path == "/api/models":
+            if not self._authed():
+                return
+            ok, info = self._main(models_info, self.ctx.engine)
+            if ok:
+                self._json(200, info)
+            return
+        m = _EVENTS_URL_RE.match(path)
+        if m:
+            if self._authed():
+                self._stream(m.group(1))
+            return
         m = _CHAT_URL_RE.match(path)
         if m:
             if not self._authed():
                 return
-            ok, chat = self._main(chat_snapshot, self.ctx.engine, m.group(1))
+            ok, chat = self._main(chat_snapshot, self.ctx.engine, self.ctx.hub, m.group(1))
             if not ok:
                 return
             if chat is None:
@@ -393,7 +552,140 @@ class _Handler(BaseHTTPRequestHandler):
                       f"Max-Age={COOKIE_MAX_AGE}")
             self._json(200, {"ok": True}, {"Set-Cookie": cookie})
             return
+        if path == "/api/send":
+            if not self._authed():
+                return
+            text, model = data.get("text"), data.get("model")
+            chat_id = data.get("chat_id")
+            if not isinstance(text, str) or not text.strip() or len(text) > MAX_TEXT:
+                self._error(400, f"messaggio vuoto o più lungo di {MAX_TEXT} caratteri")
+                return
+            if not isinstance(model, str) or not model:
+                self._error(400, "modello mancante")
+                return
+            if chat_id is not None and not (
+                isinstance(chat_id, str) and re.fullmatch(_CHAT_ID, chat_id)
+            ):
+                self._error(400, "conversazione non valida")
+                return
+            ok, res = self._main(web_send, self.ctx.engine, self.ctx.hub, chat_id,
+                                 text.strip(), model, bool(data.get("think", True)))
+            if not ok:
+                return
+            if isinstance(res, str):
+                self._error(409 if res.startswith("occupato") else 400, res)
+                return
+            self._json(200, {"chat_id": res[0], "after": res[1]})
+            return
+        if path == "/api/stop":
+            if not self._authed():
+                return
+            chat_id = data.get("chat_id")
+            if not (isinstance(chat_id, str) and re.fullmatch(_CHAT_ID, chat_id)):
+                self._error(400, "conversazione non valida")
+                return
+            ok, stopped = self._main(web_stop, self.ctx.engine, chat_id)
+            if ok:
+                self._json(200, {"stopped": stopped})
+            return
         self._error(404, "risorsa inesistente")
+
+    # ---------------------------------------------------------- stream SSE
+
+    def _sse(self, kind: str, data, seq: int | None = None) -> None:
+        head = f"id: {seq}\n" if seq is not None else ""
+        payload = json.dumps(data, ensure_ascii=False)
+        self.wfile.write(f"{head}event: {kind}\ndata: {payload}\n\n".encode("utf-8"))
+
+    def _flush_answer(self, st: _StreamState) -> None:
+        """Rende il Markdown della risposta in costruzione (testo completo)."""
+        data = {"html": md_to_html(st.text, *_MD_COLORS)}
+        if st.think:
+            data["thinking_html"] = md_to_html(st.think, *_MD_COLORS)
+        self._sse("answer", data)
+        st.dirty = False
+        st.last_sent = time.monotonic()
+
+    def _handle_event(self, ev: tuple, chat_id: str, after: int, st: _StreamState) -> None:
+        seq, cid, kind, data = ev
+        if cid not in ("", chat_id):
+            return
+        new = seq > after   # il client non l'ha ancora visto
+        if kind == "text" or kind == "think":
+            if st.active:
+                if kind == "text":
+                    st.text += data
+                else:
+                    st.think += data
+                st.dirty = True
+            return
+        if kind == "start":
+            st.active, st.text, st.think, st.dirty = True, "", "", False
+        elif kind == "done":
+            if new and st.active and st.dirty:
+                self._flush_answer(st)
+            st.active, st.text, st.think, st.dirty = False, "", "", False
+        if not new:
+            return
+        if kind == "user":
+            data = render_message(data)
+        self._sse(kind, data, seq)
+
+    def _stream(self, chat_id: str) -> None:
+        """GET /api/chats/<id>/events: eventi della conversazione in SSE.
+
+        `after` (query o Last-Event-ID) è l'ultimo evento già noto al
+        client: quelli successivi del backlog vengono rispediti. Il testo
+        arriva come HTML già reso, al massimo ogni ANSWER_INTERVAL secondi.
+        """
+        query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+        after = 0
+        for raw in (query.get("after", ["0"])[0], self.headers.get("Last-Event-ID") or "0"):
+            try:
+                after = max(after, int(raw))
+            except ValueError:
+                pass
+        hub = self.ctx.hub
+        q, backlog, busy = hub.subscribe()
+        self.close_connection = True
+        st = _StreamState()
+        try:
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Connection", "close")
+            self.end_headers()
+            self.wfile.write(b"retry: 3000\n\n")
+            self._sse("busy", {"busy": busy})
+            for ev in backlog:
+                self._handle_event(ev, chat_id, after, st)
+            if st.active and st.dirty:
+                self._flush_answer(st)   # testo generato prima del collegamento
+            self.wfile.flush()
+            while True:
+                wait = PING_INTERVAL
+                if st.dirty:
+                    wait = max(0.0, ANSWER_INTERVAL - (time.monotonic() - st.last_sent))
+                try:
+                    ev = q.get(timeout=wait)
+                except queue.Empty:
+                    if st.dirty:
+                        self._flush_answer(st)
+                    else:
+                        self.wfile.write(b": ping\n\n")
+                    self.wfile.flush()
+                    continue
+                if ev is None:      # server in arresto
+                    break
+                self._handle_event(ev, chat_id, 0, st)
+                if st.dirty and time.monotonic() - st.last_sent >= ANSWER_INTERVAL:
+                    self._flush_answer(st)
+                self.wfile.flush()
+        except OSError:
+            pass   # telefono disconnesso
+        finally:
+            hub.unsubscribe(q)
 
 
 # ------------------------------------------------------------------ server
@@ -409,6 +701,7 @@ class CompanionServer(QObject):
         self.engine = engine
         self.auth = auth or PairingAuth()
         self.bridge = _Bridge(self)
+        self.hub = EventHub(engine, self)
         self._httpd: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
         self._state = "off"
@@ -445,6 +738,7 @@ class CompanionServer(QObject):
     def stop(self) -> None:
         httpd, self._httpd = self._httpd, None
         if httpd is not None:
+            self.hub.close_all()    # chiude gli stream SSE aperti
             httpd.shutdown()        # attende l'uscita da serve_forever
             httpd.server_close()
             self._thread = None

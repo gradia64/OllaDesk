@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (
 
 from . import __version__, app_update, companion, config, server_share, theme
 from .engine import ChatEngine
-from .ollama_client import ApiWorker, shutdown_workers
+from .ollama_client import shutdown_workers
 from .widgets.chat_area import ChatArea
 from .widgets.model_manager import ModelManagerDialog
 from .widgets.pairing_dialog import PairingDialog
@@ -49,15 +49,13 @@ class MainWindow(QMainWindow):
         # conversazione visualizzata: None = pagina di benvenuto; un id non
         # ancora salvato è una conversazione nuova (nasce al primo messaggio)
         self._view_id: str | None = None
-        self._status_worker: ApiWorker | None = None
-        self._models_worker: ApiWorker | None = None
         self._app_update_worker: app_update.AppUpdateCheckWorker | None = None
         self._app_update: dict | None = None   # release più recente trovata
-        self._models: list[dict] = []
-        self._online: bool | None = None
         self._preferred_model: str | None = None
         self._workers = WorkerRegistry()
-        self._version = "?"
+        # l'invio partito da questa finestra svuota l'input al commit; uno
+        # partito dal telefono no (la bozza sul PC resta)
+        self._clear_input_for: str | None = None
         self._resolved_theme = theme.resolve_theme(self.settings["theme"])
         self.tray: QSystemTrayIcon | None = None
         self._really_quit = False      # True solo da «Esci» nel menu della tray
@@ -210,6 +208,9 @@ class MainWindow(QMainWindow):
         e.think_chunk.connect(self._on_think_chunk)
         e.generation_finished.connect(self._on_generation_finished)
         e.notice.connect(self._on_notice)
+        e.status_changed.connect(self._on_status_changed)
+        e.models_loading.connect(self._on_models_loading)
+        e.models_changed.connect(self._set_models)
 
     def _shortcuts(self) -> None:
         for seq, fn in (
@@ -244,35 +245,25 @@ class MainWindow(QMainWindow):
 
     # ------------------------------------------------------------- connessione
 
+    @property
+    def _online(self) -> bool | None:
+        return self.engine.online()
+
+    @property
+    def _version(self) -> str:
+        return self.engine.version()
+
     def _check_server(self) -> None:
-        if self._status_worker is not None:
-            return
-        self._status_worker = ApiWorker(self.settings["host"], "/api/version", self)
-        self._status_worker.ready.connect(self._on_server_ok)
-        self._status_worker.failed.connect(self._on_server_fail)
-        self._status_worker.finished.connect(self._status_worker.deleteLater)
-        self._status_worker.finished.connect(self._workers.clear_ref(self, "_status_worker", self._status_worker))
-        self._workers.track(self._status_worker)
-        self._status_worker.start()
+        self.engine.check_server()
 
-    def _on_server_ok(self, data: object) -> None:
-        version = (data or {}).get("version", "?") if isinstance(data, dict) else "?"
-        self._version = version
-        was_online = self._online
-        self._online = True
-        self.status_dot.setProperty("status", "online")
-        self.status_label.setText(f"Ollama {html.escape(version)}")
+    def _on_status_changed(self, online: bool, version: str) -> None:
+        if online:
+            self.status_dot.setProperty("status", "online")
+            self.status_label.setText(f"Ollama {html.escape(version)}")
+        else:
+            self.status_dot.setProperty("status", "offline")
+            self.status_label.setText("offline")
         self._repolish(self.status_dot)
-        if not was_online:
-            self._refresh_models()
-
-    def _on_server_fail(self, _err: str) -> None:
-        self._online = False
-        self.status_dot.setProperty("status", "offline")
-        self.status_label.setText("offline")
-        self._repolish(self.status_dot)
-        if not self._models:
-            self._set_models([])
 
     @staticmethod
     def _repolish(w: QWidget) -> None:
@@ -282,38 +273,13 @@ class MainWindow(QMainWindow):
     # ----------------------------------------------------------------- modelli
 
     def model_names(self) -> list[str]:
-        return [m["name"] for m in self._models]
+        return self.engine.model_names()
 
     def _refresh_models(self) -> None:
-        if self._models_worker is not None:
-            return
-        self.reload_models_btn.setEnabled(False)
-        self._models_worker = ApiWorker(self.settings["host"], "/api/tags", self)
-        self._models_worker.ready.connect(self._on_models)
-        self._models_worker.failed.connect(self._on_models_fail)
-        self._models_worker.finished.connect(self._models_worker.deleteLater)
-        self._models_worker.finished.connect(self._workers.clear_ref(self, "_models_worker", self._models_worker))
-        self._workers.track(self._models_worker)
-        self._models_worker.start()
+        self.engine.refresh_models()
 
-    def _on_models(self, data: object) -> None:
-        self.reload_models_btn.setEnabled(True)
-        if not isinstance(data, dict):
-            return
-        self._models = [
-            {
-                "name": m.get("name") or m.get("model") or "?",
-                "details": m.get("details", {}),
-                "size": m.get("size", 0),
-            }
-            for m in data.get("models", [])
-        ]
-        self._models.sort(key=lambda m: m["name"].lower())
-        self._set_models(self.model_names())
-
-    def _on_models_fail(self, _err: str) -> None:
-        self.reload_models_btn.setEnabled(True)
-        self._set_models([])
+    def _on_models_loading(self, loading: bool) -> None:
+        self.reload_models_btn.setEnabled(not loading)
 
     def _set_models(self, names: list[str]) -> None:
         self.model_combo.blockSignals(True)
@@ -323,7 +289,7 @@ class MainWindow(QMainWindow):
             self.model_combo.setEnabled(False)
         else:
             self.model_combo.setEnabled(True)
-            for m in self._models:
+            for m in self.engine.models():
                 det = m.get("details", {})
                 label = m["name"]
                 extra = " · ".join(x for x in (det.get("parameter_size", ""), det.get("quantization_level", "")) if x)
@@ -448,6 +414,7 @@ class MainWindow(QMainWindow):
         self.chat_area.clear_attachments()
         if self._view_id is None:
             self._view_id = self.engine.new_chat_id()
+        self._clear_input_for = self._view_id
         self.engine.send(
             self._view_id, text, model, attachments=atts, web=web_on,
             think=bool(self.settings.get("thinking", True)),
@@ -467,12 +434,15 @@ class MainWindow(QMainWindow):
         self.chat_area.add_message(
             "user", msg["display"], msg["ts"], msg["attachments"] or None, msg["web"]
         )
-        self.chat_area.clear_input()
+        if chat_id == self._clear_input_for:
+            self._clear_input_for = None
+            self.chat_area.clear_input()
 
     def _on_busy_changed(self, busy: bool) -> None:
         self.chat_area.set_streaming(busy)
         self.sidebar.set_busy(busy)
         if not busy:
+            self._clear_input_for = None
             self.chat_area.focus_input()
 
     def _on_search_started(self, chat_id: str) -> None:
@@ -762,7 +732,7 @@ class MainWindow(QMainWindow):
         self.chat_area.set_send_on_enter(s["send_on_enter"])
         self.chat_area.set_thinking(s.get("thinking", True))
         # ricontatta il server e ricarica i modelli
-        self._online = None
+        self.engine.reset_status()
         self._check_server()
         self._refresh_models()
         # tray e condivisione possono essere cambiate nelle impostazioni

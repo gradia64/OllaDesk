@@ -5,18 +5,16 @@ errore con testo parziale, ricerca web simulata e rifiuto quando occupato.
 
 Uso:  python3 tests/engine_test.py   (nessuna rete, nessun Ollama)
 """
-import json
 import os
 import sys
 import tempfile
-import threading
 import time
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 os.environ["QT_QPA_PLATFORM"] = "offscreen"
 os.environ["XDG_CONFIG_HOME"] = tempfile.mkdtemp(prefix="olladesk_engine_config_")
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from PySide6.QtCore import QCoreApplication, QEventLoop, QThread, QTimer, Signal
 
@@ -29,47 +27,12 @@ sys.excepthook = lambda *exc: slot_errors.append(exc)
 
 # ------------------------------------------------------------ finto Ollama
 
-payloads: list[dict] = []
-release = threading.Event()   # sblocca le risposte «lente»
+from fake_ollama import FakeOllama  # noqa: E402
 
-
-class FakeOllama(BaseHTTPRequestHandler):
-    def log_message(self, *_a):
-        pass
-
-    def _line(self, obj) -> None:
-        self.wfile.write((json.dumps(obj) + "\n").encode())
-        self.wfile.flush()
-
-    def do_POST(self):  # noqa: N802 (API http.server)
-        body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
-        payloads.append(body)
-        last = body["messages"][-1]["content"]
-        self.send_response(200)
-        self.send_header("Content-Type", "application/x-ndjson")
-        self.end_headers()
-        try:
-            if "lento" in last:
-                self._line({"message": {"content": "parziale "}})
-                release.wait(10)
-            elif "pensa" in last:
-                self._line({"message": {"thinking": "sto pensando"}})
-                release.wait(10)
-            elif "errore" in last:
-                self._line({"message": {"content": "mezza risposta"}})
-                self._line({"error": "modello esploso"})
-            else:
-                self._line({"message": {"thinking": "ragiono"}})
-                self._line({"message": {"content": "Ciao, "}})
-                self._line({"message": {"content": "mondo"}})
-                self._line({"done": True, "eval_count": 10, "eval_duration": 1_000_000_000})
-        except OSError:
-            pass   # connessione chiusa dallo stop
-
-
-server = ThreadingHTTPServer(("127.0.0.1", 0), FakeOllama)
-threading.Thread(target=server.serve_forever, daemon=True).start()
-HOST = f"http://127.0.0.1:{server.server_address[1]}"
+fake = FakeOllama()
+payloads = fake.payloads
+release = fake.release
+HOST = fake.host
 
 
 # ------------------------------------------------------- finta ricerca web
@@ -142,7 +105,7 @@ assert wait_until(lambda: not engine.busy()), "la generazione non è terminata"
 f = finished()
 assert len(f) == 1 and f[0][1:3] == (cid, "done") and f[0][4] == "", f
 assert f[0][3], "statistiche mancanti"
-assert "".join(e[2] for e in events if e[0] == "text_chunk") == "Ciao, mondo"
+assert "".join(e[2] for e in events if e[0] == "text_chunk") == "Ciao, **mondo**"
 assert [e[2] for e in events if e[0] == "think_chunk"] == ["ragiono"]
 order = names()
 assert order.index("user_message_added") < order.index("generation_started") < order.index("text_chunk")
@@ -152,7 +115,7 @@ assert "think" not in payloads[-1]
 
 saved = config.load_chat(cid)
 assert [m["role"] for m in saved["messages"]] == ["user", "assistant"]
-assert saved["messages"][1]["content"] == "Ciao, mondo"
+assert saved["messages"][1]["content"] == "Ciao, **mondo**"
 assert saved["messages"][1]["thinking"] == "ragiono"
 assert saved["title"] == "ciao"
 assert [c["id"] for c in engine.chats()] == [cid]
@@ -174,7 +137,11 @@ events.clear()
 release.clear()
 c3 = engine.send(None, "rispondi lento", "finto")
 assert wait_until(lambda: "text_chunk" in names())
+# regressione: close() dal thread principale attendeva il lock del buffer,
+# tenuto dal worker fermo in lettura, fino all'arrivo di altri dati (UI bloccata)
+t0 = time.monotonic()
 engine.stop()
+assert time.monotonic() - t0 < 1.0, "lo stop ha bloccato il thread principale"
 assert not engine.busy()
 assert finished()[-1][1:3] == (c3, "stopped")
 msgs = config.load_chat(c3)["messages"]
@@ -255,6 +222,6 @@ from olladesk.ollama_client import shutdown_workers  # noqa: E402
 shutdown_workers(engine.shutdown())
 assert engine.send(None, "dopo la chiusura", "finto") is None
 wait_until(lambda: False, 200)   # consegna dei segnali in coda
-server.shutdown()
+fake.close()
 assert not slot_errors, f"eccezioni negli slot: {slot_errors}"
 print("ENGINE OK")

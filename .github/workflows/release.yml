@@ -55,6 +55,9 @@ jobs:
       - name: Companion web su porta casuale (nessuna rete)
         run: python3 tests/companion_test.py
 
+      - name: Invio dal telefono e streaming SSE (nessuna rete)
+        run: python3 tests/companion_send_test.py
+
   dist:
     needs: test
     if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'

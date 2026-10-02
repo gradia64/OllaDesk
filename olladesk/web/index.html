@@ -12,6 +12,7 @@
 <header class="bar">
   <button id="back" class="icon" type="button" aria-label="Indietro" hidden>‹</button>
   <h1 id="title">OllaDesk</h1>
+  <button id="new-chat" class="icon" type="button" aria-label="Nuova conversazione" hidden>＋</button>
   <button id="refresh" class="icon" type="button" aria-label="Aggiorna" hidden>↻</button>
 </header>
 
@@ -43,5 +44,18 @@
 
   <p id="net-error" class="error center" role="alert" hidden></p>
 </main>
+
+<form id="composer" class="composer" autocomplete="off" hidden>
+  <p id="busy-note" class="muted small" hidden>Il PC sta rispondendo a un'altra richiesta: attendi la fine.</p>
+  <div class="composer-tools">
+    <select id="model" aria-label="Modello"></select>
+    <button id="think" class="toggle" type="button" aria-pressed="true"
+            title="Ragionamento (thinking)">🧠</button>
+  </div>
+  <div class="composer-row">
+    <textarea id="input" rows="1" placeholder="Scrivi un messaggio…" aria-label="Messaggio"></textarea>
+    <button id="send" class="send" type="submit" aria-label="Invia">➤</button>
+  </div>
+</form>
 </body>
 </html>

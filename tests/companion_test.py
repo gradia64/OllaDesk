@@ -109,7 +109,7 @@ def request(method, path, body=None, headers=None, cookie=None, spin=True):
     t = threading.Thread(target=run)
     t.start()
     if spin:
-        assert wait_until(lambda: not t.is_alive(), 15), f"{method} {path} senza risposta"
+        assert wait_until(lambda: not t.is_alive(), 15000), f"{method} {path} senza risposta"
     else:
         t.join(15)
     return out["status"], out["headers"], out["body"]

@@ -50,8 +50,12 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   `sudo firewall-cmd --reload`; analogo con `ufw allow from 192.168.1.0/24
   to any port 11434 proto tcp`).
 - **Companion web** (Impostazioni → Interfaccia, spenta di default): una
-  pagina per smartphone e tablet nella rete locale, che mostra le stesse
-  conversazioni del PC (per ora in sola lettura). Si abbina un dispositivo
+  pagina per smartphone e tablet nella rete locale, con le stesse
+  conversazioni del PC. Dal telefono si leggono le chat, se ne apre una
+  nuova o si continua una esistente: si sceglie il modello, si accende o
+  spegne il ragionamento (🧠) e la risposta arriva in streaming, con il
+  pulsante ■ per interromperla. Il PC genera una risposta alla volta: se
+  sta già rispondendo, il telefono lo segnala e attende. Si abbina un dispositivo
   dal pulsante 📱 della barra superiore: compaiono l'indirizzo, un codice di
   6 cifre valido 2 minuti e una sola volta e, se è installato
   `python3-qrcode` (`python-qrcode` su Arch), un QR code da inquadrare. Il
@@ -298,6 +302,7 @@ temporanea nuova a ogni esecuzione.
 python3 tests/offline_app_update.py   # controllo aggiornamenti con finto GitHub (senza rete)
 python3 tests/engine_test.py          # motore di chat con finto Ollama (senza rete)
 python3 tests/companion_test.py       # companion web: server, abbinamento, lettura (senza rete)
+python3 tests/companion_send_test.py  # companion web: invio e streaming SSE (senza rete)
 ```
 
 La CI (`.github/workflows/release.yml`) esegue unit test e test offline a ogni
@@ -348,6 +353,8 @@ tests/repro_qthread_crash.py regressione: dialoghi distrutti con worker bloccati
 tests/offline_app_update.py controllo aggiornamenti di OllaDesk (finto GitHub)
 tests/engine_test.py        motore di chat (finto Ollama)
 tests/companion_test.py     companion web (server, abbinamento, lettura)
+tests/companion_send_test.py companion web (invio, streaming SSE, stop)
+tests/fake_ollama.py        finto server Ollama per i test offline
 olladesk.desktop            voce per il menu applicazioni di KDE
 packaging/                  file comuni .deb/Arch, modello PKGBUILD, chiave di release
 scripts/                    build (.deb, sorgenti, Arch), firma, pubblicazione AUR
