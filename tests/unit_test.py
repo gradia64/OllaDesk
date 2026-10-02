@@ -432,6 +432,69 @@ def test_share_lan_url_filter():
     assert not _is_shareable_ip("fe80::1")
 
 
+def test_chat_worker_stop_during_stream_pause():
+    # regressione: stop() chiudeva la risposta dal thread principale e
+    # restava in attesa del lock del buffer, tenuto dal worker fermo in
+    # readline() durante una pausa dello stream → UI bloccata (misurati 9,5 s)
+    import threading
+    import time
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtCore import QEventLoop, QTimer
+    from PySide6.QtWidgets import QApplication
+
+    QApplication.instance() or QApplication([])
+    from olladesk.ollama_client import ChatWorker
+
+    release = threading.Event()
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *_a):
+            pass
+
+        def do_POST(self):  # noqa: N802 (API http.server)
+            self.rfile.read(int(self.headers["Content-Length"]))
+            self.send_response(200)
+            self.send_header("Content-Type", "application/x-ndjson")
+            self.end_headers()
+            try:
+                self.wfile.write(b'{"message": {"content": "parziale "}}\n')
+                self.wfile.flush()
+                release.wait(10)   # stream in pausa: il modello «tace»
+                self.wfile.write(b'{"done": true}\n')
+            except OSError:
+                pass   # connessione chiusa dallo stop
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    server.daemon_threads = True
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    host = f"http://127.0.0.1:{server.server_address[1]}"
+
+    w = ChatWorker(host, {"model": "finto", "messages": [], "stream": True})
+    got: list[str] = []
+    w.chunk.connect(got.append)
+    try:
+        w.start()
+        loop = QEventLoop()
+        w.chunk.connect(lambda _t: loop.quit())
+        QTimer.singleShot(5000, loop.quit)
+        loop.exec()
+        assert got == ["parziale "], got
+        time.sleep(0.2)   # il worker è di nuovo fermo in lettura
+
+        t0 = time.monotonic()
+        w.stop()
+        elapsed = time.monotonic() - t0
+        assert elapsed < 1.0, f"stop() ha bloccato il thread principale per {elapsed:.1f} s"
+        assert w.wait(3000), "il worker non è uscito dopo lo stop"
+    finally:
+        release.set()
+        w.wait(3000)
+        server.shutdown()
+        server.server_close()
+
+
 def test_chat_worker_emits_thinking():
     # il ChatWorker deve distinguere thinking da content, sia in risposta
     # singola che in streaming NDJSON

@@ -22,6 +22,7 @@ from pathlib import Path
 from PySide6.QtCore import QThread, Signal
 
 from . import __version__
+from .ollama_client import abort_response
 from .updater import is_newer
 
 REPO = "gradia64/OllaDesk"
@@ -122,12 +123,7 @@ class AppUpdateCheckWorker(QThread):
 
     def stop(self) -> None:
         self._stopped = True
-        resp, self._resp = self._resp, None
-        if resp is not None:
-            try:
-                resp.close()
-            except Exception:
-                pass
+        abort_response(self._resp)   # la chiusura la fa il worker
 
     def run(self) -> None:
         req = urllib.request.Request(

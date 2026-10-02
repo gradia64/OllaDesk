@@ -6,6 +6,7 @@ QThread separati e comunicano con la UI tramite segnali.
 from __future__ import annotations
 
 import json
+import socket
 import time
 import urllib.error
 import urllib.request
@@ -17,6 +18,25 @@ from PySide6.QtCore import QThread, Signal
 _parked: set = set()
 
 _RESULT_SIGNALS = ("ready", "failed", "chunk", "done", "progress")
+
+
+def abort_response(resp) -> None:
+    """Interrompe, da un altro thread, una risposta che un worker sta leggendo.
+
+    `close()` dal thread principale attenderebbe il lock interno del buffer,
+    tenuto dal worker fermo in lettura finché non arrivano altri dati: la UI
+    resterebbe bloccata (uno stop durante una pausa dello stream). Lo
+    shutdown del socket sblocca subito la lettura; la chiusura resta al
+    worker, nel suo `finally`.
+    """
+    raw = getattr(getattr(resp, "fp", None), "raw", None)
+    sock = getattr(raw, "_sock", None)
+    if sock is None:
+        return
+    try:
+        sock.shutdown(socket.SHUT_RDWR)
+    except OSError:
+        pass
 
 
 def park_worker(w: QThread) -> None:
@@ -115,7 +135,7 @@ class ApiWorker(QThread):
 
     def stop(self) -> None:
         self._stopped = True
-        self._close_resp()
+        abort_response(self._resp)   # la chiusura la fa il worker
 
     def run(self) -> None:
         try:
@@ -158,7 +178,7 @@ class ChatWorker(QThread):
     def stop(self) -> None:
         """Interrompe la generazione e chiude la connessione."""
         self._stopped = True
-        self._close_resp()
+        abort_response(self._resp)   # la chiusura la fa il worker
 
     @property
     def stopped(self) -> bool:
@@ -254,7 +274,7 @@ class PostWorker(QThread):
 
     def stop(self) -> None:
         self._stopped = True
-        self._close_resp()
+        abort_response(self._resp)   # la chiusura la fa il worker
 
     def run(self) -> None:
         try:
@@ -303,7 +323,7 @@ class PullWorker(QThread):
 
     def stop(self) -> None:
         self._stopped = True
-        self._close_resp()
+        abort_response(self._resp)   # la chiusura la fa il worker
 
     @property
     def stopped(self) -> bool:
