@@ -12,6 +12,7 @@ from PySide6.QtGui import (
     QPalette,
     QPen,
     QPixmap,
+    qAlpha,
 )
 from PySide6.QtWidgets import QApplication
 
@@ -122,6 +123,77 @@ def globe_icon(color: str, size: int = 18) -> QIcon:
     p.end()
     pm.setDevicePixelRatio(dpr)
     return QIcon(pm)
+
+
+def _brain_fallback_icon(color: str, size: int) -> QIcon:
+    """Cervello stilizzato per quando il font emoji non è disponibile."""
+    dpr = 2
+    s = size * dpr
+    pm = QPixmap(s, s)
+    pm.fill(Qt.GlobalColor.transparent)
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    pen = QPen(QColor(color), 1.5 * dpr)
+    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    p.setPen(pen)
+    r = s / 2 - 2 * dpr
+    c = QPointF(s / 2, s / 2)
+    p.drawEllipse(c, r, r * 0.82)                          # massa
+    p.drawArc(int(c.x() - r), int(c.y() - r * 0.82), int(r), int(r * 1.64), 90 * 16, 180 * 16)  # emisferi
+    p.drawArc(int(c.x() - r * 0.6), int(c.y() - r * 0.7), int(r * 0.7), int(r * 0.8), 60 * 16, 120 * 16)  # piega
+    p.end()
+    pm.setDevicePixelRatio(dpr)
+    return QIcon(pm)
+
+
+def brain_icon(color: str, size: int = 18) -> QIcon:
+    """Cervello del toggle thinking: grigio da spento, colorato da attivo.
+
+    L'emoji 🧠 ha colori propri non controllabili e, resa come testo, risulta
+    più piccola delle icone disegnate (il glifo non riempie il riquadro). Viene
+    quindi renderizzata su una tela grande, ritagliata sui pixel visibili e
+    scalata a riempire l'icona come il globo; la tinta passa dalla maschera
+    alfa. Senza font emoji si usa il cervello stilizzato disegnato.
+    """
+    dpr = 2
+    s = size * dpr
+    canvas = s * 4
+    pm = QPixmap(canvas, canvas)
+    pm.fill(Qt.GlobalColor.transparent)
+    p = QPainter(pm)
+    f = p.font()
+    f.setPixelSize(int(canvas * 0.75))
+    p.setFont(f)
+    p.drawText(pm.rect(), Qt.AlignmentFlag.AlignCenter, "🧠")
+    p.end()
+
+    # bounding box dei pixel visibili
+    img = pm.toImage()
+    x0, y0, x1, y1 = canvas, canvas, -1, -1
+    for y in range(canvas):
+        for x in range(canvas):
+            if qAlpha(img.pixel(x, y)) > 8:
+                x0, y0 = min(x0, x), min(y0, y)
+                x1, y1 = max(x1, x), max(y1, y)
+    if x1 < 0:
+        return _brain_fallback_icon(color, size)   # glifo assente
+
+    crop = pm.copy(x0, y0, x1 - x0 + 1, y1 - y0 + 1)
+    scale = s / max(crop.width(), crop.height())
+    dw, dh = max(1, round(crop.width() * scale)), max(1, round(crop.height() * scale))
+    out = QPixmap(s, s)
+    out.fill(Qt.GlobalColor.transparent)
+    p2 = QPainter(out)
+    p2.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+    p2.drawPixmap((s - dw) // 2, (s - dh) // 2, dw, dh, crop)
+    p2.end()
+    # tinta uniforme dove il glifo ha alfa
+    p3 = QPainter(out)
+    p3.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+    p3.fillRect(out.rect(), QColor(color))
+    p3.end()
+    out.setDevicePixelRatio(dpr)
+    return QIcon(out)
 
 
 def palette_for(name: str) -> dict[str, str]:

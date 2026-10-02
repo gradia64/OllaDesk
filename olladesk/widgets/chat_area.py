@@ -209,27 +209,18 @@ class ChatArea(QWidget):
         # a off inviando "think": false a /api/chat (modelli qwen3, deepseek-r1…)
         self.think_btn = QToolButton(self.input_frame)
         self.think_btn.setCheckable(True)
-        self.think_btn.setText("🧠")
+        self.think_btn.setIconSize(QSize(18, 18))
         self.think_btn.setToolTip(
-            "Ragionamento (thinking): spuntato, i modelli che sanno farlo "
-            "ragionano prima di rispondere e il pensiero è visibile in chat;\n"
-            "non spuntato, il ragionamento viene disattivato inviando "
+            "Ragionamento (thinking): attivo (icona colorata), i modelli che sanno "
+            "farlo ragionano prima di rispondere e il pensiero è visibile in chat;\n"
+            "spento (icona grigia), il ragionamento viene disattivato inviando "
             "\"think\": false alla richiesta.\n"
             "Nota: gpt-oss non accetta la disattivazione (Ollama accetta per "
             "esso solo i livelli low/medium/high)."
         )
         self.think_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.think_btn.toggled.connect(self._on_think_toggled)
-        # lo stato acceso/spento deve vedersi: l'emoji non cambia colore, quindi
-        # il bordo/sfondo azzurro del :checked fa da indicatore (come il globo
-        # blu della ricerca web)
-        self.think_btn.setStyleSheet(
-            "QToolButton { border: 1px solid transparent; background: transparent;"
-            " border-radius: 5px; padding: 2px; }"
-            "QToolButton:checked {"
-            f" border: 1px solid {theme.WEB_ACTIVE_COLOR};"
-            " background: rgba(59,130,246,0.18); }"
-        )
+        self._update_think_icon()
         fl.addWidget(self.think_btn)
 
         self.input = ChatInput(self.input_frame)
@@ -478,6 +469,7 @@ class ChatArea(QWidget):
         self.theme_name = theme_name
         self.show_ts = show_ts
         self._update_web_icon()
+        self._update_think_icon()
         for i in range(self.msgs.count()):
             row = self.msgs.itemAt(i).widget()
             if row is None:
@@ -600,7 +592,14 @@ class ChatArea(QWidget):
     # ------------------------------------------------------------- thinking
 
     def _on_think_toggled(self, checked: bool) -> None:
+        self._update_think_icon()
         self.thinkingToggled.emit(checked)
+
+    def _update_think_icon(self) -> None:
+        """Cervello grigio da spento, blu da acceso (come il globo del web)."""
+        t = theme.palette_for(self.theme_name)
+        color = theme.WEB_ACTIVE_COLOR if self.think_btn.isChecked() else t["dim"]
+        self.think_btn.setIcon(theme.brain_icon(color))
 
     def set_thinking(self, on: bool) -> None:
         # senza blocco dei segnali, il setChecked all'avvio (o al cambio

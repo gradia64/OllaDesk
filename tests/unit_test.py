@@ -919,6 +919,29 @@ print("NOTE DISMISS OK", flush=True)
     assert r.returncode == 0, f"figlio uscito con {r.returncode}:\n{r.stderr}"
 
 
+def test_brain_icon_tinted_and_sized():
+    # il toggle thinking usa un'icona tinta (grigia/blu) come il globo: il
+    # glifo deve riempire il riquadro e il fallback deve comunque produrre
+    # un'icona valida
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+
+    QApplication.instance() or QApplication([])
+    from olladesk import theme
+
+    for color in ("#9b9b9b", theme.WEB_ACTIVE_COLOR):
+        img = theme.brain_icon(color).pixmap(18, 18).toImage()
+        opaque = sum(
+            1 for x in range(18) for y in range(18)
+            if img.pixelColor(x, y).alpha() > 8
+        )
+        assert opaque > 18 * 18 * 0.2, (color, opaque)   # glifo presente
+    fb = theme._brain_fallback_icon("#9b9b9b", 18).pixmap(18, 18).toImage()
+    assert any(
+        fb.pixelColor(x, y).alpha() > 8 for x in range(18) for y in range(18)
+    )
+
+
 def main() -> int:
     failed = 0
     for name, fn in sorted(globals().items()):
