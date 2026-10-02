@@ -145,6 +145,10 @@ class SharedOllamaServer(QObject):
         # le sonde di un ciclo precedente (start/stop ravvicinati) non devono
         # parlare per quella nuova
         self._generation = 0
+        # True quando l'istanza che serve la porta è raggiungibile dagli altri
+        # dispositivi: processo nostro con bind di rete, oppure istanza esterna
+        # verificata con la sonda LAN
+        self.lan_shared = False
 
     # ------------------------------------------------------------------ API
 
@@ -169,6 +173,7 @@ class SharedOllamaServer(QObject):
 
     def stop(self) -> None:
         self._generation += 1   # le sonde in volo non devono più rispondere
+        self.lan_shared = False
         self._poll_timer.stop()
         proc, self._proc = self._proc, None
         if proc is not None:
@@ -223,6 +228,7 @@ class SharedOllamaServer(QObject):
             if reachable:
                 # la sonda dall'IP LAN della stessa macchina dimostra il bind,
                 # non l'apertura del firewall: la dicitura resta prudente
+                self.lan_shared = True
                 self._set_state(
                     "external",
                     f"Ollama è già attivo sulla porta {port} e in ascolto su tutte "
@@ -231,6 +237,7 @@ class SharedOllamaServer(QObject):
                     "firewall (es. ufw/firewalld) e la stessa rete Wi-Fi.",
                 )
             else:
+                self.lan_shared = False
                 self._set_state(
                     "external",
                     "Ollama di sistema risponde solo su questo PC (bind 127.0.0.1): "
@@ -244,6 +251,7 @@ class SharedOllamaServer(QObject):
             if reachable:
                 self._poll_timer.stop()
                 bind = self._cfg[0]
+                self.lan_shared = bind != "127.0.0.1"
                 if bind == "127.0.0.1":
                     self._set_state(
                         "running",

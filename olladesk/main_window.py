@@ -873,12 +873,15 @@ class MainWindow(QMainWindow):
 
     def _copy_share_urls(self) -> None:
         # copia solo indirizzi davvero raggiungibili dagli altri dispositivi:
-        # processo nostro in ascolto sulle interfacce di rete
-        if self._share.state() != "running" or self.settings.get("share_bind") == "127.0.0.1":
+        # il processo nostro in ascolto sulle interfacce di rete, oppure
+        # un'istanza esterna verificata dalla sonda LAN (es. Ollama di
+        # sistema già configurato su 0.0.0.0)
+        if not self._share.lan_shared:
             self.chat_area.add_system_note(
                 "⚠ Nessun indirizzo di rete valido da copiare:\n"
-                "la condivisione non è attiva in rete (processo non avviato da "
-                "OllaDesk o bind solo locale): vedi il tooltip di 🔗."
+                "chi serve la porta non è raggiungibile dalla rete (processo "
+                "assente, bind solo locale o istanza esterna chiusa in locale): "
+                "vedi il tooltip di 🔗."
             )
             return
         urls = server_share.lan_urls(int(self.settings.get("share_port", 11434)))

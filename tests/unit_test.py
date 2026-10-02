@@ -769,6 +769,67 @@ os._exit(0)
     assert r.returncode == 0, f"figlio uscito con {r.returncode}:\n{r.stderr}"
 
 
+def test_share_lan_shared_flag():
+    # il flag decide quando copiare gli indirizzi: nostra istanza con bind di
+    # rete, o istanza esterna raggiungibile dalla sonda LAN
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+
+    QApplication.instance() or QApplication([])
+    from olladesk import server_share
+
+    srv = server_share.SharedOllamaServer()
+    srv._cfg = ("0.0.0.0", 11434)
+    srv._generation = 1
+
+    srv._set_state("starting", "")
+    srv._on_probe(True, "external-lan", 1)
+    assert srv.lan_shared is True            # istanza di sistema raggiungibile
+
+    srv._set_state("starting", "")
+    srv._on_probe(False, "external-lan", 1)
+    assert srv.lan_shared is False           # bind 127.0.0.1 del servizio
+
+    srv._set_state("starting", "")
+    srv._on_probe(True, "spawn-check", 1)
+    assert srv.lan_shared is True            # nostro processo, bind di rete
+
+    srv._cfg = ("127.0.0.1", 11434)
+    srv._set_state("starting", "")
+    srv._on_probe(True, "spawn-check", 1)
+    assert srv.lan_shared is False           # nostro processo, solo locale
+
+    srv._on_probe(True, "external-lan", 1)   # riattiva, poi stop azzera
+    srv.stop()
+    assert srv.lan_shared is False
+
+
+def test_share_copy_respects_lan_shared():
+    # regressione I4: con l'Ollama di sistema già raggiungibile in rete il
+    # clic su 🔗 deve COPIARE gli indirizzi, non rifiutare
+    with _isolated_config():
+        win = _make_window()
+        try:
+            from PySide6.QtGui import QGuiApplication
+
+            from olladesk import server_share
+
+            QGuiApplication.clipboard().setText("")
+            win._share.lan_shared = False
+            win._copy_share_urls()
+            assert QGuiApplication.clipboard().text() == ""   # rifiutato
+
+            win._share.lan_shared = True
+            win._copy_share_urls()
+            urls = server_share.lan_urls(int(win.settings.get("share_port", 11434)))
+            text = QGuiApplication.clipboard().text()
+            if urls:   # senza interfacce di rete non c'è nulla da copiare
+                assert text == "\n".join(urls), text
+        finally:
+            win._really_quit = True
+            win.close()
+
+
 def main() -> int:
     failed = 0
     for name, fn in sorted(globals().items()):
