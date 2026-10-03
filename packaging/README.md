@@ -102,6 +102,14 @@ gpg --keyserver hkps://keys.openpgp.org --send-keys 5B166C1B4AD7428C74A07D5BA337
 gpg --keyserver hkps://keyserver.ubuntu.com --send-keys 5B166C1B4AD7428C74A07D5BA3370987A0576694
 ```
 
+keys.openpgp.org pubblica l'uid (nome ed email) solo dopo la conferma
+dell'indirizzo: senza, `gpg --recv-keys` da lì risponde «chiave non
+trovata» anche se il server ha la chiave. Per chiedere la conferma:
+`gpg --export 5B166C1B4AD7428C74A07D5BA3370987A0576694 | curl -T - https://keys.openpgp.org`
+e segui il link stampato.
+
+Ricarica anche la copia sull'account GitHub (sezione 6).
+
 ### 3. Environment `release` su GitHub
 
 Settings → Environments → New environment, nome `release`:
@@ -170,6 +178,41 @@ autenticazione (repository privato o tag non pubblicato). Senza il secret
 il passo di pubblicazione viene saltato con un avviso e il resto della
 release procede.
 
+### 6. Chiave sull'account GitHub (tag «Verified»)
+
+GitHub mostra un tag firmato come «Verified» solo se la chiave pubblica è
+fra le GPG key dell'account e il suo uid (`gradia@disroot.org`) è un
+indirizzo verificato. Si carica una copia **senza la sottochiave della
+CI**: i tag del maintainer risultano «Verified», mentre una CI compromessa
+non può produrre tag o commit «Verified» (con la sua sottochiave la firma
+resta «Unverified» su GitHub e `scripts/verify-tag.sh` la rifiuta).
+
+```bash
+gpg --armor --export \
+    --export-filter drop-subkey="fpr = <CI>" \
+    5B166C1B4AD7428C74A07D5BA3370987A0576694 > /tmp/olladesk-github.asc
+gpg --show-keys --with-subkey-fingerprints /tmp/olladesk-github.asc   # niente <CI>
+gh auth refresh -h github.com -s admin:gpg_key     # una volta: permesso sulle chiavi GPG
+gh gpg-key add /tmp/olladesk-github.asc --title "OllaDesk release signing (senza CI)"
+```
+
+GitHub non aggiorna una chiave già caricata e non ne accetta due con la
+stessa primaria: dopo una proroga delle scadenze o una rotazione della
+sottochiave dei tag va cancellata e ricaricata.
+
+```bash
+gh gpg-key list                         # l'ID della chiave è A3370987A0576694
+gh gpg-key delete A3370987A0576694
+gh gpg-key add /tmp/olladesk-github.asc --title "OllaDesk release signing (senza CI)"
+```
+
+Tra la cancellazione e il nuovo caricamento i tag risultano per qualche
+istante «Unverified». Controllo:
+
+```bash
+gh api repos/gradia64/OllaDesk/git/tags/$(git rev-parse vX.Y.Z) --jq .verification.reason   # valid
+```
+
 ## Rilascio
 
 1. Porta `__version__` in `olladesk/__init__.py` alla nuova versione,
@@ -199,7 +242,8 @@ gpg --quick-add-key 5B166C1B4AD7428C74A07D5BA3370987A0576694 ed25519 sign 2y
 Aggiorna `CI_SIGNING_SUBKEY` in `scripts/release-keys.sh`, ripubblica la
 chiave pubblica (sezione 2), ricarica `GPG_PRIVATE_KEY` nell'environment e
 sostituisci la chiave SSH della CI nel profilo AUR. La sottochiave dei tag
-non si tocca.
+non si tocca, e nemmeno la copia sull'account GitHub (sezione 6), che non
+contiene la sottochiave della CI.
 
 **Scadenze**: prorogale prima che scadano (la primaria il 30/09/2029, le
 sottochiavi 3 e 2 anni dopo la creazione), poi ripubblica la chiave pubblica:
@@ -209,10 +253,15 @@ gpg --quick-set-expire 5B166C1B4AD7428C74A07D5BA3370987A0576694 3y
 gpg --quick-set-expire 5B166C1B4AD7428C74A07D5BA3370987A0576694 2y <sottochiave>
 ```
 
+Se hai prorogato la primaria o la sottochiave dei tag, ricarica anche la
+copia sull'account GitHub (sezione 6): altrimenti, dopo la vecchia
+scadenza, i tag nuovi risultano «Unverified».
+
 **Rotazione della sottochiave dei tag**: aggiungi la nuova a
 `TAG_SIGNING_SUBKEYS` (separate da spazi) prima di firmare con essa, e togli
 la vecchia solo quando non serve più verificare tag nuovi con quella.
-Revocarla invaliderebbe la verifica di tutti i tag che ha firmato.
+Revocarla invaliderebbe la verifica di tutti i tag che ha firmato. Ricarica
+la copia sull'account GitHub (sezione 6) con la nuova sottochiave.
 
 ## Script
 
