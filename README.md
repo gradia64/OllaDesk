@@ -127,9 +127,11 @@ gpg --import olladesk-release-key.asc   # impronta: vedi «Verifica delle firme�
 makepkg -si
 ```
 
-makepkg verifica la firma GPG del tarball sorgente (`validpgpkeys` nel
-PKGBUILD): se la chiave di release non è nel tuo portachiavi la build si ferma.
-Importala dal file `olladesk-release-key.asc` allegato a ogni release
+Dalla 0.2.5 il PKGBUILD clona da GitHub il tag della versione e makepkg ne
+verifica la firma GPG (`?signed` e `validpgpkeys` nel PKGBUILD): se la chiave
+di release non è nel tuo portachiavi, o è una copia precedente al 03/10/2026
+senza le sottochiavi nuove, la build si ferma. Importala (o reimportala) dal
+file `olladesk-release-key.asc` allegato a ogni release
 (`gpg --import olladesk-release-key.asc`) dopo averne controllato l'impronta.
 Ogni release include anche il pacchetto già costruito
 (`olladesk-<versione>-1-any.pkg.tar.zst`, installabile con `sudo pacman -U`).
@@ -155,7 +157,10 @@ la disinstallazione è `sudo apt remove olladesk`.
 
 Dalla 0.2.3 ogni file della release ha una firma GPG staccata (`.sig`) fatta
 con la chiave di release del progetto, pubblicata come
-`olladesk-release-key.asc` nella release e in `packaging/` nel repository:
+`olladesk-release-key.asc` nella release e in `packaging/` nel repository.
+Dalla 0.2.5 firmano due sottochiavi della stessa chiave, con ruoli separati:
+una i tag git (solo il maintainer), l'altra gli allegati (la CI). L'impronta
+da controllare resta quella della chiave primaria:
 
 ```
 gradia (OllaDesk release signing) <gradia@disroot.org>

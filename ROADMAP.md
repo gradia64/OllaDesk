@@ -16,6 +16,7 @@ incluso).
 | 3 | Icona dell'app a piena dimensione nella tray (viewBox ritagliato sui bordi del disegno) | collaudo 0.2.4 | ☑ |
 | 4 | Pulsante ✕ per chiudere le note di sistema in chat | collaudo 0.2.4 | ☑ |
 | 5 | Icona thinking come il globo della ricerca web: tinta grigia da spento/blu da attivo, senza cornice, stessa dimensione ottica (`theme.brain_icon` disegnata con QPainter, senza dipendere dal font emoji; stato corretto già all'avvio) | collaudo 0.2.4 | ☑ |
+| 6 | Firma di rilascio a due sottochiavi come in KlamAV-Py: tag firmati dal maintainer con una sottochiave che non lascia la sua macchina, allegati firmati dalla CI con un'altra, primaria fuori dalla CI; AUR costruisce dal tag firmato; secret solo nell'environment `release` con approvazione (`scripts/release-keys.sh`, `scripts/verify-tag.sh`, modello di fiducia in `packaging/README.md`) | sicurezza | ☑ |
 
 Rilasciate nella 0.2.5; i test offline e i collaudi reali con Ollama
 (gui_smoke, gui_features con thinking e2e) passano.
@@ -24,7 +25,7 @@ Rilasciate nella 0.2.5; i test offline e i collaudi reali con Ollama
 
 | # | Voce | Note | Stato |
 |---|------|------|-------|
-| T1 | Primo rilascio con le action aggiornate (Node 24) | `checkout` v7.0.1, `setup-python` v7.0.0, `upload-artifact` v7.0.1, `download-artifact` v8.0.1, runner fissati su `ubuntu-24.04`. `test`, `dist` e `arch` sono già verificati con un avvio manuale; il job `publish` (release GitHub + AUR) gira solo sui tag: va controllato al tag `v0.2.5` | ☐ |
+| T1 | Primo rilascio con le action aggiornate (Node 24) | `checkout` v7.0.1, `setup-python` v7.0.0, `upload-artifact` v7.0.1, `download-artifact` v8.0.1, runner fissati su `ubuntu-24.04`. `test`, `dist` e `arch` sono già verificati con un avvio manuale; il job `publish` (release GitHub + AUR) gira solo sui tag: va controllato al tag `v0.2.5`. Dalla voce #6 anche `verify` e `arch` (dal tag firmato) girano solo sui tag | ☐ |
 | T2 | Test e2e della condivisione API | Collaudo manuale completato il 2026-10-02 (telefono collegato a `http://192.168.1.83:11434`; firewalld sistemato con regola rich limitata alla LAN). Resta da valutare un test automatico con bind `127.0.0.1` su una porta libera | ☐ |
 
 ## Promemoria per il rilascio
@@ -34,6 +35,10 @@ Rilasciate nella 0.2.5; i test offline e i collaudi reali con Ollama
   README.
 - Prima del tag: `tests/unit_test.py` e i collaudi reali
   `tests/gui_smoke.py` e `tests/gui_features.py`.
+- Dalla 0.2.5 il tag va firmato con la sottochiave dei tag
+  (`git tag -s vX.Y.Z`, poi `scripts/verify-tag.sh vX.Y.Z` prima del push) e
+  `publish` va approvato nell'environment `release`: vedi
+  `packaging/README.md`, «Rilascio».
 
 ---
 

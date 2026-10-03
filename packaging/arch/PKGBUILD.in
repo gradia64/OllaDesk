@@ -1,5 +1,5 @@
 #@ Modello del PKGBUILD pubblicato su AUR. scripts/prepare-aur.sh sostituisce
-#@ PKGVER, SHA256 e FINGERPRINT (tra chiocciole) ed elimina queste righe «#@».
+#@ PKGVER e FINGERPRINT (tra chiocciole) ed elimina queste righe «#@».
 #@ I @VERSION@/@DATE@ in package() sono i segnaposto della manpage: restano.
 #@ Il layout installato è lo stesso del pacchetto .deb (scripts/build-deb.sh).
 # Maintainer: gradia <gradia@disroot.org>
@@ -12,25 +12,31 @@ arch=('any')
 url="https://github.com/gradia64/OllaDesk"
 license=('GPL-3.0-or-later')
 depends=('python' 'pyside6' 'hicolor-icon-theme')
+makedepends=('git')
 optdepends=(
   'ollama: server LLM locale'
   'python-pypdf: testo dei PDF allegati'
   'python-keyring: chiave API della ricerca web nel portachiavi (KWallet)'
   'qt6-svg: icona SVG della finestra'
 )
-# tarball e firma pubblicati nella release GitHub da .github/workflows/release.yml
-source=("$url/releases/download/v$pkgver/$pkgname-$pkgver.tar.gz"{,.sig})
-sha256sums=('@SHA256@'
-            'SKIP')
-validpgpkeys=('@FINGERPRINT@')  # chiave di release: packaging/olladesk-release-key.asc
+# Sorgente git dal tag firmato dal maintainer: con «?signed» makepkg verifica
+# la firma del tag annotato e la accetta solo da una chiave in validpgpkeys.
+# Il prefisso «$pkgname::» fissa la cartella del clone in $srcdir/olladesk.
+source=("$pkgname::git+$url.git#tag=v$pkgver?signed")
+# SKIP per scelta: l'integrità del sorgente la garantisce la firma del tag
+# (?signed + validpgpkeys), non un hash.
+sha256sums=('SKIP')
+# Impronta della primaria: makepkg accetta anche le firme delle sue
+# sottochiavi, quindi una rotazione delle sottochiavi non cambia questa riga.
+validpgpkeys=('@FINGERPRINT@')  # gradia (OllaDesk release signing)
 
 check() {
-  cd "$pkgname-$pkgver"
+  cd "$pkgname"
   QT_QPA_PLATFORM=offscreen python tests/unit_test.py
 }
 
 package() {
-  cd "$pkgname-$pkgver"
+  cd "$pkgname"
 
   install -d "$pkgdir/usr/share/olladesk"
   cp -r olladesk "$pkgdir/usr/share/olladesk/"

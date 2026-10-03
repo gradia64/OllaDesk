@@ -25,19 +25,18 @@ for f in PKGBUILD .SRCINFO; do
 done
 VERSION="$(sed -n 's/^pkgver=//p' "$AUR/PKGBUILD")"
 
-# le sorgenti devono essere scaricabili da CHIUNQUE (senza token): con un
-# repository GitHub privato gli URL della release rispondono 404 e il
-# pacchetto AUR sarebbe impossibile da costruire. Meglio non pubblicarlo.
+# il sorgente (tag v<versione> su GitHub) deve essere clonabile da CHIUNQUE,
+# senza credenziali: con un repository privato, o un tag non ancora
+# pubblicato, il pacchetto AUR sarebbe impossibile da costruire. Meglio non
+# pubblicarlo.
 if [ -z "${AUR_SKIP_SOURCE_CHECK:-}" ]; then
-    while read -r url; do
-        code="$(curl -s -o /dev/null -w '%{http_code}' -L -r 0-0 "$url" || true)"
-        case "$code" in
-            200|206) ;;
-            *) echo "sorgente non scaricabile pubblicamente (HTTP $code): $url" >&2
-               echo "il repository GitHub è pubblico e la release è pubblicata?" >&2
-               exit 1 ;;
-        esac
-    done < <(sed -n 's/^\tsource = //p' "$AUR/.SRCINFO")
+    url="$(sed -n 's/^url="\(.*\)"$/\1/p' "$AUR/PKGBUILD")"
+    if ! GIT_TERMINAL_PROMPT=0 git -c credential.helper= ls-remote --exit-code --tags \
+            "$url.git" "refs/tags/v$VERSION" >/dev/null 2>&1; then
+        echo "tag v$VERSION non clonabile pubblicamente da $url.git" >&2
+        echo "il repository GitHub è pubblico e il tag è stato pubblicato?" >&2
+        exit 1
+    fi
 fi
 
 TMP="$(mktemp -d)"
