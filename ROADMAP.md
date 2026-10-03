@@ -14,7 +14,7 @@ client puro dell'API Ollama, streaming NDJSON in `ChatWorker`.
 | 5 | **pytest**: `tests/release_tools_test.py` viene raccolto e dà 10 errori (le funzioni prendono `tmp, keys`); escluderlo (es. `testpaths` in `pyproject.toml`) e allineare il README (oggi: 57 passati, 10 errori) | revisione 0.2.5 | ☑ |
 | 6 | **Test degli script di rilascio più rigorosi**: verificare il messaggio d'errore e non solo il codice d'uscita; senza gpg/git uscire con errore in CI invece di «SKIP» con successo | revisione 0.2.5 | ☑ |
 | 7 | **Rifiniture**: controllo della versione vuota in `prepare-aur.sh`; commento superato in `build-source.sh` (il PKGBUILD clona il tag); refuso `OLLADEK_CHILD` in `unit_test.py`; ordine di `SHA256SUMS` indipendente dal locale (`LC_ALL=C`); PySide6 fissato in CI (`>=6.6,<7`); commento «stesso layout del .deb» nel PKGBUILD (il pacchetto Arch contiene i `.pyc`, per prassi Arch) | revisione 0.2.5 | ☑ |
-| 8 | **Falso positivo del suggerimento su `think`**: `if "think" in err.lower()` scatta per qualunque errore che contenga «thinking» | revisione 0.2.5 | ☐ |
+| 8 | **Falso positivo del suggerimento su `think`**: `if "think" in err.lower()` scatta per qualunque errore che contenga «thinking» | revisione 0.2.5 | ☑ |
 
 Le voci 2–8 vengono dalle revisioni esterne della 0.2.5 (DeepSeek 4.1
 Flash, GLM 5.3 Flash), verificate sul codice e sulla release pubblicata e

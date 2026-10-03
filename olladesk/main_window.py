@@ -55,6 +55,7 @@ class MainWindow(QMainWindow):
         self._preferred_model: str | None = None
         self._pending_stream: str = ""
         self._pending_think: str = ""   # ragionamento ricevuto nel turno corrente
+        self._think_off_sent = False     # la richiesta in corso ha "think": false
         self._pending_user: dict | None = None
         self._chat_stopped = False     # scarta i segnali del worker dopo uno stop
         self._search_stopped = False
@@ -654,6 +655,7 @@ class MainWindow(QMainWindow):
         # server); solo quando l'utente lo disattiva si invia "think": false
         if not s.get("thinking", True):
             payload["think"] = False
+        self._think_off_sent = payload.get("think") is False
 
         self._pending_stream = ""
         self._pending_think = ""
@@ -727,7 +729,9 @@ class MainWindow(QMainWindow):
             self._persist_chat()
             self.sidebar.set_chats(self.chats, self.current_chat["id"])
         extra = ""
-        if "think" in err.lower():
+        # solo se la richiesta aveva davvero "think": false: con 🧠 attivo il
+        # campo non viene inviato, e «thinking» in un altro errore non c'entra
+        if self._think_off_sent and "think" in err.lower():
             extra = (
                 "\n\nSuggerimento: il modello potrebbe non accettare il campo «think»: "
                 "riattiva il pulsante 🧠 nell'input."

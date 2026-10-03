@@ -707,6 +707,33 @@ def _thinking_texts(win) -> list[str]:
     return out
 
 
+def test_think_hint_only_when_think_false_was_sent():
+    # il suggerimento «riattiva 🧠» ha senso solo se la richiesta aveva
+    # "think": false; prima bastava la parola «think» nell'errore (anche
+    # «thinking» in un errore qualsiasi, con il thinking attivo)
+    from unittest.mock import patch
+
+    with _isolated_config():
+        win = _make_window()
+        try:
+            hint = "riattiva il pulsante 🧠"
+            cases = [
+                (False, "model does not support thinking", False),   # 🧠 attivo
+                (True, "model does not support thinking", True),     # 🧠 spento
+                (True, "connection refused", False),                 # errore estraneo
+            ]
+            for sent_false, err, expected in cases:
+                notes: list[str] = []
+                win._think_off_sent = sent_false
+                with patch.object(win.chat_area, "add_system_note", notes.append):
+                    win._on_failed(err)
+                assert len(notes) == 1, notes
+                assert (hint in notes[0]) is expected, (sent_false, err, notes[0])
+        finally:
+            win._really_quit = True
+            win.close()
+
+
 def test_share_state_updates_indicator():
     # B1: lo stato del server condiviso deve riflettersi sull'indicatore 🔗
     with _isolated_config():
