@@ -495,6 +495,68 @@ def test_chat_worker_stop_during_stream_pause():
         server.server_close()
 
 
+def test_web_search_worker_stop_during_read():
+    # regressione (revisione 0.2.5): WebSearchWorker.stop() chiudeva la
+    # risposta dal thread principale mentre il worker era fermo in read()
+    # → UI bloccata fino al timeout di rete (misurati 9,7 s con ■ durante
+    # una ricerca). Stesso schema già corretto per ChatWorker.
+    import threading
+    import time
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+
+    QApplication.instance() or QApplication([])
+    from olladesk.web_search import WebSearchWorker
+
+    release = threading.Event()
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *_a):
+            pass
+
+        def do_GET(self):  # noqa: N802 (API http.server)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", "1000")
+            self.end_headers()
+            try:
+                self.wfile.write(b'{"results": [')
+                self.wfile.flush()
+                release.wait(10)   # la risposta si ferma a metà
+            except OSError:
+                pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    server.daemon_threads = True
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    url = f"http://127.0.0.1:{server.server_address[1]}"
+
+    w = WebSearchWorker("prova", 3, provider="searxng", searxng_url=url)
+    failed: list[str] = []
+    w.failed.connect(failed.append)
+    try:
+        w.start()
+        deadline = time.monotonic() + 5
+        while not w._conns and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert w._conns, "il worker non ha aperto la connessione"
+        time.sleep(0.2)   # il worker è fermo in read()
+
+        t0 = time.monotonic()
+        w.stop()
+        elapsed = time.monotonic() - t0
+        assert elapsed < 1.0, f"stop() ha bloccato il thread principale per {elapsed:.1f} s"
+        assert w.wait(3000), "il worker non è uscito dopo lo stop"
+    finally:
+        release.set()
+        w.wait(3000)
+        server.shutdown()
+        server.server_close()
+    assert not failed, failed   # fermato: nessun errore da mostrare
+
+
 def test_chat_worker_emits_thinking():
     # il ChatWorker deve distinguere thinking da content, sia in risposta
     # singola che in streaming NDJSON

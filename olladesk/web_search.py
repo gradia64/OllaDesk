@@ -16,6 +16,8 @@ import urllib.request
 
 from PySide6.QtCore import QThread, Signal
 
+from .ollama_client import abort_response
+
 _UA = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
@@ -83,7 +85,7 @@ def _fetch(url: str, data: dict | None = None, timeout: float = 12,
     )
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         if conn_store is not None:
-            conn_store.append(resp)   # permette allo stop() di chiuderla
+            conn_store.append(resp)   # permette allo stop() di interromperla
         return resp.read().decode("utf-8", "replace")
 
 
@@ -297,11 +299,12 @@ class WebSearchWorker(QThread):
 
     def stop(self) -> None:
         self._stopped = True
-        for conn in self._conns:
-            try:
-                conn.close()
-            except Exception:
-                pass
+        # solo lo shutdown del socket: close() dal thread principale
+        # aspetterebbe il lock del buffer tenuto dal worker fermo in read()
+        # (UI bloccata fino al timeout di rete). La chiusura la fa il
+        # worker, all'uscita dal with di _fetch.
+        for conn in list(self._conns):
+            abort_response(conn)
 
     @property
     def stopped(self) -> bool:
