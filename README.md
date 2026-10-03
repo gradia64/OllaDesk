@@ -281,11 +281,13 @@ python3 tests/gui_features.py   # allegati, ricerca web, modelli, aggiornamenti
 python3 tests/gui_errors.py     # percorsi di errore (server offline)
 python3 tests/unit_test.py      # unit test delle funzioni pure (senza rete)
 python3 tests/repro_qthread_crash.py  # chiusura dialoghi con worker bloccati (senza rete)
+python3 tests/release_tools_test.py   # script di rilascio: firma dei tag e degli allegati (senza rete)
 ```
 
 Gli script `gui_*.py` sono collaudi end-to-end (richiedono Ollama e, per la
-ricerca web, la rete) e non vengono raccolti da `pytest`, che esegue solo
-`tests/unit_test.py`. La configurazione di prova vive in una cartella
+ricerca web, la rete). `pytest` raccoglie solo `tests/unit_test.py`;
+`tests/release_tools_test.py` ha il suo runner e si esegue con `python3`
+(`tests/conftest.py`). La configurazione di prova vive in una cartella
 temporanea nuova a ogni esecuzione.
 
 ```bash
@@ -333,6 +335,7 @@ tests/gui_errors.py         collaudo percorsi di errore (offline)
 tests/unit_test.py          unit test delle funzioni pure
 tests/repro_qthread_crash.py regressione: dialoghi distrutti con worker bloccati
 tests/offline_app_update.py controllo aggiornamenti di OllaDesk (finto GitHub)
+tests/release_tools_test.py script di rilascio (chiavi e repository temporanei)
 olladesk.desktop            voce per il menu applicazioni di KDE
 packaging/                  file comuni .deb/Arch, modello PKGBUILD, chiave di release
 scripts/                    build (.deb, sorgenti, Arch), firma, pubblicazione AUR
