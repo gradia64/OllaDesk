@@ -859,7 +859,6 @@ def test_quit_from_hidden_tray_exits_app():
 import os, sys, tempfile
 os.environ["QT_QPA_PLATFORM"] = "offscreen"
 os.environ["XDG_CONFIG_HOME"] = tempfile.mkdtemp()
-os.environ["OLLADEK_CHILD"] = "1"
 sys.path.insert(0, {root!r})
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon

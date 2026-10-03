@@ -1,8 +1,8 @@
 #!/bin/bash
 # Tarball dei sorgenti di una release: dist/olladesk-<versione>.tar.gz
 #
-# È la sorgente del PKGBUILD Arch/AUR (firmata con la chiave di release e
-# verificata da makepkg tramite validpgpkeys). Viene preferita all'archivio
+# Allegato alla release e firmato dalla CI. Il PKGBUILD Arch/AUR non lo usa
+# più (dalla 0.2.5 clona il tag firmato). Viene preferito all'archivio
 # automatico di GitHub, i cui checksum non sono garantiti stabili nel tempo.
 #
 # Contenuto: i file tracciati da git al commit indicato (default HEAD), con

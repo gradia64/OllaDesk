@@ -17,6 +17,10 @@ OUT="${1:-build/aur}"
 . "$ROOT/scripts/release-keys.sh"
 
 VERSION="$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' olladesk/__init__.py)"
+if [ -z "$VERSION" ]; then
+    echo "versione non leggibile da olladesk/__init__.py" >&2
+    exit 1
+fi
 
 mkdir -p "$OUT"
 # solo i segnaposto del modello: @VERSION@/@DATE@ in package() appartengono

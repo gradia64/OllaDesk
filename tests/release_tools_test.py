@@ -29,7 +29,8 @@ PASSPHRASE = "segreta di prova"
 def _env(home: Path, **extra) -> dict:
     env = {k: v for k, v in os.environ.items()
            if not k.startswith(("GPG_", "GNUPG", "GIT_", "OLLADESK_", "AUR_"))}
-    env.update(HOME=str(home), LC_ALL="C", **extra)
+    env.update(HOME=str(home), LC_ALL="C")
+    env.update(extra)   # un test può sostituire anche LC_ALL
     return env
 
 
@@ -235,6 +236,33 @@ def test_firma_con_un_altra_chiave_rifiutata(tmp, keys):
         assert not list(dist.glob("*.sig")), caso
         assert f"nessuna chiave privata della sottochiave della CI {keys.ci_subkey}" in proc.stderr, \
             (caso, proc.stderr)
+
+
+def test_sha256sums_ordinato_come_in_c(tmp, keys):
+    # l'ordine delle righe non deve dipendere dal locale di chi firma: con
+    # it_IT il glob metteva «olladesk_X.deb» prima di «olladesk-X.tar.gz»
+    repo = _project(tmp, keys)
+    dist = _dist(tmp)
+    (dist / "olladesk-1.0.0.tar.gz").write_bytes(b"src")
+    _run(["scripts/sign-release.sh", dist], tmp, cwd=repo, **keys.roles(),
+         GPG_PRIVATE_KEY=keys.subkey_secret(keys.ci_subkey), GPG_PASSPHRASE=PASSPHRASE,
+         LC_ALL="", LANG="it_IT.UTF-8")
+    names = [line.split()[1] for line in (dist / "SHA256SUMS").read_text().splitlines()]
+    assert names == sorted(names), names   # sorted() di Python = ordine dei byte, come C
+
+
+def test_prepare_aur_rifiuta_versione_vuota(tmp, keys):
+    proj = tmp / "progetto"
+    (proj / "olladesk").mkdir(parents=True)
+    (proj / "scripts").mkdir()
+    (proj / "packaging" / "arch").mkdir(parents=True)
+    for name in ("prepare-aur.sh", "release-keys.sh"):
+        shutil.copy(SCRIPTS / name, proj / "scripts" / name)
+    shutil.copy(ROOT / "packaging/arch/PKGBUILD.in", proj / "packaging/arch/PKGBUILD.in")
+    (proj / "olladesk" / "__init__.py").write_text('__version__ = ""\n')
+    proc = _run([proj / "scripts" / "prepare-aur.sh", tmp / "aur"], tmp, cwd=proj, check=False)
+    assert proc.returncode != 0 and "versione non leggibile" in proc.stderr, proc.stderr
+    assert not (tmp / "aur" / "PKGBUILD").exists()
 
 
 # -- scripts/publish-aur.sh -----------------------------------------------------

@@ -1,7 +1,8 @@
 #@ Modello del PKGBUILD pubblicato su AUR. scripts/prepare-aur.sh sostituisce
 #@ PKGVER e FINGERPRINT (tra chiocciole) ed elimina queste righe «#@».
 #@ I @VERSION@/@DATE@ in package() sono i segnaposto della manpage: restano.
-#@ Il layout installato è lo stesso del pacchetto .deb (scripts/build-deb.sh).
+#@ I file installati sono gli stessi del pacchetto .deb (scripts/build-deb.sh);
+#@ in più, per prassi di Arch, il bytecode compilato (__pycache__).
 # Maintainer: gradia <gradia@disroot.org>
 
 pkgname=olladesk

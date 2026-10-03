@@ -65,6 +65,9 @@ fi
 
 cd "$DIR"
 shopt -s nullglob
+# ordine del glob (e quindi di SHA256SUMS) indipendente dal locale: con
+# it_IT «olladesk_X.deb» viene prima di «olladesk-X.tar.gz», in C no
+LC_COLLATE=C
 files=()
 for f in *; do
     case "$f" in

@@ -43,7 +43,7 @@ jobs:
           desktop-file-validate olladesk.desktop
 
       - name: Dipendenze test (PySide6 per i worker Qt)
-        run: python3 -m pip install --quiet PySide6
+        run: python3 -m pip install --quiet "PySide6>=6.6,<7"   # come pyproject.toml, senza salti di versione maggiore
 
       - name: Test unitari
         run: python3 tests/unit_test.py
