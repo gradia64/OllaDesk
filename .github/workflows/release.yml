@@ -82,6 +82,10 @@ jobs:
             exit 1
           fi
 
+      # la descrizione della release: scritta e riletta prima del tag
+      - name: Note di rilascio presenti
+        run: scripts/release-notes.sh "$GITHUB_REF_NAME" > /dev/null
+
   dist:
     needs: [test, verify]
     # sui tag dopo verify; a mano (workflow_dispatch) senza: verify lì è saltato
@@ -183,9 +187,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="${GITHUB_REF#refs/tags/}"
-          # se la release esiste già (creata a mano con le note) carica e basta
-          gh release create "$tag" dist/* --verify-tag --generate-notes --title "$tag" \
-            || gh release upload "$tag" dist/* --clobber
+          scripts/release-notes.sh "$tag" > "$RUNNER_TEMP/note.md"
+          # una release già esistente (creata a mano, o un rilancio) resta
+          # com'è: si caricano solo i file
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" dist/* --clobber
+          else
+            gh release create "$tag" dist/* --verify-tag --title "$tag" \
+              --notes-file "$RUNNER_TEMP/note.md"
+          fi
 
       - name: Pubblica su AUR
         env:

@@ -55,10 +55,10 @@ esegue, in ordine:
 | Job       | Cosa fa |
 |-----------|---------|
 | `test`    | unit test, test offline (worker, controllo aggiornamenti), test degli script di rilascio |
-| `verify`  | il tag è annotato e firmato dalla sottochiave dei tag (`scripts/verify-tag.sh`); tag = `__version__` |
+| `verify`  | il tag è annotato e firmato dalla sottochiave dei tag (`scripts/verify-tag.sh`); tag = `__version__`; note di rilascio presenti (`scripts/release-notes.sh`) |
 | `dist`    | tarball sorgente, `.deb`, lintian. Niente firme: qui non ci sono secret |
 | `arch`    | in un container `archlinux:base-devel`: PKGBUILD che clona il tag da GitHub e ne **verifica la firma**, `check()`, namcap, installazione e avvio di prova |
-| `publish` | **attende la tua approvazione** (environment `release`), poi: firma di tutti gli artefatti con la sottochiave della CI, upload sulla release GitHub, push del PKGBUILD su AUR |
+| `publish` | **attende la tua approvazione** (environment `release`), poi: firma di tutti gli artefatti con la sottochiave della CI, release GitHub con la descrizione da `packaging/release-notes/X.Y.Z.md`, push del PKGBUILD su AUR |
 
 Solo `publish` vede i secret. Avviato a mano (`workflow_dispatch`) il
 workflow esegue `test` e `dist`: `verify`, `arch` e `publish` servono un tag.
@@ -215,8 +215,16 @@ gh api repos/gradia64/OllaDesk/git/tags/$(git rev-parse vX.Y.Z) --jq .verificati
 
 ## Rilascio
 
-1. Porta `__version__` in `olladesk/__init__.py` alla nuova versione,
-   committa e fai il push di `main` con la CI verde.
+1. Scrivi le note in `packaging/release-notes/X.Y.Z.md`, nello stile delle
+   release precedenti (sezioni `## …`, voci in grassetto, link «Full
+   Changelog» in fondo): diventano la descrizione della release così come
+   sono, quindi rileggile.
+   ```bash
+   scripts/release-notes.sh X.Y.Z
+   ```
+   Porta `__version__` in `olladesk/__init__.py` alla nuova versione,
+   committa e fai il push di `main` con la CI verde (`tests/release_tools_test.py`
+   fallisce se la versione del codice non ha le sue note).
 2. Tag firmato con la sottochiave dei tag (sezione 4), verifica e push:
    ```bash
    git tag -s vX.Y.Z -m "OllaDesk X.Y.Z"
@@ -227,7 +235,9 @@ gh api repos/gradia64/OllaDesk/git/tags/$(git rev-parse vX.Y.Z) --jq .verificati
    è stato firmato con la chiave sbagliata.
 3. Segui il workflow (`gh run watch`) e approva `publish` quando `dist` e
    `arch` sono verdi. Se `publish` fallisce dopo l'upload si può
-   rilanciare: upload con `--clobber`, push AUR idempotente.
+   rilanciare: upload con `--clobber`, push AUR idempotente. Una release
+   già esistente (creata a mano o da un rilancio) non viene ricreata: si
+   caricano solo i file, e la descrizione resta quella che ha.
 
 ## Rotazione e revoca
 
@@ -271,6 +281,7 @@ Tutti gli script funzionano anche in locale, con gli stessi risultati della CI.
 |--------|-----|
 | `scripts/release-keys.sh` | impronte e ruoli delle chiavi (letto dagli altri script) |
 | `scripts/verify-tag.sh <tag>` | il tag è firmato dalla sottochiave dei tag |
+| `scripts/release-notes.sh <versione>` | note di rilascio della versione (`packaging/release-notes/`), con i controlli del job `verify` |
 | `scripts/build-source.sh [commit]` | `dist/olladesk-X.Y.Z.tar.gz` da `git archive` (riproducibile) |
 | `scripts/build-deb.sh` | `dist/olladesk_X.Y.Z_all.deb` (riproducibile) |
 | `scripts/sign-release.sh [dir]` | firme `.sig` + `SHA256SUMS` con la sottochiave della CI; verifica con la sola chiave pubblica del repository |

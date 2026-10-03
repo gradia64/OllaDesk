@@ -266,6 +266,28 @@ def test_pkgbuild_dal_tag_firmato(tmp, keys):
     assert not re.search(r"@(PKGVER|FINGERPRINT|SHA256)@", pkgbuild), pkgbuild
 
 
+def test_note_di_rilascio(tmp, keys):
+    # la descrizione della release viene dal repository: la versione del
+    # codice deve averle, e lo script rifiuta note mancanti o in bozza
+    version = re.search(r'__version__ = "(.+)"', (ROOT / "olladesk/__init__.py").read_text()).group(1)
+    ok = _run([SCRIPTS / "release-notes.sh", f"v{version}"], tmp)
+    assert ok.stdout.startswith("## ") and f"...v{version}" in ok.stdout, ok.stdout[:200]
+
+    notes = tmp / "note"
+    notes.mkdir()
+    (notes / "1.0.0.md").write_text("bozza senza sezioni\n")
+    (notes / "1.1.0.md").write_text("## Novità\n\n- voce\n")
+    (notes / "1.2.0.md").write_text(
+        "## Novità\n\n- voce\n\n**Full Changelog**: https://x/compare/v1.1.0...v1.2.0\n")
+    cases = {"1.0.0": "nessuna sezione", "1.1.0": "Full Changelog", "9.9.9": "mancanti"}
+    for v, msg in cases.items():
+        proc = _run([SCRIPTS / "release-notes.sh", v], tmp, check=False,
+                    OLLADESK_RELEASE_NOTES_DIR=notes)
+        assert proc.returncode != 0 and msg in proc.stderr, (v, proc.stderr)
+    good = _run([SCRIPTS / "release-notes.sh", "v1.2.0"], tmp, OLLADESK_RELEASE_NOTES_DIR=notes)
+    assert good.stdout.startswith("## Novità")
+
+
 def _jobs(text: str) -> dict:
     """Testo di ogni job di release.yml, per nome (indentazione a 2 spazi)."""
     body = text[text.index("\njobs:\n"):]
@@ -277,6 +299,9 @@ def test_workflow_verifica_il_tag_e_isola_i_secret(tmp, keys):
     text = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
     jobs = _jobs(text)
     assert "scripts/verify-tag.sh" in jobs["verify"]
+    # note di rilascio dal repository, controllate prima di pubblicare
+    assert "scripts/release-notes.sh" in jobs["verify"]
+    assert "--notes-file" in jobs["publish"] and "--generate-notes" not in text
     assert "needs: verify" in jobs["arch"] and "verify" in jobs["dist"].split("\n")[0]
     # nessun job firma tag o esporta chiavi
     assert "git tag" not in text and "export-secret-keys" not in text
