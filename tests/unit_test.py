@@ -973,12 +973,16 @@ def test_share_copy_respects_lan_shared():
             win._copy_share_urls()
             assert QGuiApplication.clipboard().text() == ""   # rifiutato
 
+            # indirizzi fissi: il controllo vale anche su un host senza rete
+            # (prima era dentro un «if urls:» e lì non verificava nulla)
+            from unittest.mock import patch
+
+            urls = ["http://192.168.1.20:11434", "http://10.0.0.5:11434"]
             win._share.lan_shared = True
-            win._copy_share_urls()
-            urls = server_share.lan_urls(int(win.settings.get("share_port", 11434)))
+            with patch.object(server_share, "lan_urls", return_value=urls):
+                win._copy_share_urls()
             text = QGuiApplication.clipboard().text()
-            if urls:   # senza interfacce di rete non c'è nulla da copiare
-                assert text == "\n".join(urls), text
+            assert text == "\n".join(urls), text
         finally:
             win._really_quit = True
             win.close()

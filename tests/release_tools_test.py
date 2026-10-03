@@ -41,6 +41,16 @@ def _run(cmd, home: Path, cwd=None, check=True, **extra):
     return proc
 
 
+def _require(tool: str) -> bool:
+    """True se lo strumento c'è; altrimenti salta il test in locale, ma in
+    CI (variabile CI impostata) lo fa fallire: lì deve esserci."""
+    if shutil.which(tool):
+        return True
+    assert not os.environ.get("CI"), f"{tool} assente in CI"
+    print(f"    ({tool} assente: test saltato)")
+    return False
+
+
 class Keyring:
     """Portachiavi temporaneo con una chiave «di rilascio» come quella vera
     (primaria [SC], una sottochiave per i tag e una per la CI) e una chiave
@@ -155,7 +165,14 @@ def test_tag_firmato_dalla_primaria_rifiutato(tmp, keys):
 
 
 def test_tag_non_valido_rifiutato(tmp, keys):
-    for caso in ("altra chiave", "annotato senza firma", "leggero"):
+    # il messaggio dice PERCHÉ è rifiutato: un codice d'uscita non zero da
+    # solo passerebbe anche se lo script morisse prima di verificare
+    attesi = {
+        "altra chiave": "non ha una firma valida della chiave di rilascio",
+        "annotato senza firma": "non ha una firma valida della chiave di rilascio",
+        "leggero": "non è un tag annotato",
+    }
+    for caso, messaggio in attesi.items():
         sub = tmp / caso.replace(" ", "_")
         sub.mkdir()
         repo = _project(sub, keys)
@@ -166,6 +183,7 @@ def test_tag_non_valido_rifiutato(tmp, keys):
         proc = _run(["scripts/verify-tag.sh", "v1.0.0"], sub, cwd=repo, check=False, **keys.roles())
         assert proc.returncode != 0, caso
         assert "firmato dal maintainer" not in proc.stdout, caso
+        assert messaggio in proc.stderr, (caso, proc.stderr)
 
 
 # -- scripts/sign-release.sh ----------------------------------------------------
@@ -215,6 +233,8 @@ def test_firma_con_un_altra_chiave_rifiutata(tmp, keys):
                     **keys.roles(), GPG_PRIVATE_KEY=secret, GPG_PASSPHRASE=PASSPHRASE)
         assert proc.returncode != 0, caso
         assert not list(dist.glob("*.sig")), caso
+        assert f"nessuna chiave privata della sottochiave della CI {keys.ci_subkey}" in proc.stderr, \
+            (caso, proc.stderr)
 
 
 # -- scripts/publish-aur.sh -----------------------------------------------------
@@ -293,8 +313,7 @@ def test_deb_installed_size_dal_contenuto(tmp, keys):
     # ed ext4 (328 contro 396 KiB per la 0.2.5), quindi .deb diverso a
     # parità di contenuto. Ora deve valere quanto dice il contenuto stesso:
     # file arrotondati al KiB, 1 KiB per directory e collegamenti.
-    if not shutil.which("dpkg-deb"):
-        print("    (dpkg-deb assente: test saltato)")
+    if not _require("dpkg-deb"):
         return
     clone = tmp / "clone"
     _run(["git", "clone", "-q", ROOT, clone], tmp)
@@ -362,6 +381,11 @@ def test_ruoli_delle_chiavi_coerenti_con_la_chiave_pubblica(tmp, keys):
 
 def main() -> int:
     if not all(shutil.which(t) for t in ("gpg", "git", "bash")):
+        # in CI questi test sono il controllo di sicurezza del rilascio: senza
+        # gli strumenti devono fallire, non risultare verdi senza copertura
+        if os.environ.get("CI"):
+            print("ERRORE: servono gpg, git e bash (in CI questi test non si saltano)")
+            return 1
         print("SKIP: servono gpg, git e bash")
         return 0
     base = Path(tempfile.mkdtemp(prefix="olladesk_release_test_"))
