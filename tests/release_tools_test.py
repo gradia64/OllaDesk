@@ -288,6 +288,29 @@ def test_note_di_rilascio(tmp, keys):
     assert good.stdout.startswith("## Novità")
 
 
+def test_deb_installed_size_dal_contenuto(tmp, keys):
+    # Installed-Size veniva da «du -sk»: blocchi allocati, diversi tra tmpfs
+    # ed ext4 (328 contro 396 KiB per la 0.2.5), quindi .deb diverso a
+    # parità di contenuto. Ora deve valere quanto dice il contenuto stesso:
+    # file arrotondati al KiB, 1 KiB per directory e collegamenti.
+    if not shutil.which("dpkg-deb"):
+        print("    (dpkg-deb assente: test saltato)")
+        return
+    clone = tmp / "clone"
+    _run(["git", "clone", "-q", ROOT, clone], tmp)
+    shutil.copy(SCRIPTS / "build-deb.sh", clone / "scripts" / "build-deb.sh")
+    _run([clone / "scripts" / "build-deb.sh"], tmp, cwd=clone)
+    deb = next((clone / "dist").glob("*.deb"))
+    declared = int(_run(["dpkg-deb", "-f", deb, "Installed-Size"], tmp).stdout)
+    expected = 0
+    for line in _run(["dpkg-deb", "-c", deb], tmp).stdout.splitlines():
+        perms, _owner, size, _d, _t, name = line.split(None, 5)
+        if name.rstrip("/") == ".":
+            continue
+        expected += -(-int(size) // 1024) if perms[0] == "-" else 1
+    assert declared == expected, (declared, expected)
+
+
 def _jobs(text: str) -> dict:
     """Testo di ogni job di release.yml, per nome (indentazione a 2 spazi)."""
     body = text[text.index("\njobs:\n"):]

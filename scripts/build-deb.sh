@@ -116,8 +116,13 @@ gzip -9n -c "$STAGE/olladesk.1" > "$PKG/usr/share/man/man1/olladesk.1.gz"
 # già marcati tali, conservano il bit x)
 chmod -R u=rwX,go=rX "$PKG"
 
-# dimensione installata (KiB) di TUTTO il contenuto, metadati esclusi
-INSTALLED_SIZE="$(du -sk --exclude=DEBIAN "$PKG" | cut -f1)"
+# dimensione installata (KiB) di TUTTO il contenuto, metadati esclusi, come
+# la calcola dpkg-gencontrol: ogni file arrotondato al KiB superiore, 1 KiB
+# per directory e collegamenti. Non «du»: conta i blocchi allocati, che
+# cambiano con il filesystem (tmpfs, ext4…) e rendevano il .deb diverso a
+# parità di contenuto.
+INSTALLED_SIZE="$(find "$PKG" -path "$PKG/DEBIAN" -prune -o -mindepth 1 -printf '%y %s\n' \
+    | awk '$1 == "f" { s += int(($2 + 1023) / 1024); next } { s += 1 } END { print s + 0 }')"
 sed -i "s/@INSTALLED_SIZE@/$INSTALLED_SIZE/" "$PKG/DEBIAN/control"
 
 # md5sums: permette a debsums di verificare i file installati
