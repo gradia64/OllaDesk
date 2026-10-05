@@ -25,6 +25,10 @@ Flash, GLM 5.3 Flash), verificate sul codice e sulla release pubblicata e
 approvate il 2026-10-03. Le voci 9–12 vengono dal collaudo della 0.2.5
 (ricerca web con SearXNG e DuckDuckGo), approvate il 2026-10-05.
 
+Tutte implementate per la 0.2.6, un commit per voce; test offline e collaudi
+reali con Ollama verdi su ogni commit. Note di rilascio in
+`packaging/release-notes/0.2.6.md`.
+
 Rilievi valutati e non accolti come difetti: `arch` non eseguibile con
 l'avvio manuale (scelta: costruisce dal tag firmato, documentato in
 `packaging/README.md`); `.pyc` nel pacchetto Arch (prassi della
