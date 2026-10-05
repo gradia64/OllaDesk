@@ -170,12 +170,8 @@ def search(query: str, n_results: int = 5,
     return unique
 
 
-def search_searxng(base_url: str, query: str, n_results: int = 5,
-                   conn_store: list | None = None) -> list[tuple[str, str, str]]:
-    """Ricerca via API JSON di un'istanza SearXNG personale."""
-    url = base_url.rstrip("/") + "/search?" + urllib.parse.urlencode(
-        {"q": query, "format": "json"}
-    )
+def _searxng_once(url: str, base_url: str, conn_store: list | None) -> dict:
+    """Una richiesta all'API JSON di SearXNG: il dizionario della risposta."""
     try:
         req = urllib.request.Request(url, headers={"User-Agent": _UA})
         resp = urllib.request.urlopen(req, timeout=12)
@@ -201,6 +197,10 @@ def search_searxng(base_url: str, query: str, n_results: int = 5,
         ) from e
     if not isinstance(data, dict):
         raise WebSearchError("risposta inattesa dall'istanza SearXNG")
+    return data
+
+
+def _searxng_results(data: dict, n_results: int) -> list[tuple[str, str, str]]:
     out: list[tuple[str, str, str]] = []
     for r in (data.get("results") or [])[: max(1, n_results)]:
         if not isinstance(r, dict):
@@ -211,6 +211,50 @@ def search_searxng(base_url: str, query: str, n_results: int = 5,
         if title and link:
             out.append((title, link, snippet))
     return out
+
+
+def _searxng_failed_engines(data: dict) -> list[str]:
+    """«motore: motivo» per i motori che non hanno risposto (unresponsive_engines)."""
+    out = []
+    for e in data.get("unresponsive_engines") or []:
+        if isinstance(e, (list, tuple)) and e:
+            name = str(e[0])
+            reason = str(e[1]) if len(e) > 1 else ""
+            out.append(f"{name}: {reason}" if reason else name)
+    return out
+
+
+def search_searxng(base_url: str, query: str, n_results: int = 5,
+                   conn_store: list | None = None,
+                   should_stop=None) -> list[tuple[str, str, str]]:
+    """Ricerca via API JSON di un'istanza SearXNG personale.
+
+    A connessioni fredde i motori di SearXNG vanno spesso in timeout e
+    l'istanza risponde con zero risultati, mentre la richiesta successiva
+    funziona: con una risposta vuota E motori che non hanno risposto si
+    riprova una volta (salvo stop). Se resta vuota l'errore nomina i motori
+    in errore; una risposta vuota senza guasti è un vero «nessun risultato».
+    """
+    url = base_url.rstrip("/") + "/search?" + urllib.parse.urlencode(
+        {"q": query, "format": "json"}
+    )
+    data = _searxng_once(url, base_url, conn_store)
+    results = _searxng_results(data, n_results)
+    if results or not _searxng_failed_engines(data):
+        return results
+    if should_stop is not None and should_stop():
+        return []
+    data = _searxng_once(url, base_url, conn_store)
+    results = _searxng_results(data, n_results)
+    failed = _searxng_failed_engines(data)
+    if not results and failed:
+        raise WebSearchError(
+            "SearXNG non ha trovato risultati; motori che non hanno risposto: "
+            + ", ".join(failed)
+            + " (nel settings.yml dell'istanza: outgoing.request_timeout più alto "
+            "o motori diversi)"
+        )
+    return results
 
 
 def search_ollama(query: str, api_key: str, n_results: int = 5,
@@ -326,7 +370,8 @@ class WebSearchWorker(QThread):
                         "URL dell'istanza SearXNG non configurato (Impostazioni → Interfaccia)"
                     )
                     return
-                results = search_searxng(self._searxng_url.strip(), self._query, self._n, conn_store=conns)
+                results = search_searxng(self._searxng_url.strip(), self._query, self._n,
+                                         conn_store=conns, should_stop=lambda: self._stopped)
             else:
                 results = search(self._query, self._n, conn_store=conns)
             if self._stopped:

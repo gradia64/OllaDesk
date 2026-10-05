@@ -557,6 +557,81 @@ def test_web_search_worker_stop_during_read():
     assert not failed, failed   # fermato: nessun errore da mostrare
 
 
+def _fake_searxng(responses: list[dict]):
+    """Finto SearXNG: risponde in ordine con i JSON dati. Restituisce
+    (url, elenco delle richieste ricevute, server)."""
+    import json as _json
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    seen: list[str] = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *_a):
+            pass
+
+        def do_GET(self):  # noqa: N802 (API http.server)
+            seen.append(self.path)
+            body = _json.dumps(responses[min(len(seen), len(responses)) - 1]).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    server.daemon_threads = True
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return f"http://127.0.0.1:{server.server_address[1]}", seen, server
+
+
+def test_searxng_retries_empty_answer_with_failed_engines():
+    # collaudo 0.2.5: a connessioni fredde i motori di SearXNG vanno in
+    # timeout e l'istanza risponde con 0 risultati; la richiesta dopo va.
+    from olladesk.web_search import WebSearchError, search_searxng
+
+    vuota_guasti = {"results": [], "unresponsive_engines": [["brave", "timeout"],
+                                                            ["duckduckgo", "CAPTCHA"]]}
+    buona = {"results": [{"title": "Rame", "url": "https://esempio.it/rame", "content": "prezzo"}]}
+
+    # 1. vuota con motori guasti, poi buona → risultati, due richieste
+    url, seen, srv = _fake_searxng([vuota_guasti, buona])
+    try:
+        res = search_searxng(url, "rame", 5)
+        assert res == [("Rame", "https://esempio.it/rame", "prezzo")], res
+        assert len(seen) == 2, seen
+    finally:
+        srv.shutdown(); srv.server_close()
+
+    # 2. vuota due volte → errore che nomina motori e motivi
+    url, seen, srv = _fake_searxng([vuota_guasti, vuota_guasti])
+    try:
+        try:
+            search_searxng(url, "rame", 5)
+            raise AssertionError("doveva fallire")
+        except WebSearchError as e:
+            assert "brave: timeout" in str(e) and "duckduckgo: CAPTCHA" in str(e), str(e)
+        assert len(seen) == 2, seen
+    finally:
+        srv.shutdown(); srv.server_close()
+
+    # 3. vuota senza motori guasti → nessun risultato vero: niente nuovo tentativo
+    url, seen, srv = _fake_searxng([{"results": [], "unresponsive_engines": []}])
+    try:
+        assert search_searxng(url, "rame", 5) == []
+        assert len(seen) == 1, seen
+    finally:
+        srv.shutdown(); srv.server_close()
+
+    # 4. stop prima del nuovo tentativo → nessuna seconda richiesta
+    url, seen, srv = _fake_searxng([vuota_guasti, buona])
+    try:
+        assert search_searxng(url, "rame", 5, should_stop=lambda: True) == []
+        assert len(seen) == 1, seen
+    finally:
+        srv.shutdown(); srv.server_close()
+
+
 def test_chat_worker_emits_thinking():
     # il ChatWorker deve distinguere thinking da content, sia in risposta
     # singola che in streaming NDJSON
