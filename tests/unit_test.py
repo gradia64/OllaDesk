@@ -632,6 +632,116 @@ def test_searxng_retries_empty_answer_with_failed_engines():
         srv.shutdown(); srv.server_close()
 
 
+def test_web_search_fallback_provider():
+    # collaudo 0.2.5: con DuckDuckGo bloccato (anti-bot) la ricerca falliva.
+    # Con un provider di riserva configurato si prova quello, e una nota
+    # dice quale ha risposto; senza riserva nulla cambia.
+    from unittest.mock import patch
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+
+    QApplication.instance() or QApplication([])
+    from olladesk import web_search
+    from olladesk.web_search import WebSearchError, WebSearchWorker
+
+    blocco = WebSearchError("DuckDuckGo sta bloccando le richieste automatiche")
+    buoni = [("Rame", "https://esempio.it/rame", "prezzo")]
+
+    def run(fallback, ddg, sx):
+        calls: list[str] = []
+
+        def fake_ddg(*_a, **_k):
+            calls.append("ddg")
+            if isinstance(ddg, Exception):
+                raise ddg
+            return ddg
+
+        def fake_sx(*_a, **_k):
+            calls.append("searxng")
+            if isinstance(sx, Exception):
+                raise sx
+            return sx
+
+        w = WebSearchWorker("rame", 5, provider="duckduckgo", fallback=fallback,
+                            searxng_url="http://127.0.0.1:1")
+        got: dict = {"ready": [], "failed": [], "notice": []}
+        w.ready.connect(lambda b, q: got["ready"].append(b))
+        w.failed.connect(got["failed"].append)
+        w.notice.connect(got["notice"].append)
+        with patch.object(web_search, "search", fake_ddg), \
+                patch.object(web_search, "search_searxng", fake_sx):
+            w.run()   # nel thread del test: i segnali arrivano subito
+        return got, calls
+
+    # 1. principale bloccato, riserva buona → risultati e nota
+    got, calls = run("searxng", blocco, buoni)
+    assert calls == ["ddg", "searxng"] and len(got["ready"]) == 1 and not got["failed"], got
+    assert "esempio.it/rame" in got["ready"][0]
+    assert len(got["notice"]) == 1 and "DuckDuckGo" in got["notice"][0] and "SearXNG" in got["notice"][0]
+
+    # 2. principale vuoto, riserva buona → anche «nessun risultato» passa alla riserva
+    got, calls = run("searxng", [], buoni)
+    assert calls == ["ddg", "searxng"] and len(got["ready"]) == 1, got
+
+    # 3. nessuna riserva → errore originale, nessuna query altrove
+    got, calls = run("", blocco, buoni)
+    assert calls == ["ddg"] and got["failed"] == [str(blocco)] and not got["notice"], got
+
+    # 4. riserva uguale al principale → ignorata
+    got, calls = run("duckduckgo", blocco, buoni)
+    assert calls == ["ddg"] and got["failed"], got
+
+    # 5. falliscono entrambi → un errore che li nomina tutti e due
+    got, calls = run("searxng", blocco, WebSearchError("motori in errore"))
+    assert not got["ready"] and len(got["failed"]) == 1, got
+    assert "DuckDuckGo" in got["failed"][0] and "riserva SearXNG: motori in errore" in got["failed"][0]
+
+    # 6. principale buono → la riserva non viene interrogata
+    got, calls = run("searxng", buoni, buoni)
+    assert calls == ["ddg"] and not got["notice"], got
+
+
+def test_web_fallback_setting_and_note():
+    # impostazione salvata dal dialogo, predefinita «nessuno», e nota in chat
+    from unittest.mock import patch
+
+    from olladesk import config, web_search
+    from olladesk.widgets.settings_dialog import SettingsDialog
+
+    with _isolated_config():
+        s = config.load_settings()
+        assert s["web_fallback"] == ""
+        s["web_fallback"] = "searxng"
+        dlg = SettingsDialog(s, lambda: [], "dark", "?")
+        try:
+            assert dlg.collect_settings()["web_fallback"] == "searxng"
+            dlg.web_fallback_combo.setCurrentIndex(dlg.web_fallback_combo.findData(""))
+            assert dlg.collect_settings()["web_fallback"] == ""
+        finally:
+            dlg.deleteLater()
+
+        created: list = []
+        win = _make_window()
+        try:
+            notes: list[str] = []
+            win.settings.update(web_provider="duckduckgo", web_fallback="searxng")
+            win.current_model = lambda: "finto"
+            win._start_generation = lambda: None
+            win.chat_area.set_web_search(True)
+            win.chat_area.input.setPlainText("Domanda")
+            with patch.object(web_search, "WebSearchWorker", _fake_search_worker_class(created)):
+                win.chat_area._emit_send()
+            assert created[0].kwargs.get("fallback") == "searxng", created[0].kwargs
+            with patch.object(win.chat_area, "add_system_note", notes.append):
+                created[0].notice.emit("DuckDuckGo non ha risposto: risultati da SearXNG")
+            assert notes and "SearXNG" in notes[0], notes
+            win._on_stop()
+        finally:
+            win._really_quit = True
+            win.close()
+
+
 def test_chat_worker_emits_thinking():
     # il ChatWorker deve distinguere thinking da content, sia in risposta
     # singola che in streaming NDJSON
@@ -816,6 +926,7 @@ def _fake_search_worker_class(created: list):
     class FakeSearch(QObject):
         ready = Signal(str, str)
         failed = Signal(str)
+        notice = Signal(str)
         finished = Signal()
 
         def __init__(self, query, *_a, **_k):
@@ -907,13 +1018,16 @@ def test_web_search_reads_keyring_only_for_ollama():
 
     from olladesk import secrets_store, web_search
 
-    for provider, deve_leggere in (("searxng", False), ("duckduckgo", False), ("ollama", True)):
+    casi = (("searxng", "", False), ("duckduckgo", "", False), ("ollama", "", True),
+            ("searxng", "ollama", True))   # la riserva Ollama usa la chiave
+    for provider, fallback, deve_leggere in casi:
         with _isolated_config():
             created: list = []
             letture: list[int] = []
             win = _make_window()
             try:
                 win.settings["web_provider"] = provider
+                win.settings["web_fallback"] = fallback
                 win.current_model = lambda: "finto"
                 win._start_generation = lambda: None
                 win.chat_area.set_web_search(True)

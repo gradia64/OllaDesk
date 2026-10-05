@@ -535,21 +535,24 @@ class MainWindow(QMainWindow):
         placeholder.show_status("🌐 Ricerca web in corso…")
 
         provider = self.settings.get("web_provider", "duckduckgo")
+        fallback = self.settings.get("web_fallback", "")
         # la chiave serve solo a ollama.com: leggerla dal portachiavi
         # (KWallet, nel thread della UI) costa fino a ~200 ms per niente
         api_key = ""
-        if provider == "ollama":
+        if "ollama" in (provider, fallback):
             api_key = secrets_store.load_api_key() or self.settings.get("web_api_key", "")
         self._search_worker = web_search.WebSearchWorker(
             web_search.make_query(self._search_msg["display"]),
             int(self.settings.get("web_results", 5)),
             provider=provider,
+            fallback=fallback,
             api_key=api_key,
             searxng_url=self.settings.get("web_searxng_url", ""),
             parent=self,
         )
         self._search_worker.ready.connect(self._on_web_results)
         self._search_worker.failed.connect(self._on_web_failed)
+        self._search_worker.notice.connect(self._on_web_notice)
         self._search_worker.finished.connect(self._search_worker.deleteLater)
         self._search_worker.finished.connect(self._clear_ref("_search_worker", self._search_worker))
         self._track_worker(self._search_worker)
@@ -566,6 +569,11 @@ class MainWindow(QMainWindow):
             msg["web_block"] = block
             self._persist_chat()
             self._start_generation()
+
+    def _on_web_notice(self, text: str) -> None:
+        if self._search_stopped or self.sender() is not self._search_worker:
+            return
+        self.chat_area.add_system_note("🌐 " + text)
 
     def _on_web_failed(self, err: str) -> None:
         if self._search_stopped or self.sender() is not self._search_worker:

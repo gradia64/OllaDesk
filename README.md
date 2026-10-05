@@ -77,6 +77,15 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
         - json
     ```
 
+    Se l'istanza risponde senza risultati perché i suoi motori non hanno
+    risposto (tipico a connessioni fredde), l'app riprova una volta e poi
+    elenca i motori in errore: di solito aiuta alzare
+    `outgoing.request_timeout` o cambiare motori nel `settings.yml`.
+
+  Un **provider di riserva** facoltativo (predefinito: nessuno) viene
+  provato quando il principale fallisce o non trova nulla, e una nota in
+  chat dice quale ha risposto. Il messaggio compare in chat subito, mentre
+  la ricerca è in corso.
   Come query viene usata solo la prima riga del messaggio (massimo 200
   caratteri), non l'intero testo. Il numero di risultati è configurabile. I modelli non chiamano il tool da
   soli: i risultati vengono iniettati nel prompt dalla GUI (verificato e2e).

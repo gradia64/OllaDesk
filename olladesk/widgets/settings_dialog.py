@@ -194,6 +194,23 @@ class SettingsDialog(QDialog):
         )
         form.addRow("Provider ricerca web:", self.web_provider_combo)
 
+        self.web_fallback_combo = QComboBox(w)
+        self.web_fallback_combo.addItem("Nessuno", "")
+        self.web_fallback_combo.addItem("DuckDuckGo", "duckduckgo")
+        self.web_fallback_combo.addItem("Ollama Cloud — ollama.com", "ollama")
+        self.web_fallback_combo.addItem("SearXNG", "searxng")
+        idx = self.web_fallback_combo.findData(s.get("web_fallback", ""))
+        self.web_fallback_combo.setCurrentIndex(max(0, idx))
+        self.web_fallback_combo.setToolTip(
+            "Provider da provare se il principale fallisce (blocco anti-bot, nessun\n"
+            "risultato, rete): una nota in chat dice quale ha risposto. «Nessuno»\n"
+            "non manda mai la domanda a un servizio diverso da quello scelto."
+        )
+        self.web_fallback_combo.currentIndexChanged.connect(
+            lambda _i: self._update_provider_fields()
+        )
+        form.addRow("Provider di riserva:", self.web_fallback_combo)
+
         self.web_key_edit = QLineEdit("", w)
         self.web_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
         self._keyring_ok = secrets_store.available()
@@ -267,12 +284,16 @@ class SettingsDialog(QDialog):
 
     def _update_provider_fields(self) -> None:
         """Mostra i campi del provider selezionato (chiave per Ollama, URL per SearXNG)."""
-        provider = self.web_provider_combo.currentData()
+        used = {self.web_provider_combo.currentData()}
+        fallback = getattr(self, "web_fallback_combo", None)
+        if fallback is not None:
+            used.add(fallback.currentData())
         form = getattr(self, "_gui_form", None)
         if form is None:
             return
-        form.setRowVisible(self._key_row, provider == "ollama")
-        form.setRowVisible(self.searxng_edit, provider == "searxng")
+        # campi del principale E della riserva (es. SearXNG con riserva Ollama)
+        form.setRowVisible(self._key_row, "ollama" in used)
+        form.setRowVisible(self.searxng_edit, "searxng" in used)
 
     # ------------------------------------------- condivisione API in rete
 
@@ -657,6 +678,7 @@ class SettingsDialog(QDialog):
             "history_limit": self.hist_spin.value(),
             "web_results": self.web_spin.value(),
             "web_provider": self.web_provider_combo.currentData() or "duckduckgo",
+            "web_fallback": self.web_fallback_combo.currentData() or "",
             # con il portachiavi la chiave NON finisce mai nel file di config
             "web_api_key": self._file_api_key(),
             "web_searxng_url": self.searxng_edit.text().strip() or "http://localhost:8888",

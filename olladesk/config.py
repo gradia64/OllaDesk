@@ -27,6 +27,9 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "system_prompt": "",
     "web_results": 5,           # risultati di ricerca web allegati al contesto
     "web_provider": "duckduckgo",   # "duckduckgo" | "ollama" | "searxng"
+    # provider di riserva se il principale fallisce: "" = nessuno (la query
+    # non va a un servizio che l'utente non ha scelto)
+    "web_fallback": "",
     "web_api_key": "",          # chiave API per il provider "ollama" (ollama.com)
     "web_searxng_url": "http://localhost:8888",  # istanza SearXNG personale
     # icona nella tray: chiusura (X) ridotta a icona invece di uscire

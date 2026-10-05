@@ -317,11 +317,20 @@ def format_results(query: str, results: list[tuple[str, str, str]]) -> str:
     return "\n".join(lines).strip()
 
 
+PROVIDER_NAMES = {"duckduckgo": "DuckDuckGo", "ollama": "Ollama Cloud", "searxng": "SearXNG"}
+
+
 class WebSearchWorker(QThread):
-    """Esegue la ricerca in background: ready(blocco_testo, query)."""
+    """Esegue la ricerca in background: ready(blocco_testo, query).
+
+    Con un provider di riserva (fallback) diverso dal principale: se il
+    principale fallisce o non trova nulla si prova la riserva, e notice()
+    dice quale ha risposto.
+    """
 
     ready = Signal(str, str)
     failed = Signal(str)
+    notice = Signal(str)
 
     def __init__(
         self,
@@ -331,11 +340,14 @@ class WebSearchWorker(QThread):
         api_key: str = "",
         searxng_url: str = "",
         parent=None,
+        fallback: str = "",
     ):
         super().__init__(parent)
         self._query = query
         self._n = n_results
         self._provider = provider or "duckduckgo"
+        # la riserva uguale al principale non aggiunge nulla
+        self._fallback = fallback if fallback and fallback != self._provider else ""
         self._api_key = api_key
         self._searxng_url = searxng_url
         self._stopped = False
@@ -354,39 +366,53 @@ class WebSearchWorker(QThread):
     def stopped(self) -> bool:
         return self._stopped
 
-    def run(self) -> None:
+    def _search_with(self, provider: str) -> list[tuple[str, str, str]]:
+        """Ricerca con un provider; WebSearchError se fallisce o è vuota."""
         conns = self._conns
         try:
-            if self._provider == "ollama":
+            if provider == "ollama":
                 if not self._api_key:
-                    self.failed.emit(
+                    raise WebSearchError(
                         "chiave API non configurata (Impostazioni → Interfaccia → Provider ricerca web)"
                     )
-                    return
                 results = search_ollama(self._query, self._api_key, self._n, conn_store=conns)
-            elif self._provider == "searxng":
+            elif provider == "searxng":
                 if not self._searxng_url.strip():
-                    self.failed.emit(
+                    raise WebSearchError(
                         "URL dell'istanza SearXNG non configurato (Impostazioni → Interfaccia)"
                     )
-                    return
                 results = search_searxng(self._searxng_url.strip(), self._query, self._n,
                                          conn_store=conns, should_stop=lambda: self._stopped)
             else:
                 results = search(self._query, self._n, conn_store=conns)
+        except WebSearchError:
+            raise
+        except Exception as e:
+            raise WebSearchError(f"rete non raggiungibile ({e.__class__.__name__})") from e
+        if not results and not self._stopped:
+            raise WebSearchError("nessun risultato (il servizio di ricerca potrebbe non rispondere)")
+        return results
+
+    def run(self) -> None:
+        main = PROVIDER_NAMES.get(self._provider, self._provider)
+        try:
+            results = self._search_with(self._provider)
+        except WebSearchError as e:
             if self._stopped:
                 return
-        except WebSearchError as e:
-            if not self._stopped:
+            if not self._fallback:
                 self.failed.emit(str(e))
-            return
-        except Exception as e:
-            if not self._stopped:
-                self.failed.emit(f"rete non raggiungibile ({e.__class__.__name__})")
-            return
+                return
+            spare = PROVIDER_NAMES.get(self._fallback, self._fallback)
+            try:
+                results = self._search_with(self._fallback)
+            except WebSearchError as e2:
+                if not self._stopped:
+                    self.failed.emit(f"{main}: {e}; riserva {spare}: {e2}")
+                return
+            if self._stopped:
+                return
+            self.notice.emit(f"{main} non ha risposto ({e}): risultati da {spare}, il provider di riserva.")
         if self._stopped:
-            return
-        if not results:
-            self.failed.emit("nessun risultato (il servizio di ricerca potrebbe non rispondere)")
             return
         self.ready.emit(format_results(self._query, results), self._query)
