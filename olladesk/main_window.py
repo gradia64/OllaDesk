@@ -534,11 +534,17 @@ class MainWindow(QMainWindow):
         placeholder = self.chat_area.begin_stream(config.now())
         placeholder.show_status("🌐 Ricerca web in corso…")
 
+        provider = self.settings.get("web_provider", "duckduckgo")
+        # la chiave serve solo a ollama.com: leggerla dal portachiavi
+        # (KWallet, nel thread della UI) costa fino a ~200 ms per niente
+        api_key = ""
+        if provider == "ollama":
+            api_key = secrets_store.load_api_key() or self.settings.get("web_api_key", "")
         self._search_worker = web_search.WebSearchWorker(
             web_search.make_query(self._search_msg["display"]),
             int(self.settings.get("web_results", 5)),
-            provider=self.settings.get("web_provider", "duckduckgo"),
-            api_key=secrets_store.load_api_key() or self.settings.get("web_api_key", ""),
+            provider=provider,
+            api_key=api_key,
             searxng_url=self.settings.get("web_searxng_url", ""),
             parent=self,
         )

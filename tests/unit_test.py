@@ -824,6 +824,38 @@ def test_web_search_message_shown_before_results():
                 win.close()
 
 
+def test_web_search_reads_keyring_only_for_ollama():
+    # regressione: la chiave API veniva letta dal portachiavi (KWallet, nel
+    # thread della UI: ~200 ms la prima volta) a ogni ricerca, anche con
+    # DuckDuckGo o SearXNG che non la usano
+    from unittest.mock import patch
+
+    from olladesk import secrets_store, web_search
+
+    for provider, deve_leggere in (("searxng", False), ("duckduckgo", False), ("ollama", True)):
+        with _isolated_config():
+            created: list = []
+            letture: list[int] = []
+            win = _make_window()
+            try:
+                win.settings["web_provider"] = provider
+                win.current_model = lambda: "finto"
+                win._start_generation = lambda: None
+                win.chat_area.set_web_search(True)
+                win.chat_area.input.setPlainText("Domanda")
+                with patch.object(web_search, "WebSearchWorker", _fake_search_worker_class(created)), \
+                        patch.object(secrets_store, "load_api_key",
+                                     lambda: letture.append(1) or "chiave-dal-portachiavi"):
+                    win.chat_area._emit_send()
+                assert bool(letture) is deve_leggere, (provider, letture)
+                atteso = "chiave-dal-portachiavi" if deve_leggere else ""
+                assert created[0].kwargs.get("api_key") == atteso, (provider, created[0].kwargs)
+                win._on_stop()
+            finally:
+                win._really_quit = True
+                win.close()
+
+
 def test_share_state_updates_indicator():
     # B1: lo stato del server condiviso deve riflettersi sull'indicatore 🔗
     with _isolated_config():
