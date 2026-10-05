@@ -56,6 +56,7 @@ class MainWindow(QMainWindow):
         self._pending_stream: str = ""
         self._pending_think: str = ""   # ragionamento ricevuto nel turno corrente
         self._think_off_sent = False     # la richiesta in corso ha "think": false
+        self._search_msg: dict | None = None   # messaggio utente in attesa della ricerca web
         self._pending_user: dict | None = None
         self._chat_stopped = False     # scarta i segnali del worker dopo uno stop
         self._search_stopped = False
@@ -517,6 +518,9 @@ class MainWindow(QMainWindow):
             )
             web_on = self._pending_user["web"] = False
         if web_on:
+            # il messaggio va subito in chat: la ricerca può durare secondi
+            # (prima la bolla compariva solo a ricerca finita)
+            self._search_msg = self._commit_user_message(start=False)
             self._start_web_search()
         else:
             self._commit_user_message()
@@ -531,7 +535,7 @@ class MainWindow(QMainWindow):
         placeholder.show_status("🌐 Ricerca web in corso…")
 
         self._search_worker = web_search.WebSearchWorker(
-            web_search.make_query(self._pending_user["display"]),
+            web_search.make_query(self._search_msg["display"]),
             int(self.settings.get("web_results", 5)),
             provider=self.settings.get("web_provider", "duckduckgo"),
             api_key=secrets_store.load_api_key() or self.settings.get("web_api_key", ""),
@@ -549,9 +553,13 @@ class MainWindow(QMainWindow):
         if self._search_stopped or self.sender() is not self._search_worker:
             return
         self.chat_area.end_stream(discard_empty=True)
-        if self._pending_user is not None:
-            self._pending_user["web_block"] = block
-            self._commit_user_message()
+        msg, self._search_msg = self._search_msg, None
+        if msg is not None:
+            # i risultati si agganciano al messaggio già in chat, prima della
+            # generazione (che li allega al contesto dell'ultimo turno)
+            msg["web_block"] = block
+            self._persist_chat()
+            self._start_generation()
 
     def _on_web_failed(self, err: str) -> None:
         if self._search_stopped or self.sender() is not self._search_worker:
@@ -560,15 +568,21 @@ class MainWindow(QMainWindow):
         self.chat_area.add_system_note(
             f"⚠ Ricerca web non riuscita ({err}).\nProcedo senza i risultati web."
         )
-        if self._pending_user is not None:
-            self._commit_user_message()
+        if self._search_msg is not None:
+            self._search_msg = None
+            self._start_generation()
 
     # ------------------------------------------------------------------ commit
 
-    def _commit_user_message(self) -> None:
+    def _commit_user_message(self, start: bool = True) -> dict | None:
+        """Aggiunge il messaggio dell'utente alla chat e lo salva.
+
+        Con start=False la generazione non parte: la avvia chi aspetta la
+        ricerca web. Restituisce il messaggio aggiunto.
+        """
         p, self._pending_user = self._pending_user, None
         if p is None:
-            return
+            return None
         model = p["model"]
         if self.current_chat is None:
             title = p["display"][:48] + ("…" if len(p["display"]) > 48 else "")
@@ -602,7 +616,9 @@ class MainWindow(QMainWindow):
         self.chat_area.clear_input()
         self._persist_chat()
         self.sidebar.set_chats(self.chats, self.current_chat["id"])
-        self._start_generation()
+        if start:
+            self._start_generation()
+        return msg
 
     def _start_generation(self) -> None:
         model = self.current_chat["model"]
@@ -752,7 +768,10 @@ class MainWindow(QMainWindow):
             self._retire_worker(self._search_worker)
             self._search_worker = None
             self.chat_area.end_stream(discard_empty=True)
+            # il messaggio dell'utente è già in chat e salvato: resta, senza
+            # risposta, come quando si ferma una generazione prima del testo
             self._pending_user = None
+            self._search_msg = None
             self._set_idle()
             return
         if self._worker is not None:

@@ -734,6 +734,96 @@ def test_think_hint_only_when_think_false_was_sent():
             win.close()
 
 
+def _fake_search_worker_class(created: list):
+    """Finto WebSearchWorker: non va in rete, i segnali li emette il test."""
+    from PySide6.QtCore import QObject, Signal
+
+    class FakeSearch(QObject):
+        ready = Signal(str, str)
+        failed = Signal(str)
+        finished = Signal()
+
+        def __init__(self, query, *_a, **_k):
+            super().__init__(_k.get("parent"))
+            self.query = query
+            self.kwargs = _k
+            self.running = False
+            created.append(self)
+
+        def start(self):
+            self.running = True
+
+        def isRunning(self):  # noqa: N802 (API Qt)
+            return self.running
+
+        def stop(self):
+            self.running = False
+
+        def wait(self, *_a):
+            return True
+
+    return FakeSearch
+
+
+def test_web_search_message_shown_before_results():
+    # regressione: con la ricerca web attiva la bolla dell'utente compariva
+    # solo a ricerca finita (2,5-3,2 s con SearXNG) e il testo restava
+    # nell'input. Ora il messaggio va in chat subito, i risultati si
+    # agganciano a lui e solo allora parte la generazione.
+    from unittest.mock import patch
+
+    from olladesk import config, web_search
+    from olladesk.widgets.message import MessageWidget
+
+    def user_bubbles(win) -> int:
+        n = 0
+        for i in range(win.chat_area.msgs.count()):
+            row = win.chat_area.msgs.itemAt(i).widget()
+            if row is not None:
+                n += sum(1 for w in row.findChildren(MessageWidget) if w.role == "user")
+        return n
+
+    for esito in ("risultati", "errore", "stop"):
+        with _isolated_config():
+            created: list = []
+            win = _make_window()
+            try:
+                generations: list[int] = []
+                win.current_model = lambda: "finto"
+                win._start_generation = lambda: generations.append(1)
+                win.chat_area.set_web_search(True)
+                win.chat_area.input.setPlainText("Quanto costa il rame?")
+                with patch.object(web_search, "WebSearchWorker", _fake_search_worker_class(created)):
+                    win.chat_area._emit_send()
+                assert len(created) == 1, esito
+                # subito: bolla, input vuoto, messaggio salvato, niente generazione
+                assert user_bubbles(win) == 1, esito
+                assert win.chat_area.input.toPlainText() == "", esito
+                msg = win.current_chat["messages"][-1]
+                assert msg["role"] == "user" and "web_block" not in msg, esito
+                assert config.load_chat(win.current_chat["id"])["messages"][-1]["display"] == "Quanto costa il rame?"
+                assert generations == [], esito
+                assert created[0].query.startswith("Quanto costa il rame")
+
+                if esito == "risultati":
+                    created[0].ready.emit("BLOCCO RISULTATI", created[0].query)
+                    assert msg["web_block"] == "BLOCCO RISULTATI"
+                    saved = config.load_chat(win.current_chat["id"])["messages"][-1]
+                    assert saved.get("web_block") == "BLOCCO RISULTATI"
+                    assert generations == [1]
+                elif esito == "errore":
+                    created[0].failed.emit("nessun risultato")
+                    assert "web_block" not in msg and generations == [1]
+                else:
+                    win._on_stop()
+                    assert generations == [] and win._search_msg is None
+                    assert win.current_chat["messages"][-1] is msg   # resta in chat
+                assert user_bubbles(win) == 1, esito   # nessuna bolla doppia
+            finally:
+                win._really_quit = True
+                win.close()
+
+
 def test_share_state_updates_indicator():
     # B1: lo stato del server condiviso deve riflettersi sull'indicatore 🔗
     with _isolated_config():
