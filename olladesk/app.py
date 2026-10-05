@@ -56,8 +56,8 @@ def main() -> int:
     app.commitDataRequest.connect(lambda *_a: setattr(win, "_really_quit", True))
 
     # SIGTERM/SIGINT (systemctl --user stop, Ctrl+C, kill): chiusura pulita
-    # via closeEvent, così il server condiviso e i worker vengono fermati e
-    # `ollama serve` non resta orfano in ascolto sulla rete
+    # via closeEvent, così la companion web e i worker vengono fermati e la
+    # porta della companion non resta in ascolto sulla rete
     def _graceful_shutdown(signum, _frame) -> None:  # noqa: ANN001 (handler segnali)
         win._really_quit = True
         try:

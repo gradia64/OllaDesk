@@ -32,11 +32,6 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     # icona nella tray: chiusura (X) ridotta a icona invece di uscire
     "tray_icon": True,
     "close_to_tray": True,
-    # condivisione dell'API Ollama in rete (stile LM Studio): OllaDesk avvia
-    # `ollama serve` con OLLAMA_HOST=<bind>:<porta> per smartphone/tablet
-    "share_api": False,
-    "share_bind": "0.0.0.0",    # "0.0.0.0" (tutte le interfacce) | "127.0.0.1"
-    "share_port": 11434,
     # companion web: OllaDesk dal telefono nella rete locale (companion.py)
     "companion": False,
     "companion_port": 8765,
@@ -105,6 +100,22 @@ def load_settings() -> dict:
     if isinstance(data, dict):
         out.update({k: v for k, v in data.items() if k in out})
     return out
+
+
+def legacy_share_port() -> int | None:
+    """Porta della condivisione dell'API (rimossa nella 0.3), se era attiva.
+
+    `load_settings` scarta già le chiavi share_* e il primo salvataggio le
+    toglie dal file: questa lettura grezza serve solo a spiegarlo all'utente
+    una volta.
+    """
+    data = _read_json(config_dir() / "settings.json", {})
+    if not (isinstance(data, dict) and data.get("share_api")):
+        return None
+    try:
+        return int(data.get("share_port", 11434))
+    except (TypeError, ValueError):
+        return 11434
 
 
 def save_settings(settings: dict) -> bool:
@@ -262,3 +273,15 @@ def new_chat_id() -> str:
 
 def now() -> float:
     return time.time()
+
+
+# ------------------------------------------------------------ companion web
+
+def load_companion() -> dict:
+    """Dati della companion web (hash dei token dei dispositivi abbinati)."""
+    data = _read_json(config_dir() / "companion.json", {})
+    return data if isinstance(data, dict) else {}
+
+
+def save_companion(data: dict) -> bool:
+    return _write_json(config_dir() / "companion.json", data)

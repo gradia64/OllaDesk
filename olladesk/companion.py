@@ -33,7 +33,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QObject, Qt, Signal
 
-from . import __version__, config
+from . import __version__, config, netinfo
 from .md import md_to_html
 
 CODE_TTL = 120            # secondi di validità del codice di abbinamento
@@ -41,7 +41,7 @@ MAX_ATTEMPTS = 5          # tentativi errati che invalidano il codice
 MAX_DEVICES = 20          # token conservati (i più vecchi escono)
 COOKIE = "olladesk_session"
 COOKIE_MAX_AGE = 365 * 24 * 3600
-MAX_BODY = 256 * 1024     # un messaggio lungo, in UTF-8
+MAX_BODY = 512 * 1024     # un messaggio di MAX_TEXT caratteri anche se tutto escapato
 BRIDGE_TIMEOUT = 5.0
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
@@ -49,6 +49,13 @@ STATIC = {
     "/": ("index.html", "text/html; charset=utf-8"),
     "/app.js": ("app.js", "text/javascript; charset=utf-8"),
     "/app.css": ("app.css", "text/css; charset=utf-8"),
+    "/manifest.webmanifest": ("manifest.webmanifest", "application/manifest+json"),
+    "/icon-192.png": ("icon-192.png", "image/png"),
+    "/icon-512.png": ("icon-512.png", "image/png"),
+    "/icon-maskable-512.png": ("icon-maskable-512.png", "image/png"),
+    "/apple-touch-icon.png": ("apple-touch-icon.png", "image/png"),
+    # i browser la chiedono comunque: la PNG va bene a tutti
+    "/favicon.ico": ("icon-192.png", "image/png"),
 }
 
 _CHAT_ID = r"[A-Za-z0-9_-]{1,64}"
@@ -69,22 +76,20 @@ def _hash(token: str) -> str:
 class PairingAuth:
     """Codice di abbinamento e token dei dispositivi. Thread-safe."""
 
-    def __init__(self, path: Path | None = None, clock=time.monotonic):
-        self._path = path or (config.config_dir() / "companion.json")
+    def __init__(self, clock=time.monotonic):
         self._clock = clock
         self._lock = threading.Lock()
         self._code: str | None = None
         self._expires = 0.0
         self._failures = 0
-        data = config._read_json(self._path, {})
-        devices = data.get("devices") if isinstance(data, dict) else None
+        devices = config.load_companion().get("devices")
         self._devices: list[dict] = [
             d for d in (devices or [])
             if isinstance(d, dict) and isinstance(d.get("hash"), str)
         ]
 
     def _save(self) -> None:
-        config._write_json(self._path, {"devices": self._devices})
+        config.save_companion({"devices": self._devices})
 
     def new_code(self) -> tuple[str, float]:
         """Nuovo codice (sostituisce il precedente): (codice, secondi di validità)."""
@@ -229,18 +234,23 @@ def models_info(engine) -> dict:
 def web_send(engine, hub, chat_id: str | None, text: str, model: str, think: bool):
     """Thread principale: invio dal telefono.
 
-    Restituisce (chat_id, seq) oppure un messaggio d'errore. `seq` precede
-    gli eventi di questo invio: lo stream SSE li riceve tutti.
+    Restituisce (200, chat_id, seq) oppure (stato HTTP, messaggio, None).
+    `seq` precede gli eventi di questo invio: lo stream SSE li riceve tutti.
     """
+    busy = (409, "occupato: il PC sta già rispondendo, riprova alla fine", None)
     if engine.busy():
-        return "occupato: il PC sta già rispondendo, riprova alla fine"
+        return busy
     if model not in engine.model_names():
-        return f"modello non disponibile: {model}"
+        return 400, f"modello non disponibile: {model}", None
+    # una conversazione eliminata sul PC non va ricreata in silenzio con il
+    # vecchio id (le chat nuove arrivano con chat_id nullo)
+    if chat_id is not None and chat_id not in {c["id"] for c in engine.chats()}:
+        return 404, "conversazione inesistente: è stata eliminata sul PC?", None
     seq = hub.seq()
     cid = engine.send(chat_id or engine.new_chat_id(), text, model, think=think)
     if cid is None:
-        return "occupato: il PC sta già rispondendo, riprova alla fine"
-    return cid, seq
+        return busy
+    return 200, cid, seq
 
 
 def web_stop(engine, chat_id: str) -> bool:
@@ -321,7 +331,8 @@ class EventHub(QObject):
         e.think_chunk.connect(lambda cid, t: self._push(cid, "think", t))
         e.generation_finished.connect(
             lambda cid, outcome, stats, err: self._push(
-                cid, "done", {"outcome": outcome, "stats": stats, "error": err}))
+                cid, "done", {"outcome": outcome, "stats": stats, "error": err,
+                              "ts": config.now()}))
         e.notice.connect(lambda cid, text: self._push(cid, "notice", {"text": text}))
         e.chats_changed.connect(lambda: self._push("", "chats", {}))
 
@@ -395,8 +406,10 @@ def host_allowed(host_header: str | None) -> bool:
         return True
     except ValueError:
         pass
-    local = {"localhost", socket.gethostname().lower()}
-    return host in local or host.endswith(".local")
+    # solo i nomi di questa macchina (anche in mDNS), non qualunque *.local
+    names = {n.lower() for n in (socket.gethostname(), socket.getfqdn()) if n}
+    local = {"localhost"} | names | {n.split(".")[0] + ".local" for n in names}
+    return host in local
 
 
 # --------------------------------------------------------------- handler HTTP
@@ -405,6 +418,9 @@ class _Handler(BaseHTTPRequestHandler):
     server_version = "OllaDesk"
     sys_version = ""
     protocol_version = "HTTP/1.1"
+    # timeout del socket: un client lento non tiene occupato un thread per
+    # sempre (lettura della richiesta, connessioni keep-alive inattive)
+    timeout = 10
     ctx: "CompanionServer"   # impostato dalla sottoclasse creata in start()
 
     def log_message(self, *_a) -> None:
@@ -539,8 +555,13 @@ class _Handler(BaseHTTPRequestHandler):
             self.close_connection = True
             self._error(415, "serve Content-Type: application/json")
             return
+        # corpo chunked o senza lunghezza: resterebbe non letto
+        if self.headers.get("Transfer-Encoding") or self.headers.get("Content-Length") is None:
+            self.close_connection = True
+            self._error(411, "serve Content-Length")
+            return
         try:
-            length = int(self.headers.get("Content-Length") or 0)
+            length = int(self.headers["Content-Length"])
         except ValueError:
             length = -1
         if not 0 <= length <= MAX_BODY:
@@ -586,10 +607,11 @@ class _Handler(BaseHTTPRequestHandler):
                                  text.strip(), model, bool(data.get("think", True)))
             if not ok:
                 return
-            if isinstance(res, str):
-                self._error(409 if res.startswith("occupato") else 400, res)
+            status, value, seq = res
+            if status != 200:
+                self._error(status, value)
                 return
-            self._json(200, {"chat_id": res[0], "after": res[1]})
+            self._json(200, {"chat_id": value, "after": seq})
             return
         if path == "/api/stop":
             if not self._authed():
@@ -655,6 +677,10 @@ class _Handler(BaseHTTPRequestHandler):
         client: quelli successivi del backlog vengono rispediti. Il testo
         arriva come HTML già reso, al massimo ogni ANSWER_INTERVAL secondi.
         """
+        if self.command == "HEAD":
+            # HEAD passa da do_GET: qui aprirebbe uno stream senza fine
+            self._error(405, "lo stream eventi richiede GET")
+            return
         query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
         after = 0
         for raw in (query.get("after", ["0"])[0], self.headers.get("Last-Event-ID") or "0"):
@@ -764,6 +790,4 @@ class CompanionServer(QObject):
             self._set_state("off", "")
 
     def urls(self) -> list[str]:
-        from .server_share import lan_urls
-
-        return lan_urls(self.port) if self._httpd is not None else []
+        return netinfo.lan_urls(self.port) if self._httpd is not None else []

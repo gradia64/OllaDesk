@@ -1,0 +1,16 @@
+{
+  "name": "OllaDesk",
+  "short_name": "OllaDesk",
+  "description": "Le conversazioni di OllaDesk dal telefono, nella rete di casa.",
+  "lang": "it",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#15171a",
+  "theme_color": "#1a1d21",
+  "icons": [
+    {"src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}

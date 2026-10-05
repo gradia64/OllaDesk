@@ -31,24 +31,6 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   in streaming, richiudibile all'arrivo della risposta e salvato nella
   conversazione. Finché il modello pensa non si vedono solo i puntini: la
   bolla mostra «sta pensando…» e poi il testo del ragionamento.
-- **Condivisione in rete (stile LM Studio)** (Impostazioni → Interfaccia):
-  OllaDesk avvia/arresta `ollama serve` con bind e porta configurabili così
-  che smartphone e tablet sulla stessa rete possano usare i modelli puntando
-  un client Ollama a `http://<ip-del-pc>:<porta>`; l'indirizzo esatto compare
-  nel pulsante 🔗 della barra superiore (clic per copiarlo). Se è già attivo
-  il servizio di sistema, l'app lo rileva e verifica che sia raggiungibile
-  davvero dalla rete: la via consigliata resta riavviarlo con
-  `OLLAMA_HOST=0.0.0.0` (`sudo systemctl edit ollama`); una seconda istanza
-  su un'altra porta usa i modelli dell'utente (`~/.ollama/models`, non quelli
-  del servizio) e carica in VRAM per conto suo. **Attenzione:** l'API di
-  Ollama non prevede autenticazione — chi raggiunge la porta può usare i
-  modelli; per l'accesso da fuori casa usare una VPN o un tunnel SSH. Se dal
-  telefono la porta non risponde, il colpevole più comune è il firewall:
-  serve una regola che accetti la porta **dalla sola rete locale** (es.
-  firewalld: `sudo firewall-cmd --permanent --add-rich-rule='rule family=ipv4
-  source address=192.168.1.0/24 port port=11434 protocol=tcp accept'` e
-  `sudo firewall-cmd --reload`; analogo con `ufw allow from 192.168.1.0/24
-  to any port 11434 proto tcp`).
 - **Companion web** (Impostazioni → Interfaccia, spenta di default): una
   pagina per smartphone e tablet nella rete locale, con le stesse
   conversazioni del PC. Dal telefono si leggono le chat, se ne apre una
@@ -60,21 +42,43 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   sull'altra, l'elenco delle chat sul telefono si aggiorna da solo e un
   pallino indica la conversazione che sta rispondendo. Durante una risposta
   il PC resta libero di aprire altre conversazioni: la risposta continua in
-  background e si ritrova riaprendo la sua chat. Si abbina un dispositivo
-  dal pulsante 📱 della barra superiore: compaiono l'indirizzo, un codice di
-  6 cifre valido 2 minuti e una sola volta e, se è installato
-  `python3-qrcode` (`python-qrcode` su Arch), un QR code da inquadrare. Il
-  telefono riceve un cookie di sessione; «Revoca dispositivi» li scollega
-  tutti. Nessuna risorsa esterna: la pagina funziona anche senza internet.
-  **Limite noto:** il collegamento è HTTP in chiaro, quindi chi è sulla
-  stessa Wi-Fi può intercettare il cookie. Va bene su una rete domestica
-  protetta (WPA2/WPA3); non aprire la porta sul router. Il firewall deve
-  accettare la porta (predefinita 8765) dalla sola rete locale, come per la
-  condivisione dell'API qui sopra.
+  background e si ritrova riaprendo la sua chat.
+  - **Abbinamento:** dal pulsante 📱 della barra superiore compaiono
+    l'indirizzo, un codice di 6 cifre valido 2 minuti e una sola volta e, se
+    è installato `python3-qrcode` (`python-qrcode` su Arch), un QR code da
+    inquadrare. Il telefono riceve un cookie di sessione; «Revoca
+    dispositivi» li scollega tutti (se ne ricordano al massimo 20).
+  - **Sulla schermata Home:** dal menu del browser «Aggiungi a schermata
+    Home» la pagina diventa un'icona con il logo di OllaDesk. Su iPhone e
+    iPad si apre a schermo intero, senza barra degli indirizzi, ma ha
+    cookie separati da Safari: l'abbinamento va ripetuto la prima volta che
+    la si apre dall'icona. Su Android Chrome crea un collegamento (l'app
+    installabile vera richiede HTTPS, rinviato a una versione successiva).
+  - **Firewall:** il PC deve accettare la porta (predefinita 8765) **dalla
+    sola rete locale**, es. firewalld: `sudo firewall-cmd --permanent
+    --add-rich-rule='rule family=ipv4 source address=192.168.1.0/24 port
+    port=8765 protocol=tcp accept'` e `sudo firewall-cmd --reload`; analogo
+    con `ufw allow from 192.168.1.0/24 to any port 8765 proto tcp`.
+    Sostituisci `192.168.1.0/24` con la sottorete della tua LAN (la vedi con
+    `ip -4 addr`).
+  - **Limite noto:** il collegamento è HTTP in chiaro, quindi chi è sulla
+    stessa Wi-Fi può intercettare il cookie. Va bene su una rete domestica
+    protetta (WPA2/WPA3); non aprire la porta sul router. Nessuna risorsa
+    esterna: la pagina funziona anche senza internet.
+- **Client Ollama di terze parti** (app per smartphone che parlano con
+  l'API di Ollama): la condivisione dell'API delle versioni 0.2.x è stata
+  rimossa nella 0.3, perché l'API di Ollama non ha autenticazione e la
+  companion web sì. Chi vuole comunque esporre Ollama in rete lo configura
+  nel servizio di sistema, **sotto la propria responsabilità**:
+  `sudo systemctl edit ollama`, poi nella sezione `[Service]` la riga
+  `Environment="OLLAMA_HOST=0.0.0.0"` e `sudo systemctl restart ollama`
+  (con la stessa regola del firewall per la porta 11434). Chi raggiunge la
+  porta può usare i modelli e la GPU: per l'accesso da fuori casa meglio
+  una VPN (es. Tailscale) o un tunnel SSH.
 - **Icona nella tray**: la finestra si riduce nell'area di notifica e si
   ripristina con un clic sull'icona (menu: Mostra/nascondi, Esci);
   facoltativamente la chiusura (X) riduce nella tray invece di uscire,
-  così le condivisioni e le generazioni in corso restano attive.
+  così la companion web e le generazioni in corso restano attive.
 - **Gestione modelli** (pulsante «Modelli» nella sidebar, Ctrl+M): elenco dei
   modelli installati con dimensione/parametri/quantizzazione, **scaricamento**
   di nuovi modelli con barra di avanzamento e annullamento, ed **eliminazione**.
@@ -113,7 +117,7 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
 - **Impostazioni → scheda «Interfaccia»**: URL del server Ollama, tema
   scuro/chiaro/**sistema** (segue KDE Plasma, anche a caldo quando lo cambi),
   dimensione del carattere, streaming on/off, invio con Invio, orario nei
-  messaggi, icona nella tray, condivisione API in rete, quantità di contesto
+  messaggi, icona nella tray, companion web, quantità di contesto
   inviata al modello, prompt di sistema predefinito, risultati ricerca web.
 - **Impostazioni → scheda «Parametri modelli»**: profilo di parametri separato
   per ogni modello (temperatura, top_k, top_p, min_p, num_ctx, num_predict,
@@ -336,11 +340,11 @@ olladesk/
   updater.py                aggiornamenti di Ollama (release GitHub + pkexec)
   app_update.py             aggiornamenti di OllaDesk (solo controllo e avviso)
   ollama_client.py          client API Ollama (stdlib) + worker QThread
-  server_share.py           condivisione API Ollama in rete (avvio `ollama serve`)
+  netinfo.py                indirizzi di rete locale (per la companion web)
   engine.py                 motore di chat: conversazioni, generazione, salvataggio
   workers.py                registro dei worker QThread attivi e in arresto
   companion.py              companion web: server HTTP in LAN e abbinamento
-  web/                      pagina mobile della companion (HTML, CSS, JS)
+  web/                      pagina mobile della companion (HTML, CSS, JS, manifest e icone)
   main_window.py            finestra principale, client del motore di chat
   widgets/
     chat_area.py            area messaggi + input (allegati, ricerca web)
@@ -365,7 +369,7 @@ tests/fake_ollama.py        finto server Ollama per i test offline
 tests/companion_client.py   client HTTP/SSE per i test della companion
 olladesk.desktop            voce per il menu applicazioni di KDE
 packaging/                  file comuni .deb/Arch, modello PKGBUILD, chiave di release
-scripts/                    build (.deb, sorgenti, Arch), firma, pubblicazione AUR
+scripts/                    build (.deb, sorgenti, Arch), firma, pubblicazione AUR, icone web
 ```
 
 ## Licenza

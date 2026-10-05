@@ -12,8 +12,8 @@ Piano delle funzionalità per la versione 0.3: la **companion web**, che permett
 | 3 | Lettura delle chat dal telefono: elenco e apertura, Markdown reso dal server con `md.py` | facile | ☑ |
 | 4 | Invio dal telefono: streaming via Server-Sent Events, nuova chat, scelta del modello, pulsante 🧠 | media | ☑ |
 | 5 | Sincronizzazione dal vivo: un messaggio scritto dal telefono compare nella finestra desktop, e viceversa | media | ☑ |
-| 6 | Pagina mobile unica (HTML + JavaScript senza build) con manifest PWA per l'installazione sulla schermata home | facile | ☐ |
-| 7 | Rimozione della condivisione dell'API (#3 della 0.2.4) | facile | ☐ |
+| 6 | Pagina mobile unica (HTML + JavaScript senza build) con manifest PWA per l'installazione sulla schermata home | facile | ☑ |
+| 7 | Rimozione della condivisione dell'API (#3 della 0.2.4) | facile | ☑ |
 
 ## Ordine di lavoro
 

@@ -11,7 +11,8 @@ immagini, PDF), ricerca web (DuckDuckGo/SearXNG), gestione dei modelli
 (scaricamento ed eliminazione), ragionamento («thinking») dei modelli con il
 blocco «Pensiero» in chat e disattivazione tramite il pulsante 🧠, icona
 nell'area di notifica (tray) con riduzione a icona della finestra,
-condivisione dell'API Ollama in rete per smartphone e tablet, e tema
+companion web per usare le stesse conversazioni da smartphone e tablet
+nella rete locale, e tema
 chiaro/scuro.
 .PP
 L'indirizzo del server e le preferenze sono configurati nell'app

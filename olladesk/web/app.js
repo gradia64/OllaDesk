@@ -53,7 +53,11 @@ async function api(path, options) {
   if (res.status === 401) throw new Unauthorized();
   let data = {};
   try { data = await res.json(); } catch (e) { /* corpo vuoto */ }
-  if (!res.ok) throw new Error(data.error || "errore " + res.status);
+  if (!res.ok) {
+    const err = new Error(data.error || "errore " + res.status);
+    err.status = res.status;
+    throw err;
+  }
   return data;
 }
 
@@ -225,7 +229,7 @@ function finishPending(d) {
   if (!p.hasText && d.outcome !== "done") {
     p.box.remove();     // interrotta o fallita prima di ogni testo
   } else {
-    const meta = [fmtTime(Date.now() / 1000), d.stats].filter(Boolean).join(" · ");
+    const meta = [fmtTime(d.ts || Date.now() / 1000), d.stats].filter(Boolean).join(" · ");
     p.box.append(el("div", "meta", meta));
   }
   if (d.outcome === "failed") {
@@ -274,6 +278,19 @@ function openStream(id, after) {
   });
   on("done", (d) => { finishPending(d); activeHere = false; updateComposer(); });
   on("notice", (d) => addNote(d.text));
+  let goneTimer = null;
+  on("chats", () => {
+    // la conversazione aperta è stata eliminata sul PC? (una nuova in
+    // ricerca web non è ancora nell'elenco ma è quella attiva)
+    clearTimeout(goneTimer);
+    goneTimer = setTimeout(async () => {
+      if (stream !== es || !currentId) return;
+      try {
+        const d = await api("/api/chats");
+        if (!d.chats.some((c) => c.id === currentId) && d.active !== currentId) chatGone();
+      } catch (e) { /* riprova al prossimo evento */ }
+    }, 300);
+  });
   es.onerror = () => {
     // 401 o server spento: EventSource non riprova da solo
     if (es.readyState === EventSource.CLOSED && stream === es) route();
@@ -384,6 +401,7 @@ async function send() {
     res = await post("/api/send", { chat_id: currentId, text, model, think });
   } catch (e) {
     if (e instanceof Unauthorized) { route(); return; }
+    if (e.status === 404) { chatGone(); return; }
     addNote(e.message, true);
     updateComposer();
     return;
@@ -405,6 +423,21 @@ function autosize() {
   t.style.height = "auto";
   t.style.height = Math.min(t.scrollHeight, 160) + "px";
 }
+
+async function chatGone() {
+  // senza hashchange: route() mostra l'elenco, poi resta visibile l'avviso
+  history.replaceState(null, "", location.pathname);
+  await route();
+  netError("La conversazione è stata eliminata sul PC.");
+}
+
+// i link delle risposte si aprono in una nuova scheda: la pagina resta qui
+$("messages").addEventListener("click", (ev) => {
+  const a = ev.target.closest(".body a[href]");
+  if (!a) return;
+  ev.preventDefault();
+  window.open(a.href, "_blank", "noopener");
+});
 
 $("composer").addEventListener("submit", (ev) => { ev.preventDefault(); send(); });
 $("input").addEventListener("input", autosize);

@@ -91,7 +91,9 @@ win.chat_area.input.setPlainText("dal PC")
 win.chat_area._emit_send()
 assert wait_until(lambda: not engine.busy())
 assert wait_until(lambda: glob.of("chats"))
-busy = [b for b in glob.of("busy")][1:]
+# busy:false arriva dopo chats (prima si salva, poi si torna idle): va atteso
+assert wait_until(lambda: len(glob.of("busy")) >= 3), glob.of("busy")   # iniziale, True, False
+busy = glob.of("busy")[1:]
 assert busy[0] == {"busy": True, "chat_id": "chat_a"} and busy[-1] == {"busy": False, "chat_id": ""}
 assert not set(glob.kinds()) & {"start", "answer", "user", "done"}, glob.kinds()
 glob.close()

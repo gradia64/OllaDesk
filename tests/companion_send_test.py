@@ -103,6 +103,9 @@ for body, status in (
     got, data = jpost("/api/send", body, TOKEN)
     assert got == status, (body, got, data)
 assert request("POST", "/api/send", {"text": "ciao", "model": "finto"})[0] == 401
+# id di una conversazione che non esiste (eliminata sul PC): 404, niente chat ricreata
+got, data = jpost("/api/send", {"text": "ciao", "model": "finto", "chat_id": "eliminata"}, TOKEN)
+assert got == 404 and "inesistente" in data["error"], (got, data)
 assert not engine.busy() and engine.chats() == []
 print("2. validazione dell'invio OK")
 
@@ -122,6 +125,7 @@ last = s.of("answer")[-1]
 assert "<b>mondo</b>" in last["html"] and "ragiono" in last["thinking_html"]
 done = s.of("done")[0]
 assert done["outcome"] == "done" and done["stats"] and done["error"] == ""
+assert abs(done["ts"] - time.time()) < 60, "orario della risposta dal PC mancante"
 assert [b["busy"] for b in s.of("busy")][-1] is False
 ids = [e[0] for e in s.events if e[0] is not None]
 assert ids == sorted(ids) and all(i > res["after"] for i in ids)
@@ -182,6 +186,11 @@ assert "start" not in again.kinds() and "user" not in again.kinds(), again.kinds
 assert "<b>mondo</b>" in again.of("answer")[-1]["html"], "testo perso nel ricollegamento"
 again.close()
 print("5. Last-Event-ID: niente eventi doppi OK")
+
+# HEAD sugli stream: rifiutata (prima apriva uno stream senza fine)
+assert request("HEAD", f"/api/chats/{cid}/events", cookie=TOKEN)[0] == 405
+assert request("HEAD", "/api/events", cookie=TOKEN)[0] == 405
+assert request("HEAD", "/", cookie=TOKEN)[0] == 200
 
 # ------------------------------------------------ 6. arresto con stream aperti
 

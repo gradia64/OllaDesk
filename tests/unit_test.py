@@ -395,20 +395,36 @@ def test_settings_keep_app_update_keys():
 
 
 def test_settings_new_024_keys():
-    # 0.2.4: thinking, tray e condivisione API hanno predefiniti sensati
+    # 0.2.4: thinking e tray hanno predefiniti sensati
     from olladesk import config
     with _isolated_config():
         s = config.load_settings()
         assert s["thinking"] is True
         assert s["tray_icon"] is True and s["close_to_tray"] is True
-        assert s["share_api"] is False
-        assert s["share_bind"] == "0.0.0.0" and s["share_port"] == 11434
         # e sopravvivono al roundtrip su disco
-        s.update(thinking=False, share_api=True, share_port=11435)
+        s.update(thinking=False)
         config.save_settings(s)
-        s2 = config.load_settings()
-        assert s2["thinking"] is False
-        assert s2["share_api"] is True and s2["share_port"] == 11435
+        assert config.load_settings()["thinking"] is False
+
+
+def test_share_settings_removed():
+    # 0.3: la condivisione dell'API non c'è più. Le chiavi share_* di un
+    # settings.json vecchio non entrano nelle impostazioni, il primo
+    # salvataggio le toglie dal file e la nota all'utente compare una volta
+    from olladesk import config
+    with _isolated_config():
+        path = config.config_dir() / "settings.json"
+        path.write_text(json.dumps({"share_api": True, "share_bind": "0.0.0.0",
+                                    "share_port": 11435, "thinking": False}))
+        s = config.load_settings()
+        assert not any(k.startswith("share_") for k in s) and s["thinking"] is False
+        assert config.legacy_share_port() == 11435
+        config.save_settings(s)
+        assert not any(k.startswith("share_") for k in json.loads(path.read_text()))
+        assert config.legacy_share_port() is None
+        # condivisione spenta: nessuna nota da mostrare
+        path.write_text(json.dumps({"share_api": False, "share_port": 11435}))
+        assert config.legacy_share_port() is None
 
 
 def test_chat_column_side_margin():
@@ -419,10 +435,10 @@ def test_chat_column_side_margin():
     assert ChatArea._side_margin(COLUMN_MAX_W + 340) == 170
 
 
-def test_share_lan_url_filter():
+def test_lan_url_filter():
     # il filtro degli indirizzi di rete parte dalla stringa: loopback,
-    # link-local e IPv6 non sono utili al client su smartphone
-    from olladesk.server_share import _is_shareable_ip
+    # link-local e IPv6 non sono utili al telefono
+    from olladesk.netinfo import _is_shareable_ip
     assert _is_shareable_ip("192.168.1.20")
     assert _is_shareable_ip("10.0.0.5")
     assert not _is_shareable_ip("127.0.0.1")
@@ -582,25 +598,6 @@ def _thinking_texts(win) -> list[str]:
     return out
 
 
-def test_share_state_updates_indicator():
-    # B1: lo stato del server condiviso deve riflettersi sull'indicatore 🔗
-    with _isolated_config():
-        win = _make_window()
-        try:
-            assert not win.share_btn.isVisibleTo(win)
-            # emit diretto: verifica anche il collegamento state_changed → UI
-            win._share.state_changed.emit("running", "192.168.1.10")
-            assert win.share_btn.isVisibleTo(win)
-            assert win.share_btn.toolTip()
-            win._share.state_changed.emit("off", "")
-            assert not win.share_btn.isVisibleTo(win)
-            win._share.state_changed.emit("error", "collaudo")
-            assert win.share_btn.isVisibleTo(win)
-            assert "collaudo" in win.share_btn.toolTip()
-        finally:
-            win._really_quit = True
-            win.close()
-
 
 def test_reopen_and_rerender_keep_thinking():
     # B4: il «Pensiero» salvato ricompare riaprendo la conversazione e
@@ -628,86 +625,24 @@ def test_reopen_and_rerender_keep_thinking():
             win.close()
 
 
-def _free_port() -> int:
-    import socket
-    s = socket.socket()
-    s.bind(("127.0.0.1", 0))
-    port = s.getsockname()[1]
-    s.close()
-    return port
-
-
-def test_share_spawn_starts_process():
-    # regressione: QProcess.setChildProcessModifier non esiste in PySide6 e
-    # _spawn sollevava AttributeError lasciando lo stato «starting» per sempre.
-    # Gira in un processo a parte: l'event loop necessario alla sonda non deve
-    # ricevere anche gli eventi in sospeso delle finestre create dagli altri
-    # test della suite (già chiuse).
-    import subprocess
-
-    child = """
-import os, sys, stat, tempfile
-os.environ["QT_QPA_PLATFORM"] = "offscreen"
-os.environ["XDG_CONFIG_HOME"] = tempfile.mkdtemp()
-sys.path.insert(0, {root!r})
-from PySide6.QtCore import QEventLoop, QTimer
-from PySide6.QtWidgets import QApplication
-app = QApplication([])
-from olladesk import server_share
-
-import socket
-s = socket.socket(); s.bind(("127.0.0.1", 0)); port = s.getsockname()[1]; s.close()
-
-bindir = tempfile.mkdtemp()
-fake = os.path.join(bindir, "ollama")
-with open(fake, "w") as fh:
-    fh.write("#!/bin/sh\\nexec sleep 60\\n")
-os.chmod(fake, os.stat(fake).st_mode | stat.S_IEXEC)
-os.environ["PATH"] = bindir + os.pathsep + os.environ.get("PATH", "")
-
-srv = server_share.SharedOllamaServer()
-srv.start("127.0.0.1", port)
-loop = QEventLoop()
-QTimer.singleShot(2500, loop.quit)
-loop.exec()
-assert srv._proc is not None, "il processo non è mai stato avviato"
-assert srv.state() in ("starting", "running"), srv.state()
-srv.stop()
-assert srv._proc is None
-print("SPAWN CHILD OK")
-""".format(root=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-    r = subprocess.run(
-        [sys.executable, "-c", child],
-        capture_output=True, text=True, timeout=60,
-        cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    )
-    assert "SPAWN CHILD OK" in r.stdout, f"figlio fallito:\n{r.stdout}\n{r.stderr}"
-    assert r.returncode == 0, f"figlio uscito con {r.returncode}:\n{r.stderr}"
-
-
-def test_share_probe_replaced_while_in_flight():
-    # regressione: _start_probe usciva se una sonda era in volo, quindi una
-    # configurazione cambiata a caldo non veniva mai sondata
+def test_share_removed_note_once():
+    # chi aveva la condivisione attiva riceve una nota (anche sulla porta
+    # rimasta nel campo «Server Ollama») e il file perde le chiavi share_*
+    from olladesk import config
     with _isolated_config():
-        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-        from PySide6.QtWidgets import QApplication
-
-        QApplication.instance() or QApplication([])
-        from olladesk import server_share
-
-        srv = server_share.SharedOllamaServer()
-        srv._cfg = ("127.0.0.1", _free_port())
-        srv._set_state("starting", "")
-        srv._start_probe("http://127.0.0.1:1/api/version", "external-local")
-        first = srv._probe
-        assert first is not None
-        srv._start_probe("http://127.0.0.1:2/api/version", "external-local")
-        assert srv._probe is not None and srv._probe is not first
-        # la sonda sostituita, finendo, non azzera il riferimento alla nuova
-        first.wait(2500)
-        assert srv._probe is not None
-        srv.stop()
+        path = config.config_dir() / "settings.json"
+        path.write_text(json.dumps({"share_api": True, "share_port": 11435,
+                                    "host": "http://localhost:11435"}))
+        win = _make_window()
+        try:
+            win._explain_share_removed(config.legacy_share_port())
+            texts = [w.text() for w in win.chat_area.findChildren(type(win.status_label))]
+            note = next(t for t in texts if "condivisione" in t)
+            assert "Companion web" in note and "11435" in note
+            assert config.legacy_share_port() is None   # alla prossima apertura niente nota
+        finally:
+            win._really_quit = True
+            win.close()
 
 
 def test_thinking_stream_no_duplication():
@@ -768,101 +703,6 @@ os._exit(0)
     assert "QUIT OK" in r.stdout, f"figlio fallito:\n{r.stdout}\n{r.stderr}"
     assert r.returncode == 0, f"figlio uscito con {r.returncode}:\n{r.stderr}"
 
-
-def test_share_lan_shared_flag():
-    # il flag decide quando copiare gli indirizzi: nostra istanza con bind di
-    # rete, o istanza esterna raggiungibile dalla sonda LAN
-    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PySide6.QtWidgets import QApplication
-
-    QApplication.instance() or QApplication([])
-    from olladesk import server_share
-
-    srv = server_share.SharedOllamaServer()
-    srv._cfg = ("0.0.0.0", 11434)
-    srv._generation = 1
-
-    srv._set_state("starting", "")
-    srv._on_probe(True, "external-lan", 1)
-    assert srv.lan_shared is True            # istanza di sistema raggiungibile
-
-    srv._set_state("starting", "")
-    srv._on_probe(False, "external-lan", 1)
-    assert srv.lan_shared is False           # bind 127.0.0.1 del servizio
-
-    srv._set_state("starting", "")
-    srv._on_probe(True, "spawn-check", 1)
-    assert srv.lan_shared is True            # nostro processo, bind di rete
-
-    srv._cfg = ("127.0.0.1", 11434)
-    srv._set_state("starting", "")
-    srv._on_probe(True, "spawn-check", 1)
-    assert srv.lan_shared is False           # nostro processo, solo locale
-
-    srv._on_probe(True, "external-lan", 1)   # riattiva, poi stop azzera
-    srv.stop()
-    assert srv.lan_shared is False
-
-
-def test_share_copy_respects_lan_shared():
-    # regressione I4: con l'Ollama di sistema già raggiungibile in rete il
-    # clic su 🔗 deve COPIARE gli indirizzi, non rifiutare
-    with _isolated_config():
-        win = _make_window()
-        try:
-            from PySide6.QtGui import QGuiApplication
-
-            from olladesk import server_share
-
-            QGuiApplication.clipboard().setText("")
-            win._share.lan_shared = False
-            win._copy_share_urls()
-            assert QGuiApplication.clipboard().text() == ""   # rifiutato
-
-            win._share.lan_shared = True
-            win._copy_share_urls()
-            urls = server_share.lan_urls(int(win.settings.get("share_port", 11434)))
-            text = QGuiApplication.clipboard().text()
-            if urls:   # senza interfacce di rete non c'è nulla da copiare
-                assert text == "\n".join(urls), text
-        finally:
-            win._really_quit = True
-            win.close()
-
-
-def test_share_external_note_only_when_actionable():
-    # la nota «external» in chat non deve comparire quando è tutto a posto
-    # (istanza già in ascolto sulle interfacce): resta solo per il caso da
-    # sistemare, e una volta per sessione
-    with _isolated_config():
-        win = _make_window()
-        try:
-            from olladesk.widgets.message import SystemNoteWidget
-
-            def note_count() -> int:
-                n = 0
-                for i in range(win.chat_area.msgs.count()):
-                    row = win.chat_area.msgs.itemAt(i).widget()
-                    lay = row.layout() if row is not None else None
-                    if lay is not None and any(
-                        isinstance(lay.itemAt(j).widget(), SystemNoteWidget)
-                        for j in range(lay.count())
-                    ):
-                        n += 1
-                return n
-
-            win._share.lan_shared = True   # Ollama di sistema già in rete
-            win._on_share_state("external", "già attivo e in ascolto su tutte le interfacce")
-            assert note_count() == 0, "nota inutile nello stato buono"
-
-            win._share.lan_shared = False  # bind 127.0.0.1: da sistemare
-            win._on_share_state("external", "risponde solo su questo PC")
-            assert note_count() == 1
-            win._on_share_state("external", "risponde solo su questo PC")
-            assert note_count() == 1   # una sola volta per sessione
-        finally:
-            win._really_quit = True
-            win.close()
 
 
 def test_system_note_dismiss():

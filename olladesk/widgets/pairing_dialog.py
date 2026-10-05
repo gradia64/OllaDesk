@@ -20,6 +20,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..companion import MAX_DEVICES
+
 
 def qr_matrix(text: str) -> list[list[bool]] | None:
     """Matrice del QR code (bordo incluso); None se manca python3-qrcode."""
@@ -121,7 +123,9 @@ class PairingDialog(QDialog):
             "Il codice vale 2 minuti e una sola volta. Il collegamento è HTTP in "
             "chiaro: usalo solo sulla rete di casa (Wi-Fi protetta). Se il telefono "
             "non raggiunge la pagina, apri la porta "
-            f"{server.port}/tcp nel firewall del PC per la sola rete locale.",
+            f"{server.port}/tcp nel firewall del PC per la sola rete locale. "
+            f"Si ricordano al massimo {MAX_DEVICES} dispositivi: oltre, i più "
+            "vecchi vengono scollegati.",
             self,
         )
         note.setObjectName("metaLabel")

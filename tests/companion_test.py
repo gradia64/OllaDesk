@@ -128,18 +128,35 @@ for path, ctype in (("/", "text/html"), ("/app.js", "text/javascript"), ("/app.c
     assert hd["X-Frame-Options"] == "DENY" and hd["X-Content-Type-Options"] == "nosniff"
     for ref in (b'src="http', b'href="http', b"url(http", b'fetch("http', b"@import"):
         assert ref not in body, f"{path}: risorsa esterna ({ref!r})"
+# PWA: manifest con icone locali, tutte servite come PNG vere
+st, hd, body = request("GET", "/manifest.webmanifest")
+assert st == 200 and hd["Content-Type"] == "application/manifest+json"
+manifest = json.loads(body)
+assert manifest["display"] == "standalone" and manifest["start_url"] == "/"
+assert any(i.get("purpose") == "maskable" for i in manifest["icons"])
+for icon in [i["src"] for i in manifest["icons"]] + ["apple-touch-icon.png", "favicon.ico"]:
+    st, hd, body = request("GET", "/" + icon)
+    assert st == 200 and hd["Content-Type"] == "image/png", icon
+    assert body.startswith(b"\x89PNG\r\n\x1a\n"), f"{icon}: non è una PNG"
+st, _h, body = request("GET", "/")
+for ref in (b'href="manifest.webmanifest"', b'href="apple-touch-icon.png"', b'name="theme-color"'):
+    assert ref in body, ref
 assert request("GET", "/nulla")[0] == 404
 assert request("GET", "/../companion.py")[0] == 404
-print("1. pagine statiche, CSP e nessuna risorsa esterna OK")
+print("1. pagine statiche, CSP, PWA e nessuna risorsa esterna OK")
 
 # -------------------------------------------------------- 2. DNS rebinding
 
 assert request("GET", "/", headers={"Host": f"evil.example:{PORT}"})[0] == 421
 assert request("GET", "/api/session", headers={"Host": "attacker.com"})[0] == 421
-assert request("GET", "/", headers={"Host": f"mio-pc.local:{PORT}"})[0] == 200
+HOSTNAME = socket.gethostname().split(".")[0]
+assert request("GET", "/", headers={"Host": f"{HOSTNAME}.local:{PORT}"})[0] == 200
+assert request("GET", "/", headers={"Host": f"{HOSTNAME}:{PORT}"})[0] == 200
+# un nome mDNS qualunque non basta: solo quelli di questa macchina
+assert request("GET", "/", headers={"Host": f"altro-pc-{HOSTNAME}.local:{PORT}"})[0] == 421
 assert request("GET", "/", headers={"Host": f"[::1]:{PORT}"})[0] == 200
 assert request("GET", "/", headers={"Host": f"localhost:{PORT}"})[0] == 200
-print("2. Host ammessi solo IP, localhost e .local OK")
+print("2. Host ammessi solo IP, localhost e nomi di questa macchina OK")
 
 # ------------------------------------------------- 3. senza abbinamento
 
@@ -178,6 +195,33 @@ t = threading.Thread(target=raw)
 t.start()
 assert wait_until(lambda: not t.is_alive()), "la connessione non è stata chiusa"
 assert raw_out["data"].count(b"HTTP/1.1 ") == 1 and b" 415 " in raw_out["data"]
+
+
+def raw_request(payload: bytes) -> bytes:
+    """Richiesta grezza in un thread; restituisce tutto fino alla chiusura."""
+    out = {}
+
+    def run():
+        s = socket.create_connection(("127.0.0.1", PORT), timeout=5)
+        s.sendall(payload)
+        data = b""
+        while chunk := s.recv(4096):
+            data += chunk
+        out["data"] = data
+        s.close()
+
+    th = threading.Thread(target=run)
+    th.start()
+    assert wait_until(lambda: not th.is_alive()), "connessione non chiusa"
+    return out["data"]
+
+
+# corpo senza lunghezza (chunked o assente): 411 e connessione chiusa
+for extra in (b"Transfer-Encoding: chunked\r\n", b""):
+    data = raw_request(b"POST /api/pair HTTP/1.1\r\nHost: 127.0.0.1\r\n"
+                       b"Content-Type: application/json\r\n" + extra + b"\r\n"
+                       b"0\r\n\r\nGET /api/session HTTP/1.1\r\n\r\n")
+    assert data.count(b"HTTP/1.1 ") == 1 and b" 411 " in data, data[:80]
 
 st, hd, body = request("POST", "/api/pair", {"code": code})
 assert st == 200, body

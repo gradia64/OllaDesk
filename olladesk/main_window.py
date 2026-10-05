@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from . import __version__, app_update, companion, config, server_share, theme
+from . import __version__, app_update, companion, config, theme
 from .engine import ChatEngine
 from .ollama_client import shutdown_workers
 from .widgets.chat_area import ChatArea
@@ -60,9 +60,6 @@ class MainWindow(QMainWindow):
         self.tray: QSystemTrayIcon | None = None
         self._really_quit = False      # True solo da «Esci» nel menu della tray
         self._tray_hint_shown = False
-        self._share_note_shown = False   # la nota «external» vale una volta per sessione
-        self._share = server_share.SharedOllamaServer(self)
-        self._share.state_changed.connect(self._on_share_state)
         self._companion = companion.CompanionServer(self.engine, self)
         self._companion.state_changed.connect(self._on_companion_state)
 
@@ -92,9 +89,11 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(150, self._refresh_models)
         # dopo l'avvio, per non rallentarlo: al massimo una volta al giorno
         QTimer.singleShot(3000, self._maybe_check_app_update)
-        # tray e condivisione API: attivati dopo il primo disegno
+        # tray e companion web: attivate dopo il primo disegno
         self._sync_tray()
-        QTimer.singleShot(800, self._sync_share)
+        legacy_port = config.legacy_share_port()
+        if legacy_port is not None:
+            QTimer.singleShot(800, lambda: self._explain_share_removed(legacy_port))
         QTimer.singleShot(800, self._sync_companion)
 
     # -------------------------------------------------------------------- UI
@@ -137,11 +136,6 @@ class MainWindow(QMainWindow):
         top_lay.addWidget(self.reload_models_btn)
 
         top_lay.addStretch(1)
-        # indicatore della condivisione API in rete (visibile solo se attiva)
-        self.share_btn = QToolButton(top)
-        self.share_btn.setText("🔗")
-        self.share_btn.hide()
-        top_lay.addWidget(self.share_btn)
         # companion web attiva: clic per abbinare un telefono
         self.companion_btn = QToolButton(top)
         self.companion_btn.setText("📱")
@@ -193,7 +187,6 @@ class MainWindow(QMainWindow):
         self.burger.clicked.connect(self._toggle_sidebar)
         self.reload_models_btn.clicked.connect(self._refresh_models)
         self.app_update_btn.clicked.connect(self._show_app_update)
-        self.share_btn.clicked.connect(self._copy_share_urls)
         self.companion_btn.clicked.connect(self._open_pairing)
         self.model_combo.currentIndexChanged.connect(self._on_model_changed)
 
@@ -578,73 +571,24 @@ class MainWindow(QMainWindow):
         self._really_quit = True
         self.close()
 
-    # ------------------------------------------------- condivisione API rete
+    # ------------------------------------- condivisione API (rimossa nella 0.3)
 
-    def _sync_share(self) -> None:
-        """Avvia o arresta il server Ollama condiviso secondo le impostazioni."""
-        if self.settings.get("share_api"):
-            self._share.start(self.settings["share_bind"], int(self.settings["share_port"]))
-        else:
-            self._share.stop()
-
-    def _on_share_state(self, state: str, detail: str) -> None:
-        port = int(self.settings.get("share_port", 11434))
-        if state == "running":
-            if self.settings.get("share_bind") == "127.0.0.1":
-                tip = f"API Ollama attiva\n{detail}"
-            else:
-                urls = server_share.lan_urls(port)
-                tip = (
-                    "API Ollama condivisa in rete\n"
-                    "Da smartphone/tablet usa uno di questi indirizzi:\n  "
-                    + "\n  ".join(urls)
-                    + f"\n(da questo PC: http://localhost:{port})"
-                    if urls else f"API Ollama condivisa\n{detail}"
-                )
-            self.share_btn.setToolTip(tip)
-            self.share_btn.show()
-        elif state == "external":
-            # il dettaglio del manager dice già se l'istanza esterna è davvero
-            # raggiungibile dalla LAN o solo in locale (bind 127.0.0.1)
-            self.share_btn.setToolTip(f"Condivisione API (istanza esterna)\n{detail}")
-            self.share_btn.show()
-            # nota in chat solo se c'è qualcosa da sistemare (istanza non
-            # raggiungibile dalla rete), e una sola volta per sessione: se è
-            # già tutto in ascolto sulle interfacce il tooltip di 🔗 basta,
-            # una nota a ogni avvio è solo rumore
-            if not self._share.lan_shared and not self._share_note_shown:
-                self._share_note_shown = True
-                self.chat_area.add_system_note(f"⚠ Condivisione API: {detail}")
-        elif state == "starting":
-            self.share_btn.setToolTip(f"Condivisione API: {detail}")
-            self.share_btn.show()
-        elif state == "error":
-            self.share_btn.setToolTip(f"Condivisione API: errore\n{detail}")
-            self.share_btn.show()
-            self.chat_area.add_system_note(f"⚠ Condivisione API non riuscita:\n{detail}")
-        else:   # off
-            self.share_btn.hide()
-
-    def _copy_share_urls(self) -> None:
-        # copia solo indirizzi davvero raggiungibili dagli altri dispositivi:
-        # il processo nostro in ascolto sulle interfacce di rete, oppure
-        # un'istanza esterna verificata dalla sonda LAN (es. Ollama di
-        # sistema già configurato su 0.0.0.0)
-        if not self._share.lan_shared:
-            self.chat_area.add_system_note(
-                "⚠ Nessun indirizzo di rete valido da copiare:\n"
-                "chi serve la porta non è raggiungibile dalla rete (processo "
-                "assente, bind solo locale o istanza esterna chiusa in locale): "
-                "vedi il tooltip di 🔗."
+    def _explain_share_removed(self, port: int) -> None:
+        """Una volta sola: la condivisione dell'API non c'è più."""
+        extra = ""
+        if f":{port}" in self.settings.get("host", "") and port != 11434:
+            extra = (
+                f"\nIl campo «Server Ollama» punta ancora alla porta {port}, quella "
+                "dell'istanza che avviava la condivisione: riportalo al tuo Ollama "
+                "(di solito http://localhost:11434)."
             )
-            return
-        urls = server_share.lan_urls(int(self.settings.get("share_port", 11434)))
-        if not urls:
-            return
-        QGuiApplication.clipboard().setText("\n".join(urls))
         self.chat_area.add_system_note(
-            "📋 Indirizzi dell'API copiati negli appunti:\n" + "\n".join(urls)
+            "ℹ La condivisione dell'API Ollama in rete è stata rimossa: per usare "
+            "OllaDesk dal telefono attiva la «Companion web» (Impostazioni → "
+            "Interfaccia), che chiede un abbinamento. Per i client di terze parti "
+            "vedi il README (OLLAMA_HOST nel servizio di sistema)." + extra
         )
+        config.save_settings(self.settings)   # le chiavi share_* escono dal file
 
     # ------------------------------------------------------ companion web
 
@@ -766,16 +710,15 @@ class MainWindow(QMainWindow):
         self.engine.reset_status()
         self._check_server()
         self._refresh_models()
-        # tray e condivisione possono essere cambiate nelle impostazioni
+        # tray e companion possono essere cambiate nelle impostazioni
         self._sync_tray()
-        self._sync_share()
         self._sync_companion()
 
     # -------------------------------------------------------------------- chiusura
 
     def closeEvent(self, ev) -> None:  # noqa: N802 (API Qt)
         # con l'icona nella tray la chiusura riduce la finestra: l'app resta
-        # attiva (stream e condivisione API inclusi); si esce davvero solo
+        # attiva (stream e companion web inclusi); si esce davvero solo
         # con «Esci» dal menu della tray (o senza tray configurata)
         if (
             self.tray is not None
@@ -796,9 +739,6 @@ class MainWindow(QMainWindow):
             return
         if self.tray is not None:
             self.tray.hide()   # via l'icona subito: niente residui nel pannello
-        # arresta l'eventuale server condiviso avviato da noi: al prossimo
-        # avvio `_sync_share` lo riporta su se l'opzione è ancora attiva
-        self._share.stop()
         self._companion.stop()
         # ferma e attende (con limite) TUTTI i worker: un QThread distrutto
         # mentre è in esecuzione fa abortire il processo. Gli "zombie" bloccati
