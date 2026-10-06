@@ -308,7 +308,7 @@ except OSError:
     pass
 print("9. porta occupata ed arresto OK")
 
-# ------------------------------------------- 10. dialogo di abbinamento e QR
+# --------------------------------- 10. finestra della companion: abbinamento e QR
 
 fake_qr = types.ModuleType("qrcode")
 fake_qr.constants = types.SimpleNamespace(ERROR_CORRECT_M=0)
@@ -331,11 +331,19 @@ class FakeQR:
 fake_qr.QRCode = FakeQR
 sys.modules["qrcode"] = fake_qr
 
-from olladesk.widgets.pairing_dialog import PairingDialog, qr_matrix  # noqa: E402
+from olladesk.widgets.companion_dialog import CompanionDialog, qr_matrix  # noqa: E402
+
+# servizio spento: niente codice, abbinamento disattivato
+srv.urls = lambda: ["http://192.168.1.50:%d" % srv.port]
+off = CompanionDialog(srv, {"companion": False})
+assert srv.state() == "off" and not off.pair_box.isEnabled()
+assert auth.code_remaining() == 0 and "Spenta" in off.state_label.text()
+off.reject()
 
 srv.start(0, "127.0.0.1")
-srv.urls = lambda: ["http://192.168.1.50:%d" % srv.port]
-dlg = PairingDialog(srv)
+dlg = CompanionDialog(srv, {"companion": True, "companion_port": srv.port})
+assert dlg.pair_box.isEnabled() and f"porta {srv.port}" in dlg.state_label.text()
+assert "192.168.1.50" in dlg.urls_label.text() and dlg.copy_btn.isVisibleTo(dlg)
 code_text = dlg.code_label.text().replace(" ", "")
 assert len(code_text) == 6 and auth.code_remaining() > 0
 assert dlg.qr.isVisibleTo(dlg) and len(dlg.qr._matrix) == 25
@@ -347,7 +355,7 @@ PORT = srv.port
 st, _h, _b = request("POST", "/api/pair", {"code": code_text})
 assert st == 200
 assert wait_until(lambda: "abbinato" in dlg.status_label.text())
-assert dlg.devices_label.text().endswith(": 1") and not dlg.new_code_btn.isHidden()
+assert "abbinati: 1." in dlg.devices_label.text() and not dlg.new_code_btn.isHidden()
 assert not dlg.qr.isVisibleTo(dlg), "il QR deve sparire dopo l'abbinamento"
 dlg._new_code()
 dlg.reject()
@@ -358,7 +366,7 @@ try:
 except ImportError:
     assert qr_matrix("x") is None, "senza python3-qrcode niente QR"
 srv.stop()
-print("10. dialogo di abbinamento con QR code OK")
+print("10. finestra della companion: abbinamento con QR code OK")
 
 # --------------------------------------------------- 11. finestra principale
 
@@ -373,12 +381,57 @@ config.save_settings(s)
 
 from olladesk.main_window import MainWindow  # noqa: E402
 
+
+def auth_code_active(server) -> bool:
+    return server.auth.code_remaining() > 0
+
+
 win = MainWindow()
 win._sync_companion()
 assert win._companion.state() == "running" and not win.companion_btn.isHidden()
 win.settings["companion"] = False
 win._sync_companion()
 assert win._companion.state() == "off" and win.companion_btn.isHidden()
+
+# la finestra della companion (barra laterale, Ctrl+D) accende, cambia porta
+# e spegne il servizio, e salva la scelta nelle impostazioni
+assert win.sidebar.companion_btn.text().endswith("Companion")
+from olladesk.widgets.companion_dialog import CompanionDialog  # noqa: E402
+
+box = CompanionDialog(win._companion, win.settings, win._apply_companion)
+box.enable_chk.setChecked(True)
+assert win._companion.state() == "running" and win._companion.port == free_port
+assert config.load_settings()["companion"] is True
+assert box.pair_box.isEnabled() and auth_code_active(win._companion)
+probe = socket.socket()
+probe.bind(("127.0.0.1", 0))
+other_port = probe.getsockname()[1]
+probe.close()
+box.port_spin.setValue(other_port)
+assert box.port_btn.isVisibleTo(box)
+box._apply_port()
+assert win._companion.state() == "running" and win._companion.port == other_port
+assert config.load_settings()["companion_port"] == other_port
+# porta occupata: errore mostrato nella finestra
+busy_sock = socket.socket()
+busy_sock.bind(("0.0.0.0", 0))
+busy_sock.listen(1)
+box.port_spin.setValue(busy_sock.getsockname()[1])
+box._apply_port()
+assert win._companion.state() == "error" and "Non avviata" in box.state_label.text()
+assert not box.pair_box.isEnabled()
+busy_sock.close()
+box.enable_chk.setChecked(False)
+assert win._companion.state() == "off" and config.load_settings()["companion"] is False
+box.reject()
+# le impostazioni non hanno più la sezione della companion
+from olladesk.widgets.settings_dialog import SettingsDialog  # noqa: E402
+
+sd = SettingsDialog(win.settings, lambda: [], "dark", "?", win)
+assert not hasattr(sd, "companion_chk")
+# i valori della companion passano intatti da un salvataggio delle impostazioni
+assert sd.collect_settings()["companion"] is False
+sd.deleteLater()
 win._really_quit = True
 win.close()
 wait_until(lambda: False, 100)

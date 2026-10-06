@@ -174,6 +174,37 @@ assert win.current_chat["messages"][-1]["content"] == "parziale e finale"
 assert win.chat_area._stream_widget is None and win.chat_area.send_btn.text() == "➤"
 print("4. risposta del PC completata in background OK")
 
+# ------------------------------- 5. rinomina ed elimina dal telefono
+
+for body, status in (({"chat_id": "chat_a", "title": "   "}, 400),
+                     ({"chat_id": "chat_a", "title": "x" * 201}, 400),
+                     ({"chat_id": "nessuna", "title": "ok"}, 404),
+                     ({"chat_id": "../x", "title": "ok"}, 400)):
+    assert h.post_json("/api/rename", body, TOKEN)[0] == status, body
+st, _d = h.post_json("/api/rename", {"chat_id": "chat_a", "title": "  Nuovo titolo  "}, TOKEN)
+assert st == 200
+assert config.load_chat("chat_a")["title"] == "Nuovo titolo"
+assert wait_until(lambda: any(
+    win.sidebar.list.item(i).toolTip() == "Nuovo titolo" or "Nuovo titolo" in win.sidebar.list.item(i).text()
+    for i in range(win.sidebar.list.count())))
+
+# il PC guarda B, il telefono la elimina mentre risponde: risposta
+# fermata, file cancellato, finestra tornata alla pagina iniziale
+fake.release.clear()
+win._open_chat("chat_b")
+win.chat_area.input.setPlainText("rispondi lento")
+win.chat_area._emit_send()
+assert wait_until(lambda: engine.partial()[0] == "parziale ")
+st, _d = h.post_json("/api/delete", {"chat_id": "chat_b"}, TOKEN)
+assert st == 200
+assert not engine.busy() and config.load_chat("chat_b") is None
+assert win._view_id is None and win.current_chat is None
+assert win.chat_area.send_btn.text() == "➤"
+assert "chat_b" not in [c["id"] for c in engine.chats()]
+assert h.post_json("/api/delete", {"chat_id": "chat_b"}, TOKEN)[0] == 404
+fake.release.set()
+print("5. rinomina ed eliminazione dal telefono, PC aggiornato OK")
+
 win._really_quit = True
 win.close()
 wait_until(lambda: False, 200)

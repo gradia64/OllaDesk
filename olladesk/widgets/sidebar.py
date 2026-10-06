@@ -22,6 +22,7 @@ class ChatSidebar(QWidget):
     chatRenamed = Signal(str, str)  # id, nuovo titolo
     chatDeleted = Signal(str)       # id
     modelsRequested = Signal()
+    companionRequested = Signal()
     settingsRequested = Signal()
 
     def __init__(self, parent=None):
@@ -62,6 +63,12 @@ class ChatSidebar(QWidget):
         self.models_btn.setToolTip("Scarica o rimuovi modelli Ollama")
         self.models_btn.clicked.connect(self.modelsRequested.emit)
         lay.addWidget(self.models_btn)
+
+        self.companion_btn = QPushButton("📱  Companion", self)
+        self.companion_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.companion_btn.setToolTip("OllaDesk dal telefono: attivazione, abbinamento, dispositivi (Ctrl+D)")
+        self.companion_btn.clicked.connect(self.companionRequested.emit)
+        lay.addWidget(self.companion_btn)
 
         self.settings_btn = QPushButton("⚙  Impostazioni", self)
         self.settings_btn.setCursor(Qt.CursorShape.PointingHandCursor)

@@ -31,7 +31,7 @@ from .engine import ChatEngine
 from .ollama_client import shutdown_workers
 from .widgets.chat_area import ChatArea
 from .widgets.model_manager import ModelManagerDialog
-from .widgets.pairing_dialog import PairingDialog
+from .widgets.companion_dialog import CompanionDialog
 from .widgets.settings_dialog import SettingsDialog
 from .widgets.sidebar import ChatSidebar
 from .workers import WorkerRegistry
@@ -178,6 +178,7 @@ class MainWindow(QMainWindow):
         self.sidebar.chatRenamed.connect(self._rename_chat)
         self.sidebar.chatDeleted.connect(self._delete_chat)
         self.sidebar.modelsRequested.connect(self._open_models)
+        self.sidebar.companionRequested.connect(self._open_companion)
         self.sidebar.settingsRequested.connect(self.open_settings)
 
         self.chat_area.sendRequested.connect(self._on_send)
@@ -187,11 +188,12 @@ class MainWindow(QMainWindow):
         self.burger.clicked.connect(self._toggle_sidebar)
         self.reload_models_btn.clicked.connect(self._refresh_models)
         self.app_update_btn.clicked.connect(self._show_app_update)
-        self.companion_btn.clicked.connect(self._open_pairing)
+        self.companion_btn.clicked.connect(self._open_companion)
         self.model_combo.currentIndexChanged.connect(self._on_model_changed)
 
         e = self.engine
         e.chats_changed.connect(self._on_chats_changed)
+        e.chat_deleted.connect(self._on_chat_deleted)
         e.user_message_added.connect(self._on_user_message)
         e.busy_changed.connect(self._on_busy_changed)
         e.search_started.connect(self._on_search_started)
@@ -211,6 +213,7 @@ class MainWindow(QMainWindow):
             ("Ctrl+B", self._toggle_sidebar),
             ("Ctrl+,", self.open_settings),
             ("Ctrl+M", self._open_models),
+            ("Ctrl+D", self._open_companion),
         ):
             sc = QShortcut(QKeySequence(seq), self)
             sc.activated.connect(fn)
@@ -453,6 +456,14 @@ class MainWindow(QMainWindow):
     def _on_chats_changed(self) -> None:
         self.sidebar.set_chats(self.engine.chats(), self._view_id)
 
+    def _on_chat_deleted(self, chat_id: str) -> None:
+        # eliminata anche dal telefono: la finestra non resta su una chat
+        # che non esiste più
+        if self._view_id == chat_id:
+            self._view_id = None
+            self.chat_area.clear_messages()
+            self._sync_busy_ui()
+
     def _on_user_message(self, chat_id: str, msg: dict) -> None:
         if not self._viewing(chat_id):
             return
@@ -584,8 +595,8 @@ class MainWindow(QMainWindow):
             )
         self.chat_area.add_system_note(
             "ℹ La condivisione dell'API Ollama in rete è stata rimossa: per usare "
-            "OllaDesk dal telefono attiva la «Companion web» (Impostazioni → "
-            "Interfaccia), che chiede un abbinamento. Per i client di terze parti "
+            "OllaDesk dal telefono attiva la «Companion web» (voce «📱 Companion» "
+            "della barra laterale, Ctrl+D), che chiede un abbinamento. Per i client di terze parti "
             "vedi il README (OLLAMA_HOST nel servizio di sistema)." + extra
         )
         config.save_settings(self.settings)   # le chiavi share_* escono dal file
@@ -605,24 +616,30 @@ class MainWindow(QMainWindow):
             where = "\n  ".join(urls) if urls else "(nessun indirizzo di rete trovato)"
             self.companion_btn.setToolTip(
                 f"Companion web attiva, sul telefono apri:\n  {where}\n"
-                "Clic per abbinare un dispositivo"
+                "Clic per abbinare un dispositivo (Ctrl+D)"
             )
             self.companion_btn.show()
         elif state == "error":
             self.companion_btn.hide()
             self.chat_area.add_system_note(
                 f"⚠ Companion web non avviata: {detail}.\n"
-                "Scegli un'altra porta nelle impostazioni (Ctrl+,)."
+                "Scegli un'altra porta nella finestra «Companion» (Ctrl+D)."
             )
         else:
             self.companion_btn.hide()
 
-    def _open_pairing(self) -> None:
-        if self._companion.state() != "running":
-            return
-        dlg = PairingDialog(self._companion, self)
+    def _open_companion(self) -> None:
+        """Finestra della companion: attivazione, abbinamento, dispositivi."""
+        dlg = CompanionDialog(self._companion, self.settings, self._apply_companion, self)
         dlg.exec()
         dlg.deleteLater()
+
+    def _apply_companion(self, enabled: bool, port: int) -> None:
+        """Scelte fatte nella finestra della companion: salvate e applicate subito."""
+        self.settings["companion"] = enabled
+        self.settings["companion_port"] = port
+        config.save_settings(self.settings)
+        self._sync_companion()
 
     # ------------------------------------------------ aggiornamenti OllaDesk
 

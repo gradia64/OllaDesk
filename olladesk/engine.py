@@ -21,6 +21,7 @@ from .workers import WorkerRegistry
 class ChatEngine(QObject):
     # --- conversazioni
     chats_changed = Signal()                  # indice cambiato (titoli, ordine, eliminazioni)
+    chat_deleted = Signal(str)                # chat_id eliminata (dal PC o dal telefono)
     user_message_added = Signal(str, dict)    # chat_id, messaggio utente salvato
     # --- elaborazione (una sola alla volta, globale)
     busy_changed = Signal(bool)
@@ -211,6 +212,7 @@ class ChatEngine(QObject):
         config.delete_chat(chat_id)
         self._cache.pop(chat_id, None)
         self._chats = [c for c in self._chats if c["id"] != chat_id]
+        self.chat_deleted.emit(chat_id)
         self.chats_changed.emit()
 
     # ------------------------------------------------------------------ invio

@@ -21,6 +21,7 @@ import hashlib
 import hmac
 import ipaddress
 import json
+import os
 import queue
 import re
 import secrets
@@ -33,7 +34,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QObject, Qt, Signal
 
-from . import __version__, config, netinfo
+from . import __version__, config, context, netinfo
 from .md import md_to_html
 
 CODE_TTL = 120            # secondi di validità del codice di abbinamento
@@ -147,6 +148,100 @@ class PairingAuth:
             self._save()
 
 
+# ------------------------------------------------------------ allegati
+
+MAX_UPLOAD = context.MAX_IMAGE_BYTES   # 20 MB per file, come per le immagini dal PC
+MAX_ATTACHMENTS = 10                   # allegati per messaggio
+MAX_PENDING = 30                       # caricati e non ancora inviati
+UPLOAD_TTL = 3600                      # secondi prima che un caricamento orfano sparisca
+_UNSAFE_NAME_RE = re.compile(r"[^\w.\- ()]+")
+
+
+def safe_filename(name: str) -> str:
+    """Nome di file ripulito: niente percorsi, solo caratteri innocui."""
+    base = name.replace("\\", "/").rsplit("/", 1)[-1]
+    base = _UNSAFE_NAME_RE.sub("_", base).strip(" .") or "file"
+    stem, dot, ext = base.rpartition(".")
+    if dot and len(ext) <= 10:
+        return stem[:90] + "." + ext
+    return base[:100]
+
+
+class UploadStore:
+    """File caricati dal telefono e non ancora inviati. Thread-safe.
+
+    Il telefono conosce solo l'id: all'invio il server lo traduce nel file
+    che ha salvato lui, nella cartella privata degli allegati. Mai un
+    percorso scelto dal client.
+    """
+
+    def __init__(self, clock=time.monotonic):
+        self._clock = clock
+        self._lock = threading.Lock()
+        self._items: dict[str, dict] = {}
+
+    @staticmethod
+    def folder() -> Path:
+        d = config.attachments_dir() / "companion"
+        d.mkdir(mode=0o700, exist_ok=True)
+        return d
+
+    def pending(self) -> int:
+        with self._lock:
+            return len(self._items)
+
+    def add(self, name: str, kind: str, rfile, length: int) -> dict:
+        """Salva `length` byte letti da `rfile`; OSError se la lettura si interrompe."""
+        self.purge()
+        upload_id = secrets.token_hex(8)
+        path = self.folder() / f"{upload_id}_{name}"
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        try:
+            with os.fdopen(fd, "wb") as fh:
+                left = length
+                while left > 0:
+                    chunk = rfile.read(min(65536, left))
+                    if not chunk:
+                        raise OSError("caricamento interrotto")
+                    fh.write(chunk)
+                    left -= len(chunk)
+        except BaseException:
+            path.unlink(missing_ok=True)
+            raise
+        meta = {"path": str(path), "name": name, "kind": kind}
+        with self._lock:
+            self._items[upload_id] = {**meta, "t": self._clock()}
+        return {"id": upload_id, "name": name, "kind": kind}
+
+    def take(self, ids: list[str]) -> list[dict] | None:
+        """Allegati per un invio (monouso); None se un id è sconosciuto o scaduto."""
+        with self._lock:
+            if any(i not in self._items for i in ids):
+                return None
+            return [
+                {k: v for k, v in self._items.pop(i).items() if k != "t"} | {"id": i}
+                for i in ids
+            ]
+
+    def give_back(self, metas: list[dict]) -> None:
+        """Invio rifiutato (es. occupato): gli allegati restano disponibili."""
+        with self._lock:
+            for m in metas:
+                self._items[m["id"]] = {k: v for k, v in m.items() if k != "id"} | {"t": self._clock()}
+
+    def purge(self, max_age: float = UPLOAD_TTL) -> None:
+        """Cancella i caricamenti mai inviati più vecchi di `max_age` secondi."""
+        now = self._clock()
+        with self._lock:
+            old = [i for i, m in self._items.items() if now - m["t"] >= max_age]
+            gone = [self._items.pop(i) for i in old]
+        for m in gone:
+            Path(m["path"]).unlink(missing_ok=True)
+
+    def clear(self) -> None:
+        self.purge(max_age=-1)
+
+
 # ------------------------------------------------------------------- ponte
 
 class _Bridge(QObject):
@@ -231,7 +326,8 @@ def models_info(engine) -> dict:
     }
 
 
-def web_send(engine, hub, chat_id: str | None, text: str, model: str, think: bool):
+def web_send(engine, hub, chat_id: str | None, text: str, model: str, think: bool,
+             attachments: list[dict] = ()):
     """Thread principale: invio dal telefono.
 
     Restituisce (200, chat_id, seq) oppure (stato HTTP, messaggio, None).
@@ -247,10 +343,30 @@ def web_send(engine, hub, chat_id: str | None, text: str, model: str, think: boo
     if chat_id is not None and chat_id not in {c["id"] for c in engine.chats()}:
         return 404, "conversazione inesistente: è stata eliminata sul PC?", None
     seq = hub.seq()
-    cid = engine.send(chat_id or engine.new_chat_id(), text, model, think=think)
+    cid = engine.send(chat_id or engine.new_chat_id(), text, model, think=think,
+                      attachments=list(attachments))
     if cid is None:
         return busy
     return 200, cid, seq
+
+
+MAX_TITLE = 200
+
+
+def web_rename(engine, chat_id: str, title: str) -> bool:
+    """Thread principale: rinomina dal telefono; False se la chat non esiste."""
+    if chat_id not in {c["id"] for c in engine.chats()}:
+        return False
+    engine.rename_chat(chat_id, title)
+    return True
+
+
+def web_delete(engine, chat_id: str) -> bool:
+    """Thread principale: elimina dal telefono (ferma la sua risposta, se c'è)."""
+    if chat_id not in {c["id"] for c in engine.chats()}:
+        return False
+    engine.delete_chat(chat_id)
+    return True
 
 
 def web_stop(engine, chat_id: str) -> bool:
@@ -547,6 +663,9 @@ class _Handler(BaseHTTPRequestHandler):
         if not self._precheck():
             return
         path = self.path.split("?", 1)[0]
+        if path == "/api/upload":
+            self._upload()
+            return
         # solo JSON: un modulo HTML di un altro sito non può inviarlo, e una
         # fetch da un'altra origine richiede un preflight CORS che qui non c'è
         ctype = (self.headers.get("Content-Type") or "").split(";")[0].strip().lower()
@@ -592,7 +711,13 @@ class _Handler(BaseHTTPRequestHandler):
                 return
             text, model = data.get("text"), data.get("model")
             chat_id = data.get("chat_id")
-            if not isinstance(text, str) or not text.strip() or len(text) > MAX_TEXT:
+            ids = data.get("attachments") or []
+            if not (isinstance(ids, list) and len(ids) <= MAX_ATTACHMENTS
+                    and all(isinstance(i, str) for i in ids)):
+                self._error(400, f"al massimo {MAX_ATTACHMENTS} allegati per messaggio")
+                return
+            # come sul PC: si può inviare anche un messaggio fatto di soli allegati
+            if not isinstance(text, str) or len(text) > MAX_TEXT or not (text.strip() or ids):
                 self._error(400, f"messaggio vuoto o più lungo di {MAX_TEXT} caratteri")
                 return
             if not isinstance(model, str) or not model:
@@ -603,8 +728,14 @@ class _Handler(BaseHTTPRequestHandler):
             ):
                 self._error(400, "conversazione non valida")
                 return
+            atts = self.ctx.uploads.take(ids)
+            if atts is None:
+                self._error(400, "allegato sconosciuto o scaduto: caricalo di nuovo")
+                return
             ok, res = self._main(web_send, self.ctx.engine, self.ctx.hub, chat_id,
-                                 text.strip(), model, bool(data.get("think", True)))
+                                 text.strip(), model, bool(data.get("think", True)), atts)
+            if not ok or res[0] != 200:
+                self.ctx.uploads.give_back(atts)
             if not ok:
                 return
             status, value, seq = res
@@ -624,7 +755,73 @@ class _Handler(BaseHTTPRequestHandler):
             if ok:
                 self._json(200, {"stopped": stopped})
             return
+        if path in ("/api/rename", "/api/delete"):
+            if not self._authed():
+                return
+            chat_id = data.get("chat_id")
+            if not (isinstance(chat_id, str) and re.fullmatch(_CHAT_ID, chat_id)):
+                self._error(400, "conversazione non valida")
+                return
+            if path == "/api/rename":
+                title = data.get("title")
+                if not isinstance(title, str) or not title.strip() or len(title) > MAX_TITLE:
+                    self._error(400, f"titolo vuoto o più lungo di {MAX_TITLE} caratteri")
+                    return
+                ok, found = self._main(web_rename, self.ctx.engine, chat_id, title.strip())
+            else:
+                ok, found = self._main(web_delete, self.ctx.engine, chat_id)
+            if not ok:
+                return
+            if not found:
+                self._error(404, "conversazione inesistente")
+                return
+            self._json(200, {"ok": True})
+            return
         self._error(404, "risorsa inesistente")
+
+    # ---------------------------------------------------------- caricamenti
+
+    def _upload(self) -> None:
+        """POST /api/upload?name=<nome>: corpo binario, risposta {id, name, kind}.
+
+        Content-Type application/octet-stream: non è un tipo «semplice» dei
+        moduli HTML, quindi da un'altra origine serve un preflight che qui non
+        c'è. Ogni rifiuto chiude la connessione: il corpo resta non letto.
+        """
+        self.close_connection = True
+        if not self._authed():
+            return
+        ctype = (self.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+        if ctype != "application/octet-stream":
+            self._error(415, "serve Content-Type: application/octet-stream")
+            return
+        if self.headers.get("Transfer-Encoding") or self.headers.get("Content-Length") is None:
+            self._error(411, "serve Content-Length")
+            return
+        try:
+            length = int(self.headers["Content-Length"])
+        except ValueError:
+            length = -1
+        if length <= 0 or length > MAX_UPLOAD:
+            self._error(413, f"file vuoto o più grande di {MAX_UPLOAD // (1024 * 1024)} MB")
+            return
+        query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+        name = safe_filename(query.get("name", ["file"])[0])
+        kind = context.classify(Path(name))
+        if kind == "unknown":
+            self._error(415, f"tipo di file non supportato: {name} (immagini, testo, PDF)")
+            return
+        store = self.ctx.uploads
+        store.purge()
+        if store.pending() >= MAX_PENDING:
+            self._error(429, "troppi allegati in attesa: invia o riprova più tardi")
+            return
+        try:
+            meta = store.add(name, kind, self.rfile, length)
+        except OSError:
+            return   # telefono disconnesso a metà: niente da rispondere
+        self.close_connection = False   # corpo letto per intero
+        self._json(200, meta)
 
     # ---------------------------------------------------------- stream SSE
 
@@ -745,6 +942,7 @@ class CompanionServer(QObject):
         self.auth = auth or PairingAuth()
         self.bridge = _Bridge(self)
         self.hub = EventHub(engine, self)
+        self.uploads = UploadStore()
         self._httpd: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
         self._state = "off"
@@ -782,6 +980,7 @@ class CompanionServer(QObject):
         httpd, self._httpd = self._httpd, None
         if httpd is not None:
             self.hub.close_all()    # chiude gli stream SSE aperti
+            self.uploads.clear()    # caricamenti mai inviati
             httpd.shutdown()        # attende l'uscita da serve_forever
             httpd.server_close()
             self._thread = None

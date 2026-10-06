@@ -249,7 +249,6 @@ class SettingsDialog(QDialog):
 
         lay.addLayout(form)
 
-        lay.addWidget(self._build_companion_group(w, s))
 
         info = QLabel(
             f"Impostazioni, parametri e conversazioni sono salvati in:\n{config.config_dir()}",
@@ -274,44 +273,6 @@ class SettingsDialog(QDialog):
         form.setRowVisible(self._key_row, provider == "ollama")
         form.setRowVisible(self.searxng_edit, provider == "searxng")
 
-    # --------------------------------------------------------- companion web
-
-    def _build_companion_group(self, parent: QWidget, s: dict) -> QGroupBox:
-        """Companion web: OllaDesk dal telefono (vedi companion.py)."""
-        box = QGroupBox("Companion web (OllaDesk da smartphone e tablet)", parent)
-        lay = QVBoxLayout(box)
-        lay.setSpacing(8)
-
-        row = QHBoxLayout()
-        self.companion_chk = QCheckBox("Attiva la pagina per i dispositivi nella rete locale", box)
-        self.companion_chk.setChecked(bool(s.get("companion", False)))
-        self.companion_chk.toggled.connect(self._update_companion_fields)
-        row.addWidget(self.companion_chk, 1)
-        row.addWidget(QLabel("Porta:", box))
-        self.companion_port_spin = IntStepper(box)
-        self.companion_port_spin.setRange(1024, 65535)
-        self.companion_port_spin.setValue(int(s.get("companion_port", 8765)))
-        row.addWidget(self.companion_port_spin)
-        lay.addLayout(row)
-
-        self.companion_hint = QLabel(
-            "Il telefono vede e continua le stesse conversazioni del PC. Per abbinarlo "
-            "premi 📱 nella barra superiore: compaiono l'indirizzo e un codice di 6 cifre "
-            "(e un QR code, se è installato python3-qrcode). Solo HTTP nella rete di "
-            "casa: non aprire la porta sul router.",
-            box,
-        )
-        self.companion_hint.setObjectName("metaLabel")
-        self.companion_hint.setWordWrap(True)
-        lay.addWidget(self.companion_hint)
-
-        self._update_companion_fields()
-        return box
-
-    def _update_companion_fields(self) -> None:
-        on = self.companion_chk.isChecked()
-        self.companion_port_spin.setEnabled(on)
-        self.companion_hint.setVisible(on)
 
     def _clear_api_key(self) -> None:
         """Segna la chiave per la rimozione (effettiva con «Salva»)."""
@@ -624,8 +585,6 @@ class SettingsDialog(QDialog):
             "show_timestamps": self.ts_chk.isChecked(),
             "tray_icon": self.tray_chk.isChecked(),
             "close_to_tray": self.close_tray_chk.isChecked(),
-            "companion": self.companion_chk.isChecked(),
-            "companion_port": self.companion_port_spin.value(),
             "history_limit": self.hist_spin.value(),
             "web_results": self.web_spin.value(),
             "web_provider": self.web_provider_combo.currentData() or "duckduckgo",

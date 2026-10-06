@@ -187,6 +187,66 @@ assert "<b>mondo</b>" in again.of("answer")[-1]["html"], "testo perso nel ricoll
 again.close()
 print("5. Last-Event-ID: niente eventi doppi OK")
 
+# ------------------------------------------------- 5b. allegati dal telefono
+
+PNG = (b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06"
+       b"\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\rIDATx\x9cc\xf8\x0f\x00\x00\x01"
+       b"\x01\x00\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82")
+st, img = cc.upload("foto.png", PNG, TOKEN)
+assert st == 200 and img["kind"] == "image" and img["name"] == "foto.png", (st, img)
+st, txt = cc.upload("../../etc/note segrete.txt", "contenuto ALLEGATO".encode(), TOKEN)
+assert st == 200 and txt["kind"] == "text" and txt["name"] == "note segrete.txt", txt
+folder = srv.uploads.folder()
+saved = sorted(folder.iterdir())
+assert len(saved) == 2 and all(p.parent == folder for p in saved), "file fuori dalla cartella privata"
+assert all(p.stat().st_mode & 0o077 == 0 for p in saved), "allegati leggibili da altri utenti"
+
+# rifiuti: niente login, tipo sbagliato, estensione ignota, troppo grande, vuoto
+assert cc.upload("a.png", PNG, "token-falso")[0] == 401
+assert cc.upload("a.png", PNG, TOKEN, ctype="image/png")[0] == 415
+assert cc.upload("virus.exe", b"MZ", TOKEN)[0] == 415
+assert cc.upload("enorme.png", b"x", TOKEN, length=companion.MAX_UPLOAD + 1)[0] == 413
+assert cc.upload("vuoto.txt", b"", TOKEN)[0] == 413
+assert srv.uploads.pending() == 2
+
+# id sconosciuto: rifiutato senza consumare gli altri
+got, data = jpost("/api/send", {"text": "", "model": "finto", "attachments": [img["id"], "nonesiste"]}, TOKEN)
+assert got == 400 and "allegato" in data["error"] and srv.uploads.pending() == 2
+
+# PC occupato: 409 e gli allegati restano disponibili
+fake.release.clear()
+st, res = jpost("/api/send", {"text": "rispondi lento", "model": "finto", "chat_id": cid}, TOKEN)
+assert st == 200
+got, data = jpost("/api/send", {"text": "", "model": "finto", "attachments": [img["id"]]}, TOKEN)
+assert got == 409 and srv.uploads.pending() == 2
+jpost("/api/stop", {"chat_id": cid}, TOKEN)
+fake.release.set()
+assert wait_until(lambda: not engine.busy())
+
+# messaggio fatto di soli allegati: immagine in base64, testo nel contenuto
+st, res = jpost("/api/send", {"text": "", "model": "finto", "chat_id": cid,
+                              "attachments": [img["id"], txt["id"]]}, TOKEN)
+assert st == 200, res
+assert wait_until(lambda: not engine.busy())
+last = fake.payloads[-1]["messages"][-1]
+assert last["images"] and "contenuto ALLEGATO" in last["content"]
+user = config.load_chat(cid)["messages"][-2]
+assert user["attachments"] == ["foto.png", "note segrete.txt"]
+assert srv.uploads.pending() == 0
+# monouso: lo stesso id non vale una seconda volta
+got, _d = jpost("/api/send", {"text": "di nuovo", "model": "finto", "chat_id": cid,
+                              "attachments": [img["id"]]}, TOKEN)
+assert got == 400
+
+# caricamenti mai inviati: spariscono alla scadenza e all'arresto del server
+st, orfano = cc.upload("orfano.txt", b"x", TOKEN)
+orfano_path = next(p for p in folder.iterdir() if p.name.endswith("_orfano.txt"))
+srv.uploads.purge(max_age=0)
+assert not orfano_path.exists() and srv.uploads.pending() == 0
+st, orfano = cc.upload("orfano2.txt", b"x", TOKEN)
+assert srv.uploads.pending() == 1
+print("5b. allegati: caricamento, limiti, invio, monouso e pulizia OK")
+
 # HEAD sugli stream: rifiutata (prima apriva uno stream senza fine)
 assert request("HEAD", f"/api/chats/{cid}/events", cookie=TOKEN)[0] == 405
 assert request("HEAD", "/api/events", cookie=TOKEN)[0] == 405
@@ -198,6 +258,7 @@ idle = SSE(f"/api/chats/{cid}/events?after=0", TOKEN)
 assert wait_until(lambda: idle.status == 200)
 srv.stop()
 assert wait_until(lambda: idle.ended, 5000), "lo stream SSE non si è chiuso con il server"
+assert srv.uploads.pending() == 0 and not any(p.name.endswith("_orfano2.txt") for p in folder.iterdir())
 print("6. stream chiusi all'arresto del server OK")
 
 # -------------------------------------------------- 7. finestra desktop

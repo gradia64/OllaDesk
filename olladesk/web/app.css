@@ -226,7 +226,7 @@ details.think summary { cursor: pointer; }
 
 /* ------------------------------------------------------------ compositore */
 
-body.composing main { padding-bottom: 170px; }
+body.composing main { padding-bottom: 200px; }
 
 .composer {
   position: fixed;
@@ -331,3 +331,56 @@ body.composing main { padding-bottom: 170px; }
 
 .list .badge { display: none; color: var(--accent); }
 .list a.active .badge { display: inline; }
+
+/* ------------------------------------------------------------- menu chat */
+
+.menu {
+  position: absolute;
+  top: calc(100% - 4px);
+  right: 8px;
+  display: flex;
+  flex-direction: column;
+  min-width: 170px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+}
+
+.menu button {
+  padding: 10px 12px;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 6px;
+}
+
+.menu button:active { background: var(--border); }
+.menu .danger { color: var(--error); }
+
+/* ------------------------------------------------------- allegati in invio */
+
+.atts { margin: 0 auto; }
+.atts .chip { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; }
+.atts .chip span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+.chip-x {
+  padding: 0 2px;
+  font-size: 12px;
+  color: var(--muted);
+  background: none;
+  border: none;
+}
+
+.attach {
+  flex: none;
+  width: 42px;
+  height: 42px;
+  font-size: 20px;
+  background: none;
+  border: none;
+  border-radius: 50%;
+}
+
+.attach:active { background: var(--border); }

@@ -8,6 +8,7 @@ import http.client
 import json
 import socket
 import threading
+import urllib.parse
 
 from olladesk import companion
 
@@ -41,6 +42,33 @@ def request(method, path, body=None, headers=None, cookie=None):
     t = threading.Thread(target=run)
     t.start()
     assert _wait(lambda: not t.is_alive(), 15000), f"{method} {path} senza risposta"
+    return out["r"]
+
+
+def upload(name, data: bytes, cookie, ctype="application/octet-stream", length=None):
+    """POST /api/upload grezzo; restituisce (stato, json)."""
+    out = {}
+    path = "/api/upload?name=" + urllib.parse.quote(name)
+
+    def run():
+        c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+        c.putrequest("POST", path, skip_host=True)
+        c.putheader("Host", f"127.0.0.1:{PORT}")
+        c.putheader("Cookie", f"{companion.COOKIE}={cookie}")
+        c.putheader("Content-Type", ctype)
+        c.putheader("Content-Length", str(len(data) if length is None else length))
+        c.endheaders()
+        try:
+            c.send(data)
+        except OSError:
+            pass   # il server può chiudere prima di leggere un corpo rifiutato
+        r = c.getresponse()
+        out["r"] = (r.status, json.loads(r.read().decode() or "{}"))
+        c.close()
+
+    t = threading.Thread(target=run)
+    t.start()
+    assert _wait(lambda: not t.is_alive(), 15000), f"upload {name} senza risposta"
     return out["r"]
 
 

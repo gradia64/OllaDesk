@@ -31,7 +31,8 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   in streaming, richiudibile all'arrivo della risposta e salvato nella
   conversazione. Finché il modello pensa non si vedono solo i puntini: la
   bolla mostra «sta pensando…» e poi il testo del ragionamento.
-- **Companion web** (Impostazioni → Interfaccia, spenta di default): una
+- **Companion web** (voce «📱 Companion» della barra laterale, `Ctrl+D`;
+  spenta di default): una
   pagina per smartphone e tablet nella rete locale, con le stesse
   conversazioni del PC. Dal telefono si leggono le chat, se ne apre una
   nuova o si continua una esistente: si sceglie il modello, si accende o
@@ -43,8 +44,18 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   pallino indica la conversazione che sta rispondendo. Durante una risposta
   il PC resta libero di aprire altre conversazioni: la risposta continua in
   background e si ritrova riaprendo la sua chat.
-  - **Abbinamento:** dal pulsante 📱 della barra superiore compaiono
-    l'indirizzo, un codice di 6 cifre valido 2 minuti e una sola volta e, se
+  - **Dal telefono:** allegati con 📎 (foto dalla fotocamera o dalla
+    galleria, file di testo e PDF, fino a 20 MB ciascuno): le foto vengono
+    ridotte sul telefono prima del caricamento e il PC le passa ai modelli
+    che leggono le immagini. Dal menu «⋯» di una chat si rinomina o si
+    elimina la conversazione, anche dal PC. Restano solo sul PC le
+    impostazioni e la gestione dei modelli.
+  - **Finestra «Companion»:** raccoglie tutto in un posto: attivazione e
+    porta, stato e indirizzo (con «Copia indirizzo»), abbinamento e
+    dispositivi. Quando è attiva, anche il pulsante 📱 della barra superiore
+    apre la stessa finestra.
+  - **Abbinamento:** nella finestra compaiono l'indirizzo, un codice di 6
+    cifre valido 2 minuti e una sola volta e, se
     è installato `python3-qrcode` (`python-qrcode` su Arch), un QR code da
     inquadrare. Il telefono riceve un cookie di sessione; «Revoca
     dispositivi» li scollega tutti (se ne ricordano al massimo 20).
@@ -117,7 +128,7 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
 - **Impostazioni → scheda «Interfaccia»**: URL del server Ollama, tema
   scuro/chiaro/**sistema** (segue KDE Plasma, anche a caldo quando lo cambi),
   dimensione del carattere, streaming on/off, invio con Invio, orario nei
-  messaggi, icona nella tray, companion web, quantità di contesto
+  messaggi, icona nella tray, quantità di contesto
   inviata al modello, prompt di sistema predefinito, risultati ricerca web.
 - **Impostazioni → scheda «Parametri modelli»**: profilo di parametri separato
   per ogni modello (temperatura, top_k, top_p, min_p, num_ctx, num_predict,
@@ -254,6 +265,7 @@ l'app dai sorgenti senza installarla, sostituisci `Exec=` con
 | `Ctrl+N`    | Nuova conversazione             |
 | `Ctrl+B`    | Mostra/nascondi la sidebar      |
 | `Ctrl+M`    | Gestione modelli (download/rimozione) |
+| `Ctrl+D`    | Companion web (telefono e tablet) |
 | `Ctrl+,`    | Apri le impostazioni            |
 | `Invio`     | Invia il messaggio (attivabile) |
 | `Ctrl+Invio` | Invia il messaggio (sempre)    |
@@ -354,7 +366,7 @@ olladesk/
     steppers.py             campi numerici con pulsanti tondi −/+
     model_manager.py        dialog scaricamento/eliminazione modelli
     settings_dialog.py      finestra impostazioni (2 schede + aggiornamenti)
-    pairing_dialog.py       abbinamento di un dispositivo (codice e QR code)
+    companion_dialog.py     finestra della companion: servizio, abbinamento, dispositivi
 tests/gui_smoke.py          collaudo automatico offscreen (base)
 tests/gui_features.py       collaudo automatico offscreen (funzionalità extra)
 tests/gui_errors.py         collaudo percorsi di errore (offline)

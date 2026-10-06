@@ -23,6 +23,12 @@
   <h1 id="title">OllaDesk</h1>
   <button id="new-chat" class="icon" type="button" aria-label="Nuova conversazione" hidden>＋</button>
   <button id="refresh" class="icon" type="button" aria-label="Aggiorna" hidden>↻</button>
+  <button id="chat-menu" class="icon" type="button" aria-label="Altre azioni"
+          aria-haspopup="true" aria-expanded="false" hidden>⋯</button>
+  <div id="menu" class="menu" role="menu" hidden>
+    <button id="m-rename" type="button" role="menuitem">✏️ Rinomina</button>
+    <button id="m-delete" type="button" role="menuitem" class="danger">🗑 Elimina</button>
+  </div>
 </header>
 
 <main>
@@ -33,7 +39,7 @@
   <section id="view-pair" class="view" hidden>
     <form id="pair-form" class="card" autocomplete="off">
       <h2>Abbina questo dispositivo</h2>
-      <p class="muted">Sul PC apri OllaDesk, premi 📱 nella barra in alto e scrivi qui il codice di 6 cifre.</p>
+      <p class="muted">Sul PC apri OllaDesk, scegli «📱 Companion» nella barra laterale (Ctrl+D) e scrivi qui il codice di 6 cifre.</p>
       <input id="pair-code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6"
              placeholder="000000" aria-label="Codice di abbinamento" required>
       <button type="submit" class="primary">Abbina</button>
@@ -61,7 +67,11 @@
     <button id="think" class="toggle" type="button" aria-pressed="true"
             title="Ragionamento (thinking)">🧠</button>
   </div>
+  <div id="atts" class="chips atts" hidden></div>
   <div class="composer-row">
+    <button id="attach" class="attach" type="button" aria-label="Allega foto o file">📎</button>
+    <input id="file" type="file" multiple hidden
+           accept="image/*,application/pdf,text/*,.md,.py,.json,.csv,.log,.yaml,.yml,.toml">
     <textarea id="input" rows="1" placeholder="Scrivi un messaggio…" aria-label="Messaggio"></textarea>
     <button id="send" class="send" type="submit" aria-label="Invia">➤</button>
   </div>

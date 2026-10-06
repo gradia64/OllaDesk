@@ -13,6 +13,8 @@ let pending = null;       // risposta in costruzione: {box, body, think, thinkBo
 let busy = false;         // il PC sta elaborando (qualsiasi conversazione)
 let activeHere = false;   // l'elaborazione riguarda la conversazione aperta
 let haveModels = false;
+let atts = [];            // allegati della barra di scrittura: {name, state, id, chip}
+const MAX_SIDE = 1600;    // lato lungo delle foto caricate (px)
 
 function store(key, value) {
   try {
@@ -29,6 +31,8 @@ function show(view) {
   $("new-chat").hidden = view !== "list";
   $("refresh").hidden = view !== "list" && view !== "chat";
   $("composer").hidden = !inChat;
+  $("chat-menu").hidden = true;   // showChat lo mostra per le chat già salvate
+  closeMenu();
   document.body.classList.toggle("composing", inChat);
   if (!inChat) {
     $("title").textContent = "OllaDesk";
@@ -287,7 +291,9 @@ function openStream(id, after) {
       if (stream !== es || !currentId) return;
       try {
         const d = await api("/api/chats");
-        if (!d.chats.some((c) => c.id === currentId) && d.active !== currentId) chatGone();
+        const me = d.chats.find((c) => c.id === currentId);
+        if (me) $("title").textContent = me.title || "Conversazione";   // rinominata
+        else if (d.active !== currentId) chatGone();
       } catch (e) { /* riprova al prossimo evento */ }
     }, 300);
   });
@@ -344,13 +350,14 @@ function updateComposer() {
   } else {
     btn.textContent = "➤";
     btn.setAttribute("aria-label", "Invia");
-    btn.disabled = busy || !haveModels;
+    btn.disabled = busy || !haveModels || atts.some((a) => a.state === "uploading");
   }
   $("busy-note").hidden = !(busy && !activeHere);
 }
 
 async function showChat(id) {
   closeStream();
+  clearAtts();
   const [chat] = await Promise.all([
     api("/api/chats/" + encodeURIComponent(id)),
     loadModels(null),
@@ -363,6 +370,7 @@ async function showChat(id) {
     $("model").value = chat.model;
   }
   show("chat");
+  $("chat-menu").hidden = false;   // solo per le chat già salvate
   if (chat.state) {
     activeHere = true;
     startPending(chat.state === "search" ? "🌐 Ricerca web in corso" : "");
@@ -374,6 +382,7 @@ async function showChat(id) {
 
 async function showNewChat() {
   closeStream();
+  clearAtts();
   await loadModels(null);
   currentId = null;
   $("title").textContent = "Nuova conversazione";
@@ -392,13 +401,14 @@ async function send() {
     return;
   }
   const text = $("input").value.trim();
-  if (!text || $("send").disabled) return;
+  const ids = atts.filter((a) => a.state === "ready").map((a) => a.id);
+  if ((!text && !ids.length) || $("send").disabled) return;
   const model = $("model").value;
   const think = $("think").getAttribute("aria-pressed") === "true";
   $("send").disabled = true;
   let res;
   try {
-    res = await post("/api/send", { chat_id: currentId, text, model, think });
+    res = await post("/api/send", { chat_id: currentId, text, model, think, attachments: ids });
   } catch (e) {
     if (e instanceof Unauthorized) { route(); return; }
     if (e.status === 404) { chatGone(); return; }
@@ -406,6 +416,7 @@ async function send() {
     updateComposer();
     return;
   }
+  clearAtts();   // il PC li ha presi in carico
   $("input").value = "";
   autosize();
   store("olladesk.model", model);
@@ -417,6 +428,81 @@ async function send() {
     updateComposer();
   }
 }
+
+// ----------------------------------------------------------------- allegati
+
+async function prepareFile(file) {
+  // foto: lato lungo ridotto a MAX_SIDE e JPEG, così il caricamento è
+  // leggero; anche i formati che il PC non conosce (es. HEIC) diventano JPEG
+  const isImage = file.type.startsWith("image/") && file.type !== "image/gif";
+  const known = /\.(png|jpe?g)$/i.test(file.name);
+  if (isImage) {
+    try {
+      const bmp = await createImageBitmap(file, { imageOrientation: "from-image" });
+      const scale = Math.min(1, MAX_SIDE / Math.max(bmp.width, bmp.height));
+      if (scale < 1 || !known || file.size > 2 * 1024 * 1024) {
+        const c = document.createElement("canvas");
+        c.width = Math.round(bmp.width * scale);
+        c.height = Math.round(bmp.height * scale);
+        c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+        const blob = await new Promise((r) => c.toBlob(r, "image/jpeg", 0.85));
+        if (blob) return { blob, name: file.name.replace(/\.[^.]*$/, "") + ".jpg" };
+      }
+    } catch (e) { /* non decodificabile qui: si carica com'è */ }
+  }
+  return { blob: file, name: file.name };
+}
+
+function renderAtts() {
+  const box = $("atts");
+  box.replaceChildren(...atts.map((a) => a.chip));
+  box.hidden = atts.length === 0;
+  updateComposer();
+}
+
+function clearAtts() {
+  atts = [];
+  renderAtts();
+}
+
+async function addFile(file) {
+  const entry = { name: file.name, state: "uploading", id: null, chip: el("span", "chip") };
+  const label = el("span", "", "📎 " + file.name + " …");
+  const remove = el("button", "chip-x", "✕");
+  remove.type = "button";
+  remove.setAttribute("aria-label", "Togli " + file.name);
+  remove.addEventListener("click", () => {
+    atts = atts.filter((a) => a !== entry);
+    renderAtts();
+  });
+  entry.chip.append(label, remove);
+  atts.push(entry);
+  renderAtts();
+  try {
+    const { blob, name } = await prepareFile(file);
+    const meta = await api("/api/upload?name=" + encodeURIComponent(name), {
+      method: "POST",
+      headers: { "Content-Type": "application/octet-stream" },
+      body: blob,
+    });
+    entry.id = meta.id;
+    entry.state = "ready";
+    label.textContent = (meta.kind === "image" ? "🖼 " : "📎 ") + meta.name;
+  } catch (e) {
+    if (e instanceof Unauthorized) { route(); return; }
+    entry.state = "error";
+    label.textContent = "⚠ " + file.name;
+    entry.chip.title = e.message;
+    addNote(file.name + ": " + e.message, true);
+  }
+  renderAtts();
+}
+
+$("attach").addEventListener("click", () => $("file").click());
+$("file").addEventListener("change", () => {
+  for (const f of $("file").files) addFile(f);
+  $("file").value = "";   // lo stesso file si può riscegliere
+});
 
 function autosize() {
   const t = $("input");
@@ -472,6 +558,49 @@ async function route() {
     }
   }
 }
+
+// ------------------------------------------------------ rinomina, elimina
+
+function closeMenu() {
+  $("menu").hidden = true;
+  $("chat-menu").setAttribute("aria-expanded", "false");
+}
+
+$("chat-menu").addEventListener("click", (ev) => {
+  ev.stopPropagation();
+  const open = $("menu").hidden;
+  $("menu").hidden = !open;
+  $("chat-menu").setAttribute("aria-expanded", open ? "true" : "false");
+});
+document.addEventListener("click", (ev) => {
+  if (!$("menu").hidden && !$("menu").contains(ev.target)) closeMenu();
+});
+
+$("m-rename").addEventListener("click", async () => {
+  closeMenu();
+  const title = prompt("Nuovo titolo della conversazione:", $("title").textContent);
+  if (title === null || !title.trim() || !currentId) return;
+  try {
+    await post("/api/rename", { chat_id: currentId, title: title.trim() });
+    $("title").textContent = title.trim();
+  } catch (e) {
+    if (e.status === 404) chatGone(); else addNote(e.message, true);
+  }
+});
+
+$("m-delete").addEventListener("click", async () => {
+  closeMenu();
+  if (!currentId) return;
+  const what = activeHere ? " La risposta in corso verrà interrotta." : "";
+  if (!confirm("Eliminare questa conversazione anche dal PC?" + what)) return;
+  try {
+    await post("/api/delete", { chat_id: currentId });
+  } catch (e) {
+    if (e.status !== 404) { addNote(e.message, true); return; }
+  }
+  history.replaceState(null, "", location.pathname);
+  route();
+});
 
 $("back").addEventListener("click", () => { location.hash = ""; });
 $("new-chat").addEventListener("click", () => { location.hash = "#/new"; });

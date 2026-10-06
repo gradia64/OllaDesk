@@ -14,6 +14,9 @@ Piano delle funzionalità per la versione 0.3: la **companion web**, che permett
 | 5 | Sincronizzazione dal vivo: un messaggio scritto dal telefono compare nella finestra desktop, e viceversa | media | ☑ |
 | 6 | Pagina mobile unica (HTML + JavaScript senza build) con manifest PWA per l'installazione sulla schermata home | facile | ☑ |
 | 7 | Rimozione della condivisione dell'API (#3 della 0.2.4) | facile | ☑ |
+| 8 | Ricerca web dal telefono: interruttore 🌐 nella barra di scrittura | facile | ☐ |
+| 9 | Rinomina ed elimina chat dal telefono, con conferma per l'eliminazione | facile | ☑ |
+| 10 | Allegati dal telefono: foto dalla fotocamera o dalla galleria, file di testo e PDF | media | ☑ |
 
 ## Ordine di lavoro
 
@@ -22,6 +25,7 @@ Piano delle funzionalità per la versione 0.3: la **companion web**, che permett
 3. **Fase 2 (#4):** invio e streaming.
 4. **Fase 3 (#5):** sincronizzazione dal vivo.
 5. **Fase 4 (#6, #7):** PWA e rimozione della condivisione API.
+6. **Fase 5 (#8, #9, #10):** il telefono non si limita a scrivere. #9 e #10 subito; #8 dopo il merge di `main` (0.2.6), che cambia proprio la ricerca web (messaggio in chat prima della ricerca, provider di riserva).
 
 ## Decisioni di progetto
 
@@ -41,7 +45,9 @@ Piano delle funzionalità per la versione 0.3: la **companion web**, che permett
 
 **#4 — concorrenza e perimetro.** Una sola generazione alla volta, globale: con 6 GB di VRAM due generazioni parallele non hanno senso. Una richiesta del telefono mentre il desktop sta generando riceve «occupato», e la pagina lo mostra. Il pulsante 🧠 è incluso (un booleano nella richiesta); il blocco «Pensiero» compare richiuso.
 
-**Fuori perimetro nella 0.3:** allegati, ricerca web, impostazioni, gestione modelli, eliminazione delle chat dal telefono.
+**#10 — allegati dal telefono.** Il telefono non indica mai un percorso: carica il file con `POST /api/upload` (corpo binario, `Content-Type` del file, mai uno dei tipi «semplici» dei moduli HTML) e riceve un id. All'invio passa gli id; il server li traduce nei file che ha salvato lui, nella cartella privata degli allegati. Limiti: 20 MB per file (come `MAX_IMAGE_BYTES`), solo i tipi che `context.classify` riconosce (immagini, testo, PDF), nome ripulito. Le foto vengono ridotte sul telefono (lato lungo 1600 px, JPEG) prima del caricamento. I file caricati e mai inviati si cancellano dopo un'ora o all'arresto del server.
+
+**Fuori perimetro nella 0.3:** impostazioni dal telefono (riguardano il PC). Rinviati alla 0.3.1: copia di un messaggio, gestione dei modelli dal telefono.
 
 ## Test
 
@@ -52,3 +58,10 @@ Piano delle funzionalità per la versione 0.3: la **companion web**, che permett
 - Prima della fase 4: verifica che la rimozione della #3 non lasci impostazioni orfane (`share_api`, `share_bind`, `share_port` ignorate o migrate).
 
 Il bump di versione resta al momento del rilascio (fonte unica: `olladesk/__init__.py`).
+
+## Rinviato alla 0.3.1
+
+| Funzionalità | Note |
+|---|---|
+| Copia di un messaggio dal telefono (⧉) | su HTTP l'API Clipboard non è disponibile: serve il ripiego con selezione del testo |
+| Gestione dei modelli dal telefono (scarica ed elimina) | fattibile con i worker esistenti; scaricare GB dal telefono ha poco senso, priorità bassa |
