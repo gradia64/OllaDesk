@@ -154,17 +154,35 @@ MAX_UPLOAD = context.MAX_IMAGE_BYTES   # 20 MB per file, come per le immagini da
 MAX_ATTACHMENTS = 10                   # allegati per messaggio
 MAX_PENDING = 30                       # caricati e non ancora inviati
 UPLOAD_TTL = 3600                      # secondi prima che un caricamento orfano sparisca
+MAX_NAME_BYTES = 120                   # nome salvato: id + "_" + nome resta sotto i 255 byte
 _UNSAFE_NAME_RE = re.compile(r"[^\w.\- ()]+")
 
 
+class UploadRefused(Exception):
+    """Caricamento non accettato: (stato HTTP, messaggio per il telefono)."""
+
+
+def _cut_bytes(text: str, limit: int) -> str:
+    """Taglia `text` a `limit` byte UTF-8 senza spezzare un carattere."""
+    return text.encode("utf-8")[:limit].decode("utf-8", "ignore")
+
+
 def safe_filename(name: str) -> str:
-    """Nome di file ripulito: niente percorsi, solo caratteri innocui."""
+    """Nome di file ripulito: niente percorsi, solo caratteri innocui.
+
+    Il limite dei filesystem è in byte, non in caratteri: un nome lungo in
+    cinese o con molti accenti va tagliato in byte. Il punto iniziale resta
+    (`.env`, `.gitignore` sono file di testo riconosciuti): il nome salvato
+    ha comunque davanti l'id, quindi non diventa un file nascosto.
+    """
     base = name.replace("\\", "/").rsplit("/", 1)[-1]
-    base = _UNSAFE_NAME_RE.sub("_", base).strip(" .") or "file"
+    base = _UNSAFE_NAME_RE.sub("_", base).strip(" ").rstrip(".")
+    if base.strip(".") == "":
+        base = "file"
     stem, dot, ext = base.rpartition(".")
-    if dot and len(ext) <= 10:
-        return stem[:90] + "." + ext
-    return base[:100]
+    if dot and stem and len(ext) <= 10:
+        return _cut_bytes(stem, MAX_NAME_BYTES - len(ext.encode()) - 1) + "." + ext
+    return _cut_bytes(base, MAX_NAME_BYTES)
 
 
 class UploadStore:
@@ -191,32 +209,57 @@ class UploadStore:
             return len(self._items)
 
     def add(self, name: str, kind: str, rfile, length: int) -> dict:
-        """Salva `length` byte letti da `rfile`; OSError se la lettura si interrompe."""
+        """Salva `length` byte letti da `rfile`.
+
+        OSError se il telefono interrompe l'invio (o la companion si spegne
+        nel frattempo); UploadRefused se il PC non accetta o non riesce a
+        salvare il file.
+        """
         self.purge()
         upload_id = secrets.token_hex(8)
         path = self.folder() / f"{upload_id}_{name}"
-        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        # registrato PRIMA di scrivere: uno spegnimento a metà lo vede e lo
+        # cancella, e il limite dei caricamenti in attesa non si supera
+        with self._lock:
+            if len(self._items) >= MAX_PENDING:
+                raise UploadRefused(429, "troppi allegati in attesa: invia o riprova più tardi")
+            self._items[upload_id] = {"path": str(path), "name": name, "kind": kind,
+                                      "t": self._clock(), "partial": True}
         try:
+            try:
+                fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            except OSError as e:
+                raise UploadRefused(500, f"impossibile salvare l'allegato sul PC ({e.strerror or e})") from e
             with os.fdopen(fd, "wb") as fh:
                 left = length
                 while left > 0:
                     chunk = rfile.read(min(65536, left))
                     if not chunk:
                         raise OSError("caricamento interrotto")
-                    fh.write(chunk)
+                    try:
+                        fh.write(chunk)
+                    except OSError as e:   # disco pieno, permessi
+                        raise UploadRefused(500, f"impossibile salvare l'allegato sul PC ({e.strerror or e})") from e
                     left -= len(chunk)
+            with self._lock:
+                item = self._items.get(upload_id)
+                if item is None:   # companion spenta durante il caricamento
+                    raise OSError("companion spenta durante il caricamento")
+                item.pop("partial", None)
         except BaseException:
+            with self._lock:
+                self._items.pop(upload_id, None)
             path.unlink(missing_ok=True)
             raise
-        meta = {"path": str(path), "name": name, "kind": kind}
-        with self._lock:
-            self._items[upload_id] = {**meta, "t": self._clock()}
         return {"id": upload_id, "name": name, "kind": kind}
 
     def take(self, ids: list[str]) -> list[dict] | None:
-        """Allegati per un invio (monouso); None se un id è sconosciuto o scaduto."""
+        """Allegati per un invio (monouso); None se un id è sconosciuto,
+        scaduto, ancora in caricamento o ripetuto."""
         with self._lock:
-            if any(i not in self._items for i in ids):
+            if len(set(ids)) != len(ids) or any(
+                i not in self._items or self._items[i].get("partial") for i in ids
+            ):
                 return None
             return [
                 {k: v for k, v in self._items.pop(i).items() if k != "t"} | {"id": i}
@@ -716,6 +759,9 @@ class _Handler(BaseHTTPRequestHandler):
                     and all(isinstance(i, str) for i in ids)):
                 self._error(400, f"al massimo {MAX_ATTACHMENTS} allegati per messaggio")
                 return
+            if len(set(ids)) != len(ids):
+                self._error(400, "lo stesso allegato compare più volte")
+                return
             # come sul PC: si può inviare anche un messaggio fatto di soli allegati
             if not isinstance(text, str) or len(text) > MAX_TEXT or not (text.strip() or ids):
                 self._error(400, f"messaggio vuoto o più lungo di {MAX_TEXT} caratteri")
@@ -811,13 +857,12 @@ class _Handler(BaseHTTPRequestHandler):
         if kind == "unknown":
             self._error(415, f"tipo di file non supportato: {name} (immagini, testo, PDF)")
             return
-        store = self.ctx.uploads
-        store.purge()
-        if store.pending() >= MAX_PENDING:
-            self._error(429, "troppi allegati in attesa: invia o riprova più tardi")
-            return
         try:
-            meta = store.add(name, kind, self.rfile, length)
+            meta = self.ctx.uploads.add(name, kind, self.rfile, length)
+        except UploadRefused as e:
+            status, message = e.args
+            self._error(status, message)
+            return
         except OSError:
             return   # telefono disconnesso a metà: niente da rispondere
         self.close_connection = False   # corpo letto per intero

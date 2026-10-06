@@ -638,8 +638,12 @@ class MainWindow(QMainWindow):
         """Scelte fatte nella finestra della companion: salvate e applicate subito."""
         self.settings["companion"] = enabled
         self.settings["companion_port"] = port
-        config.save_settings(self.settings)
         self._sync_companion()
+        if enabled and self._companion.state() == "error":
+            # porta occupata: su disco resta spenta, altrimenti a ogni avvio
+            # si ripresenterebbe lo stesso errore
+            self.settings["companion"] = False
+        config.save_settings(self.settings)
 
     # ------------------------------------------------ aggiornamenti OllaDesk
 

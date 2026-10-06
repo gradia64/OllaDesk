@@ -420,7 +420,13 @@ box.port_spin.setValue(busy_sock.getsockname()[1])
 box._apply_port()
 assert win._companion.state() == "error" and "Non avviata" in box.state_label.text()
 assert not box.pair_box.isEnabled()
+# avvio fallito: casella tolta e su disco spenta (niente errore a ogni avvio)
+assert not box.enable_chk.isChecked() and config.load_settings()["companion"] is False
 busy_sock.close()
+# nuova porta libera e riattivazione dalla casella
+box.port_spin.setValue(other_port)
+box.enable_chk.setChecked(True)
+assert win._companion.state() == "running" and config.load_settings()["companion"] is True
 box.enable_chk.setChecked(False)
 assert win._companion.state() == "off" and config.load_settings()["companion"] is False
 box.reject()

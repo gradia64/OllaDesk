@@ -209,6 +209,25 @@ assert cc.upload("enorme.png", b"x", TOKEN, length=companion.MAX_UPLOAD + 1)[0] 
 assert cc.upload("vuoto.txt", b"", TOKEN)[0] == 413
 assert srv.uploads.pending() == 2
 
+# nome lungo in byte (100 caratteri cinesi): accettato, troncato sotto NAME_MAX
+st, cjk = cc.upload("回" * 100 + ".png", PNG, TOKEN)
+assert st == 200 and cjk["name"].endswith(".png"), (st, cjk)
+assert len(f"{'0' * 16}_{cjk['name']}".encode()) <= 255
+# file col punto iniziale: riconosciuti come sul PC
+st, env = cc.upload(".env", b"CHIAVE=1", TOKEN)
+assert st == 200 and env["kind"] == "text" and env["name"] == ".env", (st, env)
+# il PC non riesce a salvare (cartella non scrivibile): 500, non un silenzio
+folder.chmod(0o500)
+try:
+    st, data = cc.upload("bloccato.txt", b"x", TOKEN)
+finally:
+    folder.chmod(0o700)
+assert st == 500 and "salvare" in data["error"], (st, data)
+got, _d = jpost("/api/send", {"text": "", "model": "finto", "attachments": [cjk["id"], cjk["id"]]}, TOKEN)
+assert got == 400, "id ripetuti accettati"
+assert srv.uploads.take([cjk["id"], cjk["id"]]) is None
+assert srv.uploads.take([cjk["id"], env["id"]]) and srv.uploads.pending() == 2   # toglie i due di prova
+
 # id sconosciuto: rifiutato senza consumare gli altri
 got, data = jpost("/api/send", {"text": "", "model": "finto", "attachments": [img["id"], "nonesiste"]}, TOKEN)
 assert got == 400 and "allegato" in data["error"] and srv.uploads.pending() == 2
@@ -245,6 +264,36 @@ srv.uploads.purge(max_age=0)
 assert not orfano_path.exists() and srv.uploads.pending() == 0
 st, orfano = cc.upload("orfano2.txt", b"x", TOKEN)
 assert srv.uploads.pending() == 1
+# spegnimento durante un caricamento: nessun file resta orfano nella cartella
+import io  # noqa: E402
+
+
+class StopMidway(io.BytesIO):
+    """Corpo che a metà lettura spegne la companion (come uno stop dall'utente)."""
+
+    def read(self, n=-1):
+        srv.uploads.clear()
+        return super().read(n)
+
+
+before = set(folder.iterdir())
+try:
+    srv.uploads.add("a-meta.txt", "text", StopMidway(b"x" * 10), 10)
+    raise AssertionError("il caricamento doveva fallire")
+except OSError:
+    pass
+after = set(folder.iterdir())
+assert after <= before and not any(p.name.endswith("_a-meta.txt") for p in after), \
+    "file orfano dopo lo spegnimento"
+
+# limite dei caricamenti in attesa controllato sotto lock
+saved_max = companion.MAX_PENDING
+companion.MAX_PENDING = srv.uploads.pending()
+try:
+    st, data = cc.upload("troppi.txt", b"x", TOKEN)
+    assert st == 429, (st, data)
+finally:
+    companion.MAX_PENDING = saved_max
 print("5b. allegati: caricamento, limiti, invio, monouso e pulizia OK")
 
 # HEAD sugli stream: rifiutata (prima apriva uno stream senza fine)

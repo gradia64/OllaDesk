@@ -231,7 +231,13 @@ class CompanionDialog(QDialog):
                     "⚠ Nessun indirizzo di rete trovato: il PC è collegato alla rete "
                     "locale (Wi-Fi o cavo)?")
         elif state == "error":
-            self.state_label.setText(f"⚠ Non avviata: {detail}. Scegli un'altra porta.")
+            self.state_label.setText(
+                f"⚠ Non avviata: {detail}. Scegli un'altra porta e riattiva.")
+            # la casella segue lo stato reale (la finestra principale salva spenta)
+            self.enable_chk.blockSignals(True)
+            self.enable_chk.setChecked(False)
+            self.enable_chk.blockSignals(False)
+            self.port_btn.hide()
             self._url = ""
             self.urls_label.setText("")
         else:
