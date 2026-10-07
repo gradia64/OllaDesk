@@ -1,9 +1,16 @@
-# Test a ogni push/PR. Sui tag v*: tarball sorgente, .deb e pacchetto Arch,
-# tutti firmati con la chiave GPG di release, allegati alla release GitHub e
+# Test a ogni push/PR. Sui tag v*: verifica del tag firmato, tarball sorgente,
+# .deb e pacchetto Arch dal tag, allegati firmati sulla release GitHub e
 # PKGBUILD pubblicato su AUR. Le action sono fissate per SHA (commento = versione).
 #
-# Secret necessari (vedi packaging/README.md):
-#   GPG_PRIVATE_KEY, GPG_PASSPHRASE   firma (obbligatoria per ogni release)
+# Due sottochiavi di firma con ruoli separati (scripts/release-keys.sh,
+# modello di fiducia in packaging/README.md): il tag lo firma il maintainer
+# con la sua, che non è mai nella CI, e qui si VERIFICA che sia proprio
+# quella (scripts/verify-tag.sh); la CI firma solo gli allegati, con la
+# sottochiave della CI. La primaria non lascia la macchina del maintainer.
+#
+# Secret, solo nell'environment «release» (limitato ai tag v*, con
+# approvazione del maintainer): nessun altro job li vede.
+#   GPG_PRIVATE_KEY, GPG_PASSPHRASE   sottochiave della CI (obbligatori)
 #   AUR_SSH_PRIVATE_KEY               push su AUR (se assente il passo è saltato)
 name: release
 
@@ -36,7 +43,7 @@ jobs:
           desktop-file-validate olladesk.desktop
 
       - name: Dipendenze test (PySide6 per i worker Qt)
-        run: python3 -m pip install --quiet PySide6
+        run: python3 -m pip install --quiet "PySide6>=6.6,<7"   # come pyproject.toml, senza salti di versione maggiore
 
       - name: Test unitari
         run: python3 tests/unit_test.py
@@ -61,17 +68,25 @@ jobs:
       - name: Sincronizzazione telefono-PC (nessuna rete)
         run: python3 tests/sync_test.py
 
-  dist:
-    needs: test
-    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+      - name: Script di rilascio (verifica dei tag, firma degli allegati)
+        run: python3 tests/release_tools_test.py
+
+  verify:
+    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
-          fetch-depth: 0   # SOURCE_DATE_EPOCH dall'ultimo commit
+          fetch-depth: 0
+
+      - name: Tag annotato e firmato dalla sottochiave dei tag
+        run: |
+          # checkout può riscrivere il tag come leggero: si riprende l'oggetto
+          # tag annotato com'è sul server prima di verificarne la firma
+          git fetch --force origin "refs/tags/$GITHUB_REF_NAME:refs/tags/$GITHUB_REF_NAME"
+          scripts/verify-tag.sh "$GITHUB_REF_NAME"
 
       - name: Il tag corrisponde alla versione del codice
-        if: startsWith(github.ref, 'refs/tags/')
         run: |
           code="$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' olladesk/__init__.py)"
           if [ "${GITHUB_REF_NAME#v}" != "$code" ]; then
@@ -79,12 +94,22 @@ jobs:
             exit 1
           fi
 
-      - name: Chiave pubblica di release presente
-        run: |
-          test -f packaging/olladesk-release-key.asc || {
-            echo "::error::manca packaging/olladesk-release-key.asc (scripts/gen-release-key.sh)"
-            exit 1
-          }
+      # la descrizione della release: scritta e riletta prima del tag
+      - name: Note di rilascio presenti
+        run: scripts/release-notes.sh "$GITHUB_REF_NAME" > /dev/null
+
+  dist:
+    needs: [test, verify]
+    # sui tag dopo verify; a mano (workflow_dispatch) senza: verify lì è saltato
+    if: >-
+      !cancelled() && needs.test.result == 'success'
+      && (needs.verify.result == 'success'
+          || (github.event_name == 'workflow_dispatch' && needs.verify.result == 'skipped'))
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0   # SOURCE_DATE_EPOCH dall'ultimo commit
 
       - name: Tarball sorgente e .deb
         run: |
@@ -97,36 +122,20 @@ jobs:
           sudo apt-get install -y -qq lintian
           lintian --fail-on error,warning dist/*.deb
 
-      # la firma del tarball serve già al job arch: makepkg la verifica
-      - name: Firma GPG
-        env:
-          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-        run: |
-          if [ -z "$GPG_PRIVATE_KEY" ]; then
-            echo "::error::secret GPG_PRIVATE_KEY mancante: le release devono essere firmate"
-            exit 1
-          fi
-          scripts/sign-release.sh dist
-
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: dist
           path: dist/
 
   arch:
-    needs: dist
+    needs: verify
     runs-on: ubuntu-24.04
     container: archlinux:base-devel
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
-        with:
-          name: dist
-          path: dist/
-
-      # build con verifica della firma del tarball, check(), namcap,
+      # il PKGBUILD clona il tag da GitHub e ne verifica la firma (?signed +
+      # validpgpkeys), come farà ogni utente AUR; poi check(), namcap,
       # installazione di prova e avvio offscreen
       - name: PKGBUILD e pacchetto Arch
         run: |
@@ -143,12 +152,25 @@ jobs:
             build/aur/.SRCINFO
 
   publish:
-    needs: arch
+    needs: [dist, arch]
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-24.04
+    # unico job con i secret, e solo dopo l'approvazione del maintainer:
+    # l'ultimo punto di controllo prima della release e di AUR
+    environment: release
     permissions:
       contents: write   # necessaria per creare la release e caricare i file
     steps:
+      # prima di qualunque pubblicazione: una release non firmata non esce
+      - name: Secret di firma presenti
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        run: |
+          if [ -z "$GPG_PRIVATE_KEY" ]; then
+            echo "::error::secret GPG_PRIVATE_KEY mancante nell'environment release (packaging/README.md)"
+            exit 1
+          fi
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
@@ -161,7 +183,7 @@ jobs:
           name: arch
           path: arch/
 
-      - name: Raccolta e firma di tutti gli artefatti
+      - name: Firma degli artefatti con la sottochiave della CI
         env:
           GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
@@ -169,8 +191,6 @@ jobs:
           cp arch/dist/*.pkg.tar.zst dist/
           mkdir -p build/aur
           cp arch/build/aur/PKGBUILD arch/build/aur/.SRCINFO build/aur/
-          # rifirma tutto: SHA256SUMS copre anche il pacchetto Arch
-          rm -f dist/*.sig dist/SHA256SUMS
           scripts/sign-release.sh dist
           cp packaging/olladesk-release-key.asc dist/
 
@@ -179,11 +199,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="${GITHUB_REF#refs/tags/}"
-          # se la release esiste già (creata a mano con le note) carica e basta
-          gh release create "$tag" dist/* --generate-notes --title "$tag" \
-            || gh release upload "$tag" dist/* --clobber
+          scripts/release-notes.sh "$tag" > "$RUNNER_TEMP/note.md"
+          # una release già esistente (creata a mano, o un rilancio) resta
+          # com'è: si caricano solo i file
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" dist/* --clobber
+          else
+            gh release create "$tag" dist/* --verify-tag --title "$tag" \
+              --notes-file "$RUNNER_TEMP/note.md"
+          fi
 
-      # dopo la release: il PKGBUILD scarica tarball e firma da lì
       - name: Pubblica su AUR
         env:
           AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}

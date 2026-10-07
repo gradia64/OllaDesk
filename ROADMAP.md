@@ -1,30 +1,45 @@
-# Roadmap 0.2.5
+# Roadmap 0.2.6
 
-Piano della versione 0.2.5. Architettura di riferimento: app PySide6,
+Piano della versione 0.2.6. Architettura di riferimento: app PySide6,
 client puro dell'API Ollama, streaming NDJSON in `ChatWorker`.
 
-## Funzionalità approvate
-
-Nessuna funzionalità nuova: la 0.2.5 raccoglie le rifiniture emerse dal
-collaudo quotidiano della 0.2.4 (telefono collegato alla API condivisa
-incluso).
+## Voci approvate
 
 | # | Voce | Origine | Stato |
 |---|------|---------|-------|
-| 1 | 🔗 copia gli indirizzi anche quando la porta è servita da un'Ollama esterno già raggiungibile in rete (`lan_shared` dalle sonde) | collaudo 0.2.4 | ☑ |
-| 2 | Niente nota «⚠ Condivisione API» all'avvio quando l'istanza esterna è già in ascolto sulle interfacce (resta solo nel tooltip; nota solo se c'è da sistemare, una volta per sessione) | collaudo 0.2.4 | ☑ |
-| 3 | Icona dell'app a piena dimensione nella tray (viewBox ritagliato sui bordi del disegno) | collaudo 0.2.4 | ☑ |
-| 4 | Pulsante ✕ per chiudere le note di sistema in chat | collaudo 0.2.4 | ☑ |
-| 5 | Icona thinking come il globo della ricerca web: tinta grigia da spento/blu da attivo, senza cornice, stessa dimensione ottica (`theme.brain_icon` con ritaglio del glifo e fallback disegnato) | collaudo 0.2.4 | ☑ |
+| 1 | Chiave di rilascio su GitHub nella documentazione: in `packaging/README.md` (configurazione e «Rotazione e revoca») i comandi per caricare sull'account la chiave pubblica **senza la sottochiave della CI** (`gpg --export --export-filter drop-subkey="fpr = <CI>"`, poi `gh gpg-key add`), così i tag risultano «Verified» ma una CI compromessa non può produrre tag o commit «Verified». A ogni rotazione o proroga la chiave va cancellata e ricaricata su GitHub (`gh gpg-key delete`). Fatto a mano il 2026-10-03 per OllaDesk e KlamAV-Py: `v0.2.5` e `v0.1.14` risultano «Verified» | revisione 0.2.5 | ☑ |
+| 2 | **Stop della ricerca web senza blocchi**: `WebSearchWorker.stop()` chiude la risposta dal thread principale (`web_search.py:298`); va usato `abort_response`, come per gli altri worker, con un test di regressione gemello di quello di `ChatWorker` (riprodotto: 9,66 s di UI bloccata premendo ■ durante la ricerca) | revisione 0.2.5 | ☑ |
+| 3 | **Note di rilascio dal repository**: il workflow crea la release con `--generate-notes` (`release.yml:187`), quindi la descrizione è solo il link «Full Changelog». Le note di ogni versione in un file del repository, passate con `--notes-file` (la descrizione della 0.2.5 è stata riscritta a mano) | revisione 0.2.5 | ☑ |
+| 4 | **`.deb` riproducibile**: `Installed-Size` calcolato sui file invece che con `du -sk`, che conta i blocchi delle directory e cambia con il filesystem (ricostruito dal tag: 328 su tmpfs, 396 nella CI; contenuto identico) | revisione 0.2.5 | ☑ |
+| 5 | **pytest**: `tests/release_tools_test.py` viene raccolto e dà 10 errori (le funzioni prendono `tmp, keys`); escluderlo (es. `testpaths` in `pyproject.toml`) e allineare il README (oggi: 57 passati, 10 errori) | revisione 0.2.5 | ☑ |
+| 6 | **Test degli script di rilascio più rigorosi**: verificare il messaggio d'errore e non solo il codice d'uscita; senza gpg/git uscire con errore in CI invece di «SKIP» con successo | revisione 0.2.5 | ☑ |
+| 7 | **Rifiniture**: controllo della versione vuota in `prepare-aur.sh`; commento superato in `build-source.sh` (il PKGBUILD clona il tag); refuso `OLLADEK_CHILD` in `unit_test.py`; ordine di `SHA256SUMS` indipendente dal locale (`LC_ALL=C`); PySide6 fissato in CI (`>=6.6,<7`); commento «stesso layout del .deb» nel PKGBUILD (il pacchetto Arch contiene i `.pyc`, per prassi Arch) | revisione 0.2.5 | ☑ |
+| 8 | **Falso positivo del suggerimento su `think`**: `if "think" in err.lower()` scatta per qualunque errore che contenga «thinking» | revisione 0.2.5 | ☑ |
+| 9 | **Messaggio subito in chat con la ricerca web attiva**: oggi la bolla dell'utente compare solo a ricerca finita (misurati 2,5–3,2 s con SearXNG) e il testo resta nell'input; la bolla va aggiunta all'invio, la ricerca parte dopo e i risultati si agganciano al messaggio prima della generazione | collaudo 0.2.5 | ☑ |
+| 10 | **Portachiavi solo se serve**: la chiave API viene letta da KWallet nel thread della UI a ogni ricerca (~200 ms la prima volta), anche con DuckDuckGo o SearXNG che non la usano; va letta solo con il provider «Ollama» | collaudo 0.2.5 | ☑ |
+| 11 | **SearXNG più tollerante**: a connessioni fredde i motori vanno in timeout e l'istanza restituisce 0 risultati («nessun risultato» al primo messaggio, il secondo funziona). Se la risposta è vuota e ci sono motori che non hanno risposto si riprova una volta; se resta vuota il messaggio elenca i motori in errore (es. «brave: timeout, duckduckgo: CAPTCHA») | collaudo 0.2.5 | ☑ |
+| 12 | **Provider di riserva**: impostazione facoltativa (predefinita: nessuno, per non mandare la query a un servizio non scelto) con un secondo provider da provare se il principale fallisce (blocco anti-bot di DuckDuckGo, nessun risultato, rete); una nota in chat dice quale ha risposto | collaudo 0.2.5 | ☑ |
 
-Rilasciate nella 0.2.5; i test offline e i collaudi reali con Ollama
-(gui_smoke, gui_features con thinking e2e) passano.
+Le voci 2–8 vengono dalle revisioni esterne della 0.2.5 (DeepSeek 4.1
+Flash, GLM 5.3 Flash), verificate sul codice e sulla release pubblicata e
+approvate il 2026-10-03. Le voci 9–12 vengono dal collaudo della 0.2.5
+(ricerca web con SearXNG e DuckDuckGo), approvate il 2026-10-05.
 
-## Residui tecnici dalla 0.2.4
+Tutte implementate per la 0.2.6, un commit per voce; test offline e collaudi
+reali con Ollama verdi su ogni commit. Note di rilascio in
+`packaging/release-notes/0.2.6.md`.
+
+Rilievi valutati e non accolti come difetti: `arch` non eseguibile con
+l'avvio manuale (scelta: costruisce dal tag firmato, documentato in
+`packaging/README.md`); `.pyc` nel pacchetto Arch (prassi della
+distribuzione). Suggerimenti di processo da valutare a parte: pinning delle
+action obbligatorio nelle impostazioni del repository, protezione di
+`main`, `concurrency` nel workflow.
+
+## Residui tecnici
 
 | # | Voce | Note | Stato |
 |---|------|------|-------|
-| T1 | Primo rilascio con le action aggiornate (Node 24) | `checkout` v7.0.1, `setup-python` v7.0.0, `upload-artifact` v7.0.1, `download-artifact` v8.0.1, runner fissati su `ubuntu-24.04`. `test`, `dist` e `arch` sono già verificati con un avvio manuale; il job `publish` (release GitHub + AUR) gira solo sui tag: va controllato al tag `v0.2.5` | ☐ |
 | T2 | Test e2e della condivisione API | Collaudo manuale completato il 2026-10-02 (telefono collegato a `http://192.168.1.83:11434`; firewalld sistemato con regola rich limitata alla LAN). Resta da valutare un test automatico con bind `127.0.0.1` su una porta libera | ☐ |
 
 ## Promemoria per il rilascio
@@ -32,12 +47,35 @@ Rilasciate nella 0.2.5; i test offline e i collaudi reali con Ollama
 - Il bump di versione si fa al momento del rilascio (fonte unica:
   `olladesk/__init__.py`); aggiornare anche l'esempio `gpg --verify` nel
   README.
-- Prima del tag: `tests/unit_test.py` e i collaudi reali
-  `tests/gui_smoke.py` e `tests/gui_features.py`.
+- Prima del tag: `tests/unit_test.py`, `tests/release_tools_test.py` e i
+  collaudi reali `tests/gui_smoke.py` e `tests/gui_features.py`.
+- Il tag va firmato con la sottochiave dei tag (`git tag -s vX.Y.Z`, poi
+  `scripts/verify-tag.sh vX.Y.Z` prima del push) e `publish` va approvato
+  nell'environment `release`: vedi `packaging/README.md`, «Rilascio».
+- Note di rilascio in `packaging/release-notes/X.Y.Z.md` prima del tag:
+  diventano la descrizione della release (`scripts/release-notes.sh`).
 
 ---
 
-## Archivio — 0.2.4 (rilasciata)
+## Archivio — 0.2.5 (rilasciata il 2026-10-03)
+
+Rifiniture dal collaudo della 0.2.4: copia 🔗 con istanza esterna
+raggiungibile, nota all'avvio solo se serve, icona più grande nella tray,
+✕ sulle note di sistema, icona thinking disegnata come il globo. Stop dei
+worker senza blocchi della UI (chat, modelli, aggiornamenti), `.deb` in xz.
+Residuo T1 chiuso: action Node 24 e runner fissati verificati al primo
+`publish`.
+
+Decisioni di progetto ancora valide:
+
+- **Firma di rilascio a due sottochiavi** (modello di KlamAV-Py): i tag li
+  firma il maintainer con la sottochiave dei tag, che non lascia la sua
+  macchina; gli allegati la CI con la sua sottochiave, l'unica nei secret
+  dell'environment `release`. La primaria `5B16…6694` resta `[SC]` (con
+  `change-usage` a `[C]` gpg rifiuterebbe le firme fino alla 0.2.4) ma non
+  firma più nulla. AUR costruisce dal tag firmato (`?signed`).
+
+## Archivio — 0.2.4
 
 Funzionalità rilasciate: versione nella sidebar, modello in uso nella
 «Gestione modelli», condivisione dell'API Ollama in rete (stile LM Studio),

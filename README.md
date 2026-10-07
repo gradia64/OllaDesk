@@ -112,6 +112,15 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
         - json
     ```
 
+    Se l'istanza risponde senza risultati perché i suoi motori non hanno
+    risposto (tipico a connessioni fredde), l'app riprova una volta e poi
+    elenca i motori in errore: di solito aiuta alzare
+    `outgoing.request_timeout` o cambiare motori nel `settings.yml`.
+
+  Un **provider di riserva** facoltativo (predefinito: nessuno) viene
+  provato quando il principale fallisce o non trova nulla, e una nota in
+  chat dice quale ha risposto. Il messaggio compare in chat subito, mentre
+  la ricerca è in corso.
   Come query viene usata solo la prima riga del messaggio (massimo 200
   caratteri), non l'intero testo. Il numero di risultati è configurabile. I modelli non chiamano il tool da
   soli: i risultati vengono iniettati nel prompt dalla GUI (verificato e2e).
@@ -162,9 +171,11 @@ gpg --import olladesk-release-key.asc   # impronta: vedi «Verifica delle firme�
 makepkg -si
 ```
 
-makepkg verifica la firma GPG del tarball sorgente (`validpgpkeys` nel
-PKGBUILD): se la chiave di release non è nel tuo portachiavi la build si ferma.
-Importala dal file `olladesk-release-key.asc` allegato a ogni release
+Dalla 0.2.5 il PKGBUILD clona da GitHub il tag della versione e makepkg ne
+verifica la firma GPG (`?signed` e `validpgpkeys` nel PKGBUILD): se la chiave
+di release non è nel tuo portachiavi, o è una copia precedente al 03/10/2026
+senza le sottochiavi nuove, la build si ferma. Importala (o reimportala) dal
+file `olladesk-release-key.asc` allegato a ogni release
 (`gpg --import olladesk-release-key.asc`) dopo averne controllato l'impronta.
 Ogni release include anche il pacchetto già costruito
 (`olladesk-<versione>-1-any.pkg.tar.zst`, installabile con `sudo pacman -U`).
@@ -176,7 +187,7 @@ Ogni release include anche il pacchetto già costruito
 Scarica `olladesk_<versione>_all.deb` dall'ultima
 [release su GitHub](https://github.com/gradia64/OllaDesk/releases/latest)
 e installalo: apt risolve da solo le dipendenze (Python 3.10+ e i moduli
-PySide6 di Qt core/gui/widgets):
+PySide6 di Qt core/gui/widgets/network):
 
 ```bash
 sudo apt install ./olladesk_*_all.deb
@@ -190,7 +201,10 @@ la disinstallazione è `sudo apt remove olladesk`.
 
 Dalla 0.2.3 ogni file della release ha una firma GPG staccata (`.sig`) fatta
 con la chiave di release del progetto, pubblicata come
-`olladesk-release-key.asc` nella release e in `packaging/` nel repository:
+`olladesk-release-key.asc` nella release e in `packaging/` nel repository.
+Dalla 0.2.5 firmano due sottochiavi della stessa chiave, con ruoli separati:
+una i tag git (solo il maintainer), l'altra gli allegati (la CI). L'impronta
+da controllare resta quella della chiave primaria:
 
 ```
 gradia (OllaDesk release signing) <gradia@disroot.org>
@@ -201,7 +215,7 @@ Dopo l'import controlla che l'impronta mostrata da gpg coincida, poi:
 
 ```bash
 gpg --import olladesk-release-key.asc
-gpg --verify olladesk_0.2.5_all.deb.sig olladesk_0.2.5_all.deb
+gpg --verify olladesk_0.2.6_all.deb.sig olladesk_0.2.6_all.deb
 # oppure tutto in una volta:
 gpg --verify SHA256SUMS.sig SHA256SUMS && sha256sum -c --ignore-missing SHA256SUMS
 ```
@@ -312,12 +326,15 @@ python3 tests/gui_features.py   # allegati, ricerca web, modelli, aggiornamenti
 python3 tests/gui_errors.py     # percorsi di errore (server offline)
 python3 tests/unit_test.py      # unit test delle funzioni pure (senza rete)
 python3 tests/repro_qthread_crash.py  # chiusura dialoghi con worker bloccati (senza rete)
+python3 tests/release_tools_test.py   # script di rilascio: firma dei tag e degli allegati (senza rete)
 ```
 
 Gli script `gui_*.py` sono collaudi end-to-end (richiedono Ollama e, per la
-ricerca web, la rete) e non vengono raccolti da `pytest`, che esegue solo
-`tests/unit_test.py`. La configurazione di prova vive in una cartella
-temporanea nuova a ogni esecuzione.
+ricerca web, la rete). `pytest` raccoglie solo `tests/unit_test.py`;
+gli altri script senza rete (`release_tools_test.py`, `engine_test.py`, i
+test della companion e `sync_test.py`) hanno il loro runner e si eseguono
+con `python3` (`tests/conftest.py`). La configurazione di prova vive in una
+cartella temporanea nuova a ogni esecuzione.
 
 ```bash
 python3 tests/offline_app_update.py   # controllo aggiornamenti con finto GitHub (senza rete)
@@ -379,6 +396,7 @@ tests/companion_send_test.py companion web (invio, streaming SSE, stop)
 tests/sync_test.py          sincronizzazione telefono-PC dal vivo
 tests/fake_ollama.py        finto server Ollama per i test offline
 tests/companion_client.py   client HTTP/SSE per i test della companion
+tests/release_tools_test.py script di rilascio (chiavi e repository temporanei)
 olladesk.desktop            voce per il menu applicazioni di KDE
 packaging/                  file comuni .deb/Arch, modello PKGBUILD, chiave di release
 scripts/                    build (.deb, sorgenti, Arch), firma, pubblicazione AUR, icone web

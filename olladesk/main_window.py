@@ -512,7 +512,9 @@ class MainWindow(QMainWindow):
         if outcome != "failed":
             return
         extra = ""
-        if "think" in err.lower():
+        # solo se la richiesta aveva davvero "think": false: con 🧠 attivo il
+        # campo non viene inviato, e «thinking» in un altro errore non c'entra
+        if self.engine.think_off_sent() and "think" in err.lower():
             extra = (
                 "\n\nSuggerimento: il modello potrebbe non accettare il campo «think»: "
                 "riattiva il pulsante 🧠 nell'input."

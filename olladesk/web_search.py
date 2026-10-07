@@ -16,6 +16,8 @@ import urllib.request
 
 from PySide6.QtCore import QThread, Signal
 
+from .ollama_client import abort_response
+
 _UA = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
@@ -83,7 +85,7 @@ def _fetch(url: str, data: dict | None = None, timeout: float = 12,
     )
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         if conn_store is not None:
-            conn_store.append(resp)   # permette allo stop() di chiuderla
+            conn_store.append(resp)   # permette allo stop() di interromperla
         return resp.read().decode("utf-8", "replace")
 
 
@@ -168,12 +170,8 @@ def search(query: str, n_results: int = 5,
     return unique
 
 
-def search_searxng(base_url: str, query: str, n_results: int = 5,
-                   conn_store: list | None = None) -> list[tuple[str, str, str]]:
-    """Ricerca via API JSON di un'istanza SearXNG personale."""
-    url = base_url.rstrip("/") + "/search?" + urllib.parse.urlencode(
-        {"q": query, "format": "json"}
-    )
+def _searxng_once(url: str, base_url: str, conn_store: list | None) -> dict:
+    """Una richiesta all'API JSON di SearXNG: il dizionario della risposta."""
     try:
         req = urllib.request.Request(url, headers={"User-Agent": _UA})
         resp = urllib.request.urlopen(req, timeout=12)
@@ -199,6 +197,10 @@ def search_searxng(base_url: str, query: str, n_results: int = 5,
         ) from e
     if not isinstance(data, dict):
         raise WebSearchError("risposta inattesa dall'istanza SearXNG")
+    return data
+
+
+def _searxng_results(data: dict, n_results: int) -> list[tuple[str, str, str]]:
     out: list[tuple[str, str, str]] = []
     for r in (data.get("results") or [])[: max(1, n_results)]:
         if not isinstance(r, dict):
@@ -209,6 +211,50 @@ def search_searxng(base_url: str, query: str, n_results: int = 5,
         if title and link:
             out.append((title, link, snippet))
     return out
+
+
+def _searxng_failed_engines(data: dict) -> list[str]:
+    """«motore: motivo» per i motori che non hanno risposto (unresponsive_engines)."""
+    out = []
+    for e in data.get("unresponsive_engines") or []:
+        if isinstance(e, (list, tuple)) and e:
+            name = str(e[0])
+            reason = str(e[1]) if len(e) > 1 else ""
+            out.append(f"{name}: {reason}" if reason else name)
+    return out
+
+
+def search_searxng(base_url: str, query: str, n_results: int = 5,
+                   conn_store: list | None = None,
+                   should_stop=None) -> list[tuple[str, str, str]]:
+    """Ricerca via API JSON di un'istanza SearXNG personale.
+
+    A connessioni fredde i motori di SearXNG vanno spesso in timeout e
+    l'istanza risponde con zero risultati, mentre la richiesta successiva
+    funziona: con una risposta vuota E motori che non hanno risposto si
+    riprova una volta (salvo stop). Se resta vuota l'errore nomina i motori
+    in errore; una risposta vuota senza guasti è un vero «nessun risultato».
+    """
+    url = base_url.rstrip("/") + "/search?" + urllib.parse.urlencode(
+        {"q": query, "format": "json"}
+    )
+    data = _searxng_once(url, base_url, conn_store)
+    results = _searxng_results(data, n_results)
+    if results or not _searxng_failed_engines(data):
+        return results
+    if should_stop is not None and should_stop():
+        return []
+    data = _searxng_once(url, base_url, conn_store)
+    results = _searxng_results(data, n_results)
+    failed = _searxng_failed_engines(data)
+    if not results and failed:
+        raise WebSearchError(
+            "SearXNG non ha trovato risultati; motori che non hanno risposto: "
+            + ", ".join(failed)
+            + " (nel settings.yml dell'istanza: outgoing.request_timeout più alto "
+            "o motori diversi)"
+        )
+    return results
 
 
 def search_ollama(query: str, api_key: str, n_results: int = 5,
@@ -271,11 +317,20 @@ def format_results(query: str, results: list[tuple[str, str, str]]) -> str:
     return "\n".join(lines).strip()
 
 
+PROVIDER_NAMES = {"duckduckgo": "DuckDuckGo", "ollama": "Ollama Cloud", "searxng": "SearXNG"}
+
+
 class WebSearchWorker(QThread):
-    """Esegue la ricerca in background: ready(blocco_testo, query)."""
+    """Esegue la ricerca in background: ready(blocco_testo, query).
+
+    Con un provider di riserva (fallback) diverso dal principale: se il
+    principale fallisce o non trova nulla si prova la riserva, e notice()
+    dice quale ha risposto.
+    """
 
     ready = Signal(str, str)
     failed = Signal(str)
+    notice = Signal(str)
 
     def __init__(
         self,
@@ -285,11 +340,14 @@ class WebSearchWorker(QThread):
         api_key: str = "",
         searxng_url: str = "",
         parent=None,
+        fallback: str = "",
     ):
         super().__init__(parent)
         self._query = query
         self._n = n_results
         self._provider = provider or "duckduckgo"
+        # la riserva uguale al principale non aggiunge nulla
+        self._fallback = fallback if fallback and fallback != self._provider else ""
         self._api_key = api_key
         self._searxng_url = searxng_url
         self._stopped = False
@@ -297,48 +355,64 @@ class WebSearchWorker(QThread):
 
     def stop(self) -> None:
         self._stopped = True
-        for conn in self._conns:
-            try:
-                conn.close()
-            except Exception:
-                pass
+        # solo lo shutdown del socket: close() dal thread principale
+        # aspetterebbe il lock del buffer tenuto dal worker fermo in read()
+        # (UI bloccata fino al timeout di rete). La chiusura la fa il
+        # worker, all'uscita dal with di _fetch.
+        for conn in list(self._conns):
+            abort_response(conn)
 
     @property
     def stopped(self) -> bool:
         return self._stopped
 
-    def run(self) -> None:
+    def _search_with(self, provider: str) -> list[tuple[str, str, str]]:
+        """Ricerca con un provider; WebSearchError se fallisce o è vuota."""
         conns = self._conns
         try:
-            if self._provider == "ollama":
+            if provider == "ollama":
                 if not self._api_key:
-                    self.failed.emit(
+                    raise WebSearchError(
                         "chiave API non configurata (Impostazioni → Interfaccia → Provider ricerca web)"
                     )
-                    return
                 results = search_ollama(self._query, self._api_key, self._n, conn_store=conns)
-            elif self._provider == "searxng":
+            elif provider == "searxng":
                 if not self._searxng_url.strip():
-                    self.failed.emit(
+                    raise WebSearchError(
                         "URL dell'istanza SearXNG non configurato (Impostazioni → Interfaccia)"
                     )
-                    return
-                results = search_searxng(self._searxng_url.strip(), self._query, self._n, conn_store=conns)
+                results = search_searxng(self._searxng_url.strip(), self._query, self._n,
+                                         conn_store=conns, should_stop=lambda: self._stopped)
             else:
                 results = search(self._query, self._n, conn_store=conns)
+        except WebSearchError:
+            raise
+        except Exception as e:
+            raise WebSearchError(f"rete non raggiungibile ({e.__class__.__name__})") from e
+        if not results and not self._stopped:
+            raise WebSearchError("nessun risultato (il servizio di ricerca potrebbe non rispondere)")
+        return results
+
+    def run(self) -> None:
+        main = PROVIDER_NAMES.get(self._provider, self._provider)
+        try:
+            results = self._search_with(self._provider)
+        except WebSearchError as e:
             if self._stopped:
                 return
-        except WebSearchError as e:
-            if not self._stopped:
+            if not self._fallback:
                 self.failed.emit(str(e))
-            return
-        except Exception as e:
-            if not self._stopped:
-                self.failed.emit(f"rete non raggiungibile ({e.__class__.__name__})")
-            return
+                return
+            spare = PROVIDER_NAMES.get(self._fallback, self._fallback)
+            try:
+                results = self._search_with(self._fallback)
+            except WebSearchError as e2:
+                if not self._stopped:
+                    self.failed.emit(f"{main}: {e}; riserva {spare}: {e2}")
+                return
+            if self._stopped:
+                return
+            self.notice.emit(f"{main} non ha risposto ({e}): risultati da {spare}, il provider di riserva.")
         if self._stopped:
-            return
-        if not results:
-            self.failed.emit("nessun risultato (il servizio di ricerca potrebbe non rispondere)")
             return
         self.ready.emit(format_results(self._query, results), self._query)

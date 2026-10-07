@@ -607,6 +607,9 @@ class ChatArea(QWidget):
         self.think_btn.blockSignals(True)
         self.think_btn.setChecked(on)
         self.think_btn.blockSignals(False)
+        # con i segnali bloccati _on_think_toggled non scatta: l'icona va
+        # allineata qui, altrimenti all'avvio resta grigia col thinking attivo
+        self._update_think_icon()
 
     def thinking_active(self) -> bool:
         return self.think_btn.isChecked()

@@ -6,7 +6,9 @@
 #
 # - installa le dipendenze (makepkg non può usare sudo in un container)
 # - builda come utente non privilegiato, con la chiave pubblica di release
-#   nel suo portachiavi: makepkg VERIFICA la firma del tarball (validpgpkeys)
+#   nel suo portachiavi: makepkg clona il tag v<versione> da GitHub e ne
+#   VERIFICA la firma (?signed + validpgpkeys), come ogni utente AUR. Il tag
+#   deve quindi essere già pubblicato
 # - esegue check() (unit test), namcap su PKGBUILD e pacchetto
 # - rigenera .SRCINFO e copia il pacchetto in dist/
 # - installa il pacchetto e controlla che l'app parta (offscreen)
@@ -31,7 +33,7 @@ pacman -Syu --noconfirm --needed namcap $DEPS >/dev/null
 
 id builder >/dev/null 2>&1 || useradd -m builder
 WORK="$(mktemp -d)"
-cp "$AUR"/PKGBUILD "$AUR"/*.tar.gz "$AUR"/*.sig "$WORK/"
+cp "$AUR"/PKGBUILD "$WORK/"
 cp "$PUBKEY" "$WORK/release-key.asc"
 chown -R builder: "$WORK"
 

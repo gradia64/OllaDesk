@@ -448,6 +448,327 @@ def test_lan_url_filter():
     assert not _is_shareable_ip("fe80::1")
 
 
+def test_chat_worker_stop_during_stream_pause():
+    # regressione: stop() chiudeva la risposta dal thread principale e
+    # restava in attesa del lock del buffer, tenuto dal worker fermo in
+    # readline() durante una pausa dello stream → UI bloccata (misurati 9,5 s)
+    import threading
+    import time
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtCore import QEventLoop, QTimer
+    from PySide6.QtWidgets import QApplication
+
+    QApplication.instance() or QApplication([])
+    from olladesk.ollama_client import ChatWorker
+
+    release = threading.Event()
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *_a):
+            pass
+
+        def do_POST(self):  # noqa: N802 (API http.server)
+            self.rfile.read(int(self.headers["Content-Length"]))
+            self.send_response(200)
+            self.send_header("Content-Type", "application/x-ndjson")
+            self.end_headers()
+            try:
+                self.wfile.write(b'{"message": {"content": "parziale "}}\n')
+                self.wfile.flush()
+                release.wait(10)   # stream in pausa: il modello «tace»
+                self.wfile.write(b'{"done": true}\n')
+            except OSError:
+                pass   # connessione chiusa dallo stop
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    server.daemon_threads = True
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    host = f"http://127.0.0.1:{server.server_address[1]}"
+
+    w = ChatWorker(host, {"model": "finto", "messages": [], "stream": True})
+    got: list[str] = []
+    w.chunk.connect(got.append)
+    try:
+        w.start()
+        loop = QEventLoop()
+        w.chunk.connect(lambda _t: loop.quit())
+        QTimer.singleShot(5000, loop.quit)
+        loop.exec()
+        assert got == ["parziale "], got
+        time.sleep(0.2)   # il worker è di nuovo fermo in lettura
+
+        t0 = time.monotonic()
+        w.stop()
+        elapsed = time.monotonic() - t0
+        assert elapsed < 1.0, f"stop() ha bloccato il thread principale per {elapsed:.1f} s"
+        assert w.wait(3000), "il worker non è uscito dopo lo stop"
+    finally:
+        release.set()
+        w.wait(3000)
+        server.shutdown()
+        server.server_close()
+
+
+def test_web_search_worker_stop_during_read():
+    # regressione (revisione 0.2.5): WebSearchWorker.stop() chiudeva la
+    # risposta dal thread principale mentre il worker era fermo in read()
+    # → UI bloccata fino al timeout di rete (misurati 9,7 s con ■ durante
+    # una ricerca). Stesso schema già corretto per ChatWorker.
+    import threading
+    import time
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+
+    QApplication.instance() or QApplication([])
+    from olladesk.web_search import WebSearchWorker
+
+    release = threading.Event()
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *_a):
+            pass
+
+        def do_GET(self):  # noqa: N802 (API http.server)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", "1000")
+            self.end_headers()
+            try:
+                self.wfile.write(b'{"results": [')
+                self.wfile.flush()
+                release.wait(10)   # la risposta si ferma a metà
+            except OSError:
+                pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    server.daemon_threads = True
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    url = f"http://127.0.0.1:{server.server_address[1]}"
+
+    w = WebSearchWorker("prova", 3, provider="searxng", searxng_url=url)
+    failed: list[str] = []
+    w.failed.connect(failed.append)
+    try:
+        w.start()
+        deadline = time.monotonic() + 5
+        while not w._conns and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert w._conns, "il worker non ha aperto la connessione"
+        time.sleep(0.2)   # il worker è fermo in read()
+
+        t0 = time.monotonic()
+        w.stop()
+        elapsed = time.monotonic() - t0
+        assert elapsed < 1.0, f"stop() ha bloccato il thread principale per {elapsed:.1f} s"
+        assert w.wait(3000), "il worker non è uscito dopo lo stop"
+    finally:
+        release.set()
+        w.wait(3000)
+        server.shutdown()
+        server.server_close()
+    assert not failed, failed   # fermato: nessun errore da mostrare
+
+
+def _fake_searxng(responses: list[dict]):
+    """Finto SearXNG: risponde in ordine con i JSON dati. Restituisce
+    (url, elenco delle richieste ricevute, server)."""
+    import json as _json
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    seen: list[str] = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *_a):
+            pass
+
+        def do_GET(self):  # noqa: N802 (API http.server)
+            seen.append(self.path)
+            body = _json.dumps(responses[min(len(seen), len(responses)) - 1]).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    server.daemon_threads = True
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return f"http://127.0.0.1:{server.server_address[1]}", seen, server
+
+
+def test_searxng_retries_empty_answer_with_failed_engines():
+    # collaudo 0.2.5: a connessioni fredde i motori di SearXNG vanno in
+    # timeout e l'istanza risponde con 0 risultati; la richiesta dopo va.
+    from olladesk.web_search import WebSearchError, search_searxng
+
+    vuota_guasti = {"results": [], "unresponsive_engines": [["brave", "timeout"],
+                                                            ["duckduckgo", "CAPTCHA"]]}
+    buona = {"results": [{"title": "Rame", "url": "https://esempio.it/rame", "content": "prezzo"}]}
+
+    # 1. vuota con motori guasti, poi buona → risultati, due richieste
+    url, seen, srv = _fake_searxng([vuota_guasti, buona])
+    try:
+        res = search_searxng(url, "rame", 5)
+        assert res == [("Rame", "https://esempio.it/rame", "prezzo")], res
+        assert len(seen) == 2, seen
+    finally:
+        srv.shutdown(); srv.server_close()
+
+    # 2. vuota due volte → errore che nomina motori e motivi
+    url, seen, srv = _fake_searxng([vuota_guasti, vuota_guasti])
+    try:
+        try:
+            search_searxng(url, "rame", 5)
+            raise AssertionError("doveva fallire")
+        except WebSearchError as e:
+            assert "brave: timeout" in str(e) and "duckduckgo: CAPTCHA" in str(e), str(e)
+        assert len(seen) == 2, seen
+    finally:
+        srv.shutdown(); srv.server_close()
+
+    # 3. vuota senza motori guasti → nessun risultato vero: niente nuovo tentativo
+    url, seen, srv = _fake_searxng([{"results": [], "unresponsive_engines": []}])
+    try:
+        assert search_searxng(url, "rame", 5) == []
+        assert len(seen) == 1, seen
+    finally:
+        srv.shutdown(); srv.server_close()
+
+    # 4. stop prima del nuovo tentativo → nessuna seconda richiesta
+    url, seen, srv = _fake_searxng([vuota_guasti, buona])
+    try:
+        assert search_searxng(url, "rame", 5, should_stop=lambda: True) == []
+        assert len(seen) == 1, seen
+    finally:
+        srv.shutdown(); srv.server_close()
+
+
+def test_web_search_fallback_provider():
+    # collaudo 0.2.5: con DuckDuckGo bloccato (anti-bot) la ricerca falliva.
+    # Con un provider di riserva configurato si prova quello, e una nota
+    # dice quale ha risposto; senza riserva nulla cambia.
+    from unittest.mock import patch
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+
+    QApplication.instance() or QApplication([])
+    from olladesk import web_search
+    from olladesk.web_search import WebSearchError, WebSearchWorker
+
+    blocco = WebSearchError("DuckDuckGo sta bloccando le richieste automatiche")
+    buoni = [("Rame", "https://esempio.it/rame", "prezzo")]
+
+    def run(fallback, ddg, sx):
+        calls: list[str] = []
+
+        def fake_ddg(*_a, **_k):
+            calls.append("ddg")
+            if isinstance(ddg, Exception):
+                raise ddg
+            return ddg
+
+        def fake_sx(*_a, **_k):
+            calls.append("searxng")
+            if isinstance(sx, Exception):
+                raise sx
+            return sx
+
+        w = WebSearchWorker("rame", 5, provider="duckduckgo", fallback=fallback,
+                            searxng_url="http://127.0.0.1:1")
+        got: dict = {"ready": [], "failed": [], "notice": []}
+        w.ready.connect(lambda b, q: got["ready"].append(b))
+        w.failed.connect(got["failed"].append)
+        w.notice.connect(got["notice"].append)
+        with patch.object(web_search, "search", fake_ddg), \
+                patch.object(web_search, "search_searxng", fake_sx):
+            w.run()   # nel thread del test: i segnali arrivano subito
+        return got, calls
+
+    # 1. principale bloccato, riserva buona → risultati e nota
+    got, calls = run("searxng", blocco, buoni)
+    assert calls == ["ddg", "searxng"] and len(got["ready"]) == 1 and not got["failed"], got
+    assert "esempio.it/rame" in got["ready"][0]
+    assert len(got["notice"]) == 1 and "DuckDuckGo" in got["notice"][0] and "SearXNG" in got["notice"][0]
+
+    # 2. principale vuoto, riserva buona → anche «nessun risultato» passa alla riserva
+    got, calls = run("searxng", [], buoni)
+    assert calls == ["ddg", "searxng"] and len(got["ready"]) == 1, got
+
+    # 3. nessuna riserva → errore originale, nessuna query altrove
+    got, calls = run("", blocco, buoni)
+    assert calls == ["ddg"] and got["failed"] == [str(blocco)] and not got["notice"], got
+
+    # 4. riserva uguale al principale → ignorata
+    got, calls = run("duckduckgo", blocco, buoni)
+    assert calls == ["ddg"] and got["failed"], got
+
+    # 5. falliscono entrambi → un errore che li nomina tutti e due
+    got, calls = run("searxng", blocco, WebSearchError("motori in errore"))
+    assert not got["ready"] and len(got["failed"]) == 1, got
+    assert "DuckDuckGo" in got["failed"][0] and "riserva SearXNG: motori in errore" in got["failed"][0]
+
+    # 6. principale buono → la riserva non viene interrogata
+    got, calls = run("searxng", buoni, buoni)
+    assert calls == ["ddg"] and not got["notice"], got
+
+
+def test_web_fallback_setting_and_note():
+    # impostazione salvata dal dialogo, predefinita «nessuno», e nota in chat
+    from unittest.mock import patch
+
+    from olladesk import config, web_search
+    from olladesk.widgets.settings_dialog import SettingsDialog
+
+    with _isolated_config():
+        s = config.load_settings()
+        assert s["web_fallback"] == ""
+        s["web_fallback"] = "searxng"
+        dlg = SettingsDialog(s, lambda: [], "dark", "?")
+        try:
+            assert dlg.collect_settings()["web_fallback"] == "searxng"
+            dlg.web_fallback_combo.setCurrentIndex(dlg.web_fallback_combo.findData(""))
+            assert dlg.collect_settings()["web_fallback"] == ""
+        finally:
+            dlg.deleteLater()
+
+        # passaggio del provider di riserva al worker e nota in chat:
+        # tests/engine_test.py (sezione 6b), dove ora vive la ricerca web
+
+
+def test_think_hint_only_when_think_false_was_sent():
+    # il suggerimento «riattiva 🧠» ha senso solo se la richiesta aveva
+    # "think": false; prima bastava la parola «think» nell'errore (anche
+    # «thinking» in un errore qualsiasi, con il thinking attivo)
+    from unittest.mock import patch
+
+    with _isolated_config():
+        win = _make_window()
+        try:
+            win._view_id = "chat-di-prova"
+            hint = "riattiva il pulsante 🧠"
+            cases = [
+                (False, "model does not support thinking", False),   # 🧠 attivo
+                (True, "model does not support thinking", True),     # 🧠 spento
+                (True, "connection refused", False),                 # errore estraneo
+            ]
+            for sent_false, err, expected in cases:
+                notes: list[str] = []
+                with patch.object(win.engine, "think_off_sent", return_value=sent_false), \
+                        patch.object(win.chat_area, "add_system_note", notes.append):
+                    win._on_generation_finished("chat-di-prova", "failed", "", err)
+                assert len(notes) == 1, notes
+                assert (hint in notes[0]) is expected, (sent_false, err, notes[0])
+        finally:
+            win._really_quit = True
+            win.close()
+
+
 def test_chat_worker_emits_thinking():
     # il ChatWorker deve distinguere thinking da content, sia in risposta
     # singola che in streaming NDJSON
@@ -669,7 +990,6 @@ def test_quit_from_hidden_tray_exits_app():
 import os, sys, tempfile
 os.environ["QT_QPA_PLATFORM"] = "offscreen"
 os.environ["XDG_CONFIG_HOME"] = tempfile.mkdtemp()
-os.environ["OLLADEK_CHILD"] = "1"
 sys.path.insert(0, {root!r})
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon
@@ -760,26 +1080,64 @@ print("NOTE DISMISS OK", flush=True)
 
 
 def test_brain_icon_tinted_and_sized():
-    # il toggle thinking usa un'icona tinta (grigia/blu) come il globo: il
-    # glifo deve riempire il riquadro e il fallback deve comunque produrre
-    # un'icona valida
+    # il toggle thinking usa un'icona disegnata (grigia/blu) come il globo:
+    # tratto visibile, del colore richiesto, e ingombro simile al globo
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtGui import QColor
     from PySide6.QtWidgets import QApplication
 
     QApplication.instance() or QApplication([])
     from olladesk import theme
 
+    def opaque_box(icon):
+        img = icon.pixmap(18, 18).toImage()
+        pts = [(x, y) for x in range(18) for y in range(18)
+               if img.pixelColor(x, y).alpha() > 8]
+        xs, ys = [p[0] for p in pts], [p[1] for p in pts]
+        return img, pts, max(xs) - min(xs) + 1, max(ys) - min(ys) + 1
+
     for color in ("#9b9b9b", theme.WEB_ACTIVE_COLOR):
-        img = theme.brain_icon(color).pixmap(18, 18).toImage()
-        opaque = sum(
+        img, pts, w, h = opaque_box(theme.brain_icon(color))
+        assert len(pts) > 18 * 18 * 0.2, (color, len(pts))   # tratto presente
+        want = QColor(color)
+        assert any(
+            img.pixelColor(x, y).alpha() > 200
+            and abs(img.pixelColor(x, y).blue() - want.blue()) < 8
+            and abs(img.pixelColor(x, y).red() - want.red()) < 8
+            for x, y in pts
+        ), color
+        _, _, gw, gh = opaque_box(theme.globe_icon(color))
+        assert abs(w - gw) <= 2 and abs(h - gh) <= 3, (w, h, gw, gh)
+
+
+def test_think_icon_matches_state_at_startup():
+    # regressione B1 (revisione 0.2.5): set_thinking() blocca i segnali, quindi
+    # l'icona restava grigia all'avvio con il thinking attivo
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtGui import QColor
+    from PySide6.QtWidgets import QApplication
+
+    QApplication.instance() or QApplication([])
+    from olladesk import theme
+    from olladesk.widgets.chat_area import ChatArea
+
+    blue = QColor(theme.WEB_ACTIVE_COLOR)
+
+    def blue_pixels(ca) -> int:
+        img = ca.think_btn.icon().pixmap(18, 18).toImage()
+        return sum(
             1 for x in range(18) for y in range(18)
-            if img.pixelColor(x, y).alpha() > 8
+            if img.pixelColor(x, y).alpha() > 200
+            and abs(img.pixelColor(x, y).blue() - blue.blue()) < 8
+            and abs(img.pixelColor(x, y).red() - blue.red()) < 8
         )
-        assert opaque > 18 * 18 * 0.2, (color, opaque)   # glifo presente
-    fb = theme._brain_fallback_icon("#9b9b9b", 18).pixmap(18, 18).toImage()
-    assert any(
-        fb.pixelColor(x, y).alpha() > 8 for x in range(18) for y in range(18)
-    )
+
+    ca = ChatArea("dark")
+    ca.set_thinking(True)
+    assert ca.think_btn.isChecked() and blue_pixels(ca) > 0
+    ca.set_thinking(False)
+    assert not ca.think_btn.isChecked() and blue_pixels(ca) == 0
+    ca.deleteLater()
 
 
 def main() -> int:

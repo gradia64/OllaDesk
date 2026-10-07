@@ -25,7 +25,7 @@ Piano delle funzionalità per la versione 0.3: la **companion web**, che permett
 3. **Fase 2 (#4):** invio e streaming.
 4. **Fase 3 (#5):** sincronizzazione dal vivo.
 5. **Fase 4 (#6, #7):** PWA e rimozione della condivisione API.
-6. **Fase 5 (#8, #9, #10):** il telefono non si limita a scrivere. #9 e #10 subito; #8 dopo il merge di `main` (0.2.6), che cambia proprio la ricerca web (messaggio in chat prima della ricerca, provider di riserva).
+6. **Fase 5 (#8, #9, #10):** il telefono non si limita a scrivere. #9 e #10 subito; #8 dopo il merge di `main` (0.2.6), che cambia proprio la ricerca web (messaggio in chat prima della ricerca, provider di riserva). Merge fatto il 2026-10-07: le correzioni della 0.2.6 che in `main` vivono in `MainWindow` (suggerimento «think» solo con `think: false`, messaggio in chat prima della ricerca, portachiavi solo per Ollama, provider di riserva con la sua nota) sono riscritte in `ChatEngine`, con i test in `tests/engine_test.py`.
 
 ## Decisioni di progetto
 

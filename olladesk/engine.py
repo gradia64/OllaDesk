@@ -49,6 +49,9 @@ class ChatEngine(QObject):
         self._active_id: str | None = None   # chat in elaborazione
         self._phase: str | None = None       # None | "search" | "chat"
         self._pending_user: dict | None = None
+        # messaggio già in chat che attende i risultati della ricerca web
+        self._search_msg: tuple[dict, dict, bool] | None = None   # chat, messaggio, think
+        self._think_off_sent = False          # la richiesta in corso ha "think": false
         self._pending_stream = ""
         self._pending_think = ""              # ragionamento ricevuto nel turno corrente
         self._chat_stopped = False            # scarta i segnali del worker dopo uno stop
@@ -98,6 +101,10 @@ class ChatEngine(QObject):
     def partial(self) -> tuple[str, str]:
         """Testo e ragionamento già ricevuti nella risposta in corso."""
         return self._pending_stream, self._pending_think
+
+    def think_off_sent(self) -> bool:
+        """True se la generazione in corso ha inviato "think": false."""
+        return self._think_off_sent
 
     # ------------------------------------------------- server Ollama e modelli
 
@@ -260,6 +267,9 @@ class ChatEngine(QObject):
         if web:
             self._phase = "search"
             self.busy_changed.emit(True)
+            # il messaggio va subito in chat: la ricerca può durare secondi
+            # (prima la bolla compariva solo a ricerca finita)
+            self._search_msg = self._commit_user_message(start=False)
             self._start_web_search()
         else:
             self._phase = "chat"
@@ -273,16 +283,25 @@ class ChatEngine(QObject):
         self._search_stopped = False
         self.search_started.emit(self._active_id)
         s = self.settings
+        provider = s.get("web_provider", "duckduckgo")
+        fallback = s.get("web_fallback", "")
+        # la chiave serve solo a ollama.com: leggerla dal portachiavi
+        # (KWallet, nel thread della UI) costa fino a ~200 ms per niente
+        api_key = ""
+        if "ollama" in (provider, fallback):
+            api_key = secrets_store.load_api_key() or s.get("web_api_key", "")
         w = web_search.WebSearchWorker(
-            web_search.make_query(self._pending_user["display"]),
+            web_search.make_query(self._search_msg[1]["display"]),
             int(s.get("web_results", 5)),
-            provider=s.get("web_provider", "duckduckgo"),
-            api_key=secrets_store.load_api_key() or s.get("web_api_key", ""),
+            provider=provider,
+            fallback=fallback,
+            api_key=api_key,
             searxng_url=s.get("web_searxng_url", ""),
             parent=self,
         )
         w.ready.connect(self._on_web_results)
         w.failed.connect(self._on_web_failed)
+        w.notice.connect(self._on_web_notice)
         w.finished.connect(w.deleteLater)
         w.finished.connect(self._workers.clear_ref(self, "_search_worker", w))
         self._search_worker = w
@@ -293,10 +312,20 @@ class ChatEngine(QObject):
         if self._search_stopped or self.sender() is not self._search_worker:
             return
         self.search_finished.emit(self._active_id)
-        if self._pending_user is not None:
-            self._pending_user["web_block"] = block
+        pending, self._search_msg = self._search_msg, None
+        if pending is not None:
+            # i risultati si agganciano al messaggio già in chat, prima della
+            # generazione (che li allega al contesto dell'ultimo turno)
+            chat, msg, think = pending
+            msg["web_block"] = block
+            self._persist(chat)
             self._phase = "chat"
-            self._commit_user_message()
+            self._start_generation(chat, think)
+
+    def _on_web_notice(self, text: str) -> None:
+        if self._search_stopped or self.sender() is not self._search_worker:
+            return
+        self.notice.emit(self._active_id, "🌐 " + text)
 
     def _on_web_failed(self, err: str) -> None:
         if self._search_stopped or self.sender() is not self._search_worker:
@@ -306,16 +335,23 @@ class ChatEngine(QObject):
             self._active_id,
             f"⚠ Ricerca web non riuscita ({err}).\nProcedo senza i risultati web.",
         )
-        if self._pending_user is not None:
+        pending, self._search_msg = self._search_msg, None
+        if pending is not None:
+            chat, _msg, think = pending
             self._phase = "chat"
-            self._commit_user_message()
+            self._start_generation(chat, think)
 
     # ------------------------------------------------------------------ commit
 
-    def _commit_user_message(self) -> None:
+    def _commit_user_message(self, start: bool = True) -> tuple[dict, dict, bool] | None:
+        """Aggiunge il messaggio dell'utente alla conversazione e lo salva.
+
+        Con start=False la generazione non parte: la avvia la fine della
+        ricerca web. Restituisce (conversazione, messaggio, think).
+        """
         p, self._pending_user = self._pending_user, None
         if p is None:
-            return
+            return None
         chat_id = p["chat_id"]
         model = p["model"]
         chat = self.chat(chat_id)
@@ -348,7 +384,9 @@ class ChatEngine(QObject):
         chat["updated"] = ts
         self.user_message_added.emit(chat_id, msg)
         self._persist(chat)
-        self._start_generation(chat, p["think"])
+        if start:
+            self._start_generation(chat, p["think"])
+        return chat, msg, p["think"]
 
     def _start_generation(self, chat: dict, think: bool) -> None:
         chat_id = chat["id"]
@@ -402,6 +440,7 @@ class ChatEngine(QObject):
         # server); solo quando l'utente lo disattiva si invia "think": false
         if not think:
             payload["think"] = False
+        self._think_off_sent = not think
 
         self._pending_stream = ""
         self._pending_think = ""
@@ -476,7 +515,10 @@ class ChatEngine(QObject):
                 self._search_worker.stop()
                 self._workers.retire(self._search_worker)
                 self._search_worker = None
+            # il messaggio dell'utente è già in chat e salvato: resta, senza
+            # risposta, come quando si ferma una generazione prima del testo
             self._pending_user = None
+            self._search_msg = None
             self.search_finished.emit(self._active_id)
             self._set_idle()
             return
@@ -500,6 +542,8 @@ class ChatEngine(QObject):
     def _set_idle(self) -> None:
         self._active_id = None
         self._phase = None
+        self._search_msg = None
+        self._think_off_sent = False
         self.busy_changed.emit(False)
 
     # ---------------------------------------------------------------- chiusura
