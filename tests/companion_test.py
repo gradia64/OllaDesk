@@ -412,9 +412,11 @@ assert box.port_btn.isVisibleTo(box)
 box._apply_port()
 assert win._companion.state() == "running" and win._companion.port == other_port
 assert config.load_settings()["companion_port"] == other_port
-# porta occupata: errore mostrato nella finestra
+# porta occupata: errore mostrato nella finestra. Basta occuparla su
+# 127.0.0.1: un socket in ascolto sulla loopback impedisce anche il bind su
+# tutte le interfacce, e il test non apre nulla verso la rete
 busy_sock = socket.socket()
-busy_sock.bind(("0.0.0.0", 0))
+busy_sock.bind(("127.0.0.1", 0))
 busy_sock.listen(1)
 box.port_spin.setValue(busy_sock.getsockname()[1])
 box._apply_port()
