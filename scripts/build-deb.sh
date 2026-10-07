@@ -75,6 +75,9 @@ Description: Client desktop per Ollama in stile ChatGPT
  allegati (testo, immagini, PDF), ricerca web (DuckDuckGo/SearXNG), gestione
  dei modelli (scaricamento ed eliminazione) e tema chiaro/scuro.
  .
+ La companion web, facoltativa, porta le stesse conversazioni su smartphone
+ e tablet nella rete locale, con abbinamento tramite codice o QR code.
+ .
  Richiede un server Ollama locale o remoto (https://ollama.com).
 EOF
 

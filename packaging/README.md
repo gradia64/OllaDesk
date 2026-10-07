@@ -54,7 +54,7 @@ esegue, in ordine:
 
 | Job       | Cosa fa |
 |-----------|---------|
-| `test`    | unit test, test offline (worker, controllo aggiornamenti), test degli script di rilascio |
+| `test`    | unit test, test offline (worker, controllo aggiornamenti, motore di chat, companion web, sincronizzazione), test degli script di rilascio |
 | `verify`  | il tag è annotato e firmato dalla sottochiave dei tag (`scripts/verify-tag.sh`); tag = `__version__`; note di rilascio presenti (`scripts/release-notes.sh`) |
 | `dist`    | tarball sorgente, `.deb`, lintian. Niente firme: qui non ci sono secret |
 | `arch`    | in un container `archlinux:base-devel`: PKGBUILD che clona il tag da GitHub e ne **verifica la firma**, `check()`, namcap, installazione e avvio di prova |
