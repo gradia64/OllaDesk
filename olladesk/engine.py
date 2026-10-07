@@ -236,7 +236,10 @@ class ChatEngine(QObject):
             return None
         chat_id = chat_id or self.new_chat_id()
 
-        # validazione rapida: il contenuto dei file viene letto alla generazione
+        # validazione rapida: il contenuto dei file viene letto alla generazione.
+        # Gli avvisi partono dopo busy_changed(True): la companion azzera lì il
+        # suo backlog, e un telefono che apre la chat nuova dopo l'invio non li
+        # vedrebbe
         meta, warnings = [], []
         for a in attachments:
             p = Path(a["path"])
@@ -244,13 +247,8 @@ class ChatEngine(QObject):
                 warnings.append(f"file non leggibile: {a['name']}")
                 continue
             meta.append({"path": str(p), "name": a["name"], "kind": a["kind"]})
-        if warnings:
-            self.notice.emit(chat_id, "⚠ " + "\n⚠ ".join(warnings))
-
         if web and not web_search.make_query(text):
-            self.notice.emit(
-                chat_id, "⚠ Ricerca web saltata: scrivi una domanda insieme agli allegati."
-            )
+            warnings.append("Ricerca web saltata: scrivi una domanda insieme agli allegati.")
             web = False
 
         self._pending_user = {
@@ -264,16 +262,16 @@ class ChatEngine(QObject):
             "think": think,
         }
         self._active_id = chat_id
+        self._phase = "search" if web else "chat"
+        self.busy_changed.emit(True)
+        if warnings:
+            self.notice.emit(chat_id, "⚠ " + "\n⚠ ".join(warnings))
         if web:
-            self._phase = "search"
-            self.busy_changed.emit(True)
             # il messaggio va subito in chat: la ricerca può durare secondi
             # (prima la bolla compariva solo a ricerca finita)
             self._search_msg = self._commit_user_message(start=False)
             self._start_web_search()
         else:
-            self._phase = "chat"
-            self.busy_changed.emit(True)
             self._commit_user_message()
         return chat_id
 

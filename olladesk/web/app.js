@@ -259,7 +259,16 @@ function openStream(id, after) {
   const on = (kind, fn) => es.addEventListener(kind, (ev) => {
     if (stream === es) fn(JSON.parse(ev.data));
   });
-  on("busy", (d) => { busy = d.busy; updateComposer(); });
+  on("busy", (d) => {
+    busy = d.busy;
+    if (!busy) {
+      // elaborazione finita: di solito «done» è già arrivato, ma uno stop
+      // durante la ricerca web non ha risposta e quindi niente «done»
+      if (pending && !pending.hasText) { pending.box.remove(); pending = null; }
+      activeHere = false;
+    }
+    updateComposer();
+  });
   on("user", (m) => { $("messages").append(renderMessage(m)); scrollToEnd(); });
   on("search", () => {
     activeHere = true;

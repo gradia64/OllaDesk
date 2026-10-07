@@ -281,6 +281,9 @@ assert wait_until(lambda: not engine.busy())
 notes = [e[2] for e in events if e[0] == "notice" and e[1] == c8]
 assert any("file non leggibile" in n for n in notes)
 assert any("Ricerca web saltata" in n for n in notes)
+# dopo busy_changed(True): la companion azzera lì il backlog degli eventi
+order = names()
+assert order.index("busy_changed") < order.index("notice") < order.index("user_message_added"), order
 
 engine.rename_chat(cid, "  rinominata  ")
 assert engine.chat(cid)["title"] == "rinominata"

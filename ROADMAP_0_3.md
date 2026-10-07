@@ -66,3 +66,14 @@ Il bump di versione resta al momento del rilascio (fonte unica: `olladesk/__init
 | Copia di un messaggio dal telefono (⧉) | su HTTP l'API Clipboard non è disponibile: serve il ripiego con selezione del testo |
 | Gestione dei modelli dal telefono (scarica ed elimina) | fattibile con i worker esistenti; scaricare GB dal telefono ha poco senso, priorità bassa |
 | Pulizia degli allegati all'eliminazione di una chat | i file in `attachments/` (foto dal telefono in `companion/`, immagini incollate sul PC) restano anche dopo l'eliminazione della chat; da rimuovere quando nessun'altra chat li usa |
+
+## Correzioni per la 0.3.1 (revisione post-rilascio)
+
+Dalle revisioni della 0.3.0 pubblicata (GLM 5.3 e DeepSeek V4.1 Flash, 2026-10-07), verificate sul codice.
+
+| Voce | Origine | Stato |
+|---|---|---|
+| **Telefono bloccato su ■ dopo lo stop di una ricerca web**: lo stop durante la ricerca non produce `done`, e `activeHere` restava vero; ora lo azzera anche l'evento `busy: false` (`app.js`) | DeepSeek P1 | ☑ |
+| **Avvisi dell'invio persi su una chat nuova dal telefono** («Ricerca web saltata», «file non leggibile»): emessi prima di `busy_changed(True)`, che azzera il backlog della companion; ora partono dopo (`engine.py`), con test in `engine_test` e `companion_send_test` | GLM 1 | ☑ |
+| Descrizione del pacchetto Arch allineata al `.deb` (companion web) | DeepSeek M1 | ☑ |
+| Esempio d'uso generico in `scripts/release-notes.sh` | DeepSeek M2 | ☑ |

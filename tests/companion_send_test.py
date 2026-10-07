@@ -303,6 +303,19 @@ got, _d = jpost("/api/send", {"text": "di nuovo", "model": "finto", "chat_id": c
                               "attachments": [img["id"]]}, TOKEN)
 assert got == 400
 
+# chat nuova con 🌐 acceso e soli allegati: la ricerca salta e il telefono,
+# che apre lo stream solo dopo la risposta, deve vedere l'avviso (prima
+# finiva nel backlog che busy_changed azzera subito dopo)
+st, solo = cc.upload("solo.png", PNG, TOKEN)
+st, res = jpost("/api/send", {"text": "", "model": "finto", "web": True,
+                              "attachments": [solo["id"]]}, TOKEN)
+assert st == 200, res
+s = SSE(f"/api/chats/{res['chat_id']}/events?after={res['after']}", TOKEN)
+assert wait_until(lambda: "done" in s.kinds()), s.kinds()
+assert any("Ricerca web saltata" in n["text"] for n in s.of("notice")), s.events
+assert "search" not in s.kinds()
+s.close()
+
 # caricamenti mai inviati: spariscono alla scadenza e all'arresto del server
 st, orfano = cc.upload("orfano.txt", b"x", TOKEN)
 orfano_path = next(p for p in folder.iterdir() if p.name.endswith("_orfano.txt"))

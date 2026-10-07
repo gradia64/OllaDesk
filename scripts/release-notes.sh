@@ -7,7 +7,7 @@
 # fondo). Il job verify fallisce se mancano, così una release non esce più
 # con la sola lista generata da GitHub.
 #
-# Uso: scripts/release-notes.sh 0.2.6     (anche v0.2.6)
+# Uso: scripts/release-notes.sh X.Y.Z     (anche vX.Y.Z)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
