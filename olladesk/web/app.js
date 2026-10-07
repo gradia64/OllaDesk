@@ -341,6 +341,22 @@ $("think").addEventListener("click", () => {
   store("olladesk.think", on ? "1" : "0");
 });
 
+// ricerca web: come sul PC resta accesa fra un messaggio e l'altro, ma non
+// viene ricordata: a ogni apertura della pagina riparte spenta, perché la
+// domanda andrebbe a un servizio esterno
+function setWeb(on) {
+  $("web").setAttribute("aria-pressed", on ? "true" : "false");
+  $("web").title = on ? "Ricerca web attiva" : "Ricerca web spenta";
+  $("web-note").hidden = !on;
+  document.body.classList.toggle("web-on", on);
+}
+
+function webOn() {
+  return $("web").getAttribute("aria-pressed") === "true";
+}
+
+$("web").addEventListener("click", () => setWeb(!webOn()));
+
 function updateComposer() {
   const btn = $("send");
   if (activeHere) {
@@ -405,10 +421,11 @@ async function send() {
   if ((!text && !ids.length) || $("send").disabled) return;
   const model = $("model").value;
   const think = $("think").getAttribute("aria-pressed") === "true";
+  const web = webOn();
   $("send").disabled = true;
   let res;
   try {
-    res = await post("/api/send", { chat_id: currentId, text, model, think, attachments: ids });
+    res = await post("/api/send", { chat_id: currentId, text, model, think, web, attachments: ids });
   } catch (e) {
     if (e instanceof Unauthorized) { route(); return; }
     if (e.status === 404) { chatGone(); return; }

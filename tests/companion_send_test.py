@@ -2,7 +2,8 @@
 
 Copre /api/models, validazione di /api/send, streaming SSE (eventi,
 Markdown reso, statistiche), risposta «occupato», ricollegamento a metà
-risposta, stop, think=False, arresto del server con stream aperti e
+risposta, stop, think=False, ricerca web dal telefono (#8), arresto del
+server con stream aperti e
 l'effetto sulla finestra desktop (messaggio visibile, bozza conservata).
 
 Uso:  python3 tests/companion_send_test.py   (nessuna rete, nessun Ollama)
@@ -21,11 +22,11 @@ os.environ["XDG_CONFIG_HOME"] = tempfile.mkdtemp(prefix="olladesk_send_config_")
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from PySide6.QtCore import QEventLoop, QTimer
+from PySide6.QtCore import QEventLoop, QThread, QTimer, Signal
 from PySide6.QtWidgets import QApplication
 
 from fake_ollama import MODELS, FakeOllama
-from olladesk import companion, config
+from olladesk import companion, config, web_search
 from olladesk.engine import ChatEngine
 
 slot_errors = []
@@ -40,6 +41,28 @@ sys.excepthook = _hook
 
 app = QApplication([])
 fake = FakeOllama()
+
+
+class FakeSearch(QThread):
+    """Ricerca web finta: nessuna rete, risultati fissi."""
+    ready = Signal(str, str)
+    failed = Signal(str)
+    notice = Signal(str)
+    queries: list = []
+
+    def __init__(self, query, *_a, **_kw):
+        super().__init__(_kw.get("parent"))
+        self._query = query
+        FakeSearch.queries.append(query)
+
+    def stop(self):
+        pass
+
+    def run(self):
+        self.ready.emit("RISULTATI WEB DAL TELEFONO", self._query)
+
+
+web_search.WebSearchWorker = FakeSearch
 
 
 def wait_until(pred, ms=5000):
@@ -99,6 +122,10 @@ for body, status in (
     ({"text": "ciao"}, 400),
     ({"text": "ciao", "model": "finto", "chat_id": "../etc"}, 400),
     ({"text": "ciao", "model": "finto", "chat_id": 5}, 400),
+    # booleani veri: la stringa "false" non deve accendere nulla
+    ({"text": "ciao", "model": "finto", "web": "false"}, 400),
+    ({"text": "ciao", "model": "finto", "web": 1}, 400),
+    ({"text": "ciao", "model": "finto", "think": "false"}, 400),
 ):
     got, data = jpost("/api/send", body, TOKEN)
     assert got == status, (body, got, data)
@@ -132,8 +159,27 @@ assert ids == sorted(ids) and all(i > res["after"] for i in ids)
 saved = config.load_chat(cid)
 assert [m["role"] for m in saved["messages"]] == ["user", "assistant"]
 assert fake.payloads[-1]["model"] == "finto" and "think" not in fake.payloads[-1]
+assert saved["messages"][0]["web"] is False and FakeSearch.queries == []   # spenta di default
 s.close()
 print("3. invio, eventi SSE e Markdown reso OK")
+
+# ------------------------------------------ 3b. ricerca web dal telefono (#8)
+
+st, res = jpost("/api/send", {"text": "notizie dal telefono", "model": "finto", "web": True,
+                              "chat_id": cid}, TOKEN)
+assert st == 200 and res["chat_id"] == cid, res
+s = SSE(f"/api/chats/{cid}/events?after={res['after']}", TOKEN)
+assert wait_until(lambda: "done" in s.kinds()), s.kinds()
+k = s.kinds()
+# come sul PC (0.2.6): il messaggio compare prima della ricerca
+assert k.index("user") < k.index("search") < k.index("search_done") < k.index("start"), k
+assert s.of("user")[0]["web"] is True
+assert FakeSearch.queries == ["notizie dal telefono"]
+saved = config.load_chat(cid)["messages"]
+assert saved[-2]["web"] is True and saved[-2]["web_block"] == "RISULTATI WEB DAL TELEFONO"
+assert "RISULTATI WEB DAL TELEFONO" in fake.payloads[-1]["messages"][-1]["content"]
+s.close()
+print("3b. ricerca web dal telefono OK")
 
 # -------------------------------- 4. occupato, ricollegamento e stop a metà
 

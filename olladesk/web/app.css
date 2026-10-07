@@ -11,6 +11,7 @@
   --code-inline: #1f5fc4;
   --th-bg: #e6e9ee;
   --error: #c62828;
+  --web: #3b82f6;      /* come il globo della ricerca web sul PC */
   color-scheme: light;
 }
 
@@ -27,6 +28,7 @@
     --code-inline: #79b8ff;
     --th-bg: #2a2e33;
     --error: #ef6b6b;
+    --web: #60a5fa;
     color-scheme: dark;
   }
 }
@@ -227,6 +229,7 @@ details.think summary { cursor: pointer; }
 /* ------------------------------------------------------------ compositore */
 
 body.composing main { padding-bottom: 200px; }
+body.composing.web-on main { padding-bottom: 224px; }
 
 .composer {
   position: fixed;
@@ -283,6 +286,13 @@ body.composing main { padding-bottom: 200px; }
   opacity: 1;
   border-color: var(--accent);
 }
+
+.toggle.web[aria-pressed="true"] {
+  border-color: var(--web);
+  box-shadow: inset 0 0 0 1px var(--web);
+}
+
+.composer .web-note { color: var(--web); }
 
 .composer textarea {
   flex: 1;

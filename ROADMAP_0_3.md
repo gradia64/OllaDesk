@@ -14,7 +14,7 @@ Piano delle funzionalità per la versione 0.3: la **companion web**, che permett
 | 5 | Sincronizzazione dal vivo: un messaggio scritto dal telefono compare nella finestra desktop, e viceversa | media | ☑ |
 | 6 | Pagina mobile unica (HTML + JavaScript senza build) con manifest PWA per l'installazione sulla schermata home | facile | ☑ |
 | 7 | Rimozione della condivisione dell'API (#3 della 0.2.4) | facile | ☑ |
-| 8 | Ricerca web dal telefono: interruttore 🌐 nella barra di scrittura | facile | ☐ |
+| 8 | Ricerca web dal telefono: interruttore 🌐 nella barra di scrittura | facile | ☑ |
 | 9 | Rinomina ed elimina chat dal telefono, con conferma per l'eliminazione | facile | ☑ |
 | 10 | Allegati dal telefono: foto dalla fotocamera o dalla galleria, file di testo e PDF | media | ☑ |
 

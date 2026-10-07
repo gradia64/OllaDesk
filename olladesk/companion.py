@@ -370,7 +370,7 @@ def models_info(engine) -> dict:
 
 
 def web_send(engine, hub, chat_id: str | None, text: str, model: str, think: bool,
-             attachments: list[dict] = ()):
+             attachments: list[dict] = (), web: bool = False):
     """Thread principale: invio dal telefono.
 
     Restituisce (200, chat_id, seq) oppure (stato HTTP, messaggio, None).
@@ -387,7 +387,7 @@ def web_send(engine, hub, chat_id: str | None, text: str, model: str, think: boo
         return 404, "conversazione inesistente: è stata eliminata sul PC?", None
     seq = hub.seq()
     cid = engine.send(chat_id or engine.new_chat_id(), text, model, think=think,
-                      attachments=list(attachments))
+                      attachments=list(attachments), web=web)
     if cid is None:
         return busy
     return 200, cid, seq
@@ -754,6 +754,12 @@ class _Handler(BaseHTTPRequestHandler):
                 return
             text, model = data.get("text"), data.get("model")
             chat_id = data.get("chat_id")
+            # booleani veri: bool("false") varrebbe True, e con la ricerca web
+            # la domanda andrebbe a un servizio esterno che l'utente non ha chiesto
+            think, web = data.get("think", True), data.get("web", False)
+            if not (isinstance(think, bool) and isinstance(web, bool)):
+                self._error(400, "«think» e «web» devono essere true o false")
+                return
             ids = data.get("attachments") or []
             if not (isinstance(ids, list) and len(ids) <= MAX_ATTACHMENTS
                     and all(isinstance(i, str) for i in ids)):
@@ -779,7 +785,7 @@ class _Handler(BaseHTTPRequestHandler):
                 self._error(400, "allegato sconosciuto o scaduto: caricalo di nuovo")
                 return
             ok, res = self._main(web_send, self.ctx.engine, self.ctx.hub, chat_id,
-                                 text.strip(), model, bool(data.get("think", True)), atts)
+                                 text.strip(), model, think, atts, web)
             if not ok or res[0] != 200:
                 self.ctx.uploads.give_back(atts)
             if not ok:

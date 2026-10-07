@@ -36,7 +36,9 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   pagina per smartphone e tablet nella rete locale, con le stesse
   conversazioni del PC. Dal telefono si leggono le chat, se ne apre una
   nuova o si continua una esistente: si sceglie il modello, si accende o
-  spegne il ragionamento (🧠) e la risposta arriva in streaming, con il
+  spegne il ragionamento (🧠) e la ricerca web (🌐, con il provider scelto
+  sul PC; a ogni apertura della pagina riparte spenta e, finché è accesa,
+  la barra di scrittura lo ricorda) e la risposta arriva in streaming, con il
   pulsante ■ per interromperla. Il PC genera una risposta alla volta: se
   sta già rispondendo, il telefono lo segnala e attende. PC e telefono
   restano sincronizzati dal vivo: un messaggio scritto da una parte compare
