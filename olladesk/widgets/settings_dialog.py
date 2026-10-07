@@ -190,7 +190,7 @@ class SettingsDialog(QDialog):
         idx = self.web_provider_combo.findData(s.get("web_provider", "duckduckgo"))
         self.web_provider_combo.setCurrentIndex(max(0, idx))
         self.web_provider_combo.currentIndexChanged.connect(
-            lambda _i: self._update_provider_fields()
+            lambda _i: (self._sync_fallback_choices(), self._update_provider_fields())
         )
         form.addRow("Provider ricerca web:", self.web_provider_combo)
 
@@ -209,6 +209,7 @@ class SettingsDialog(QDialog):
         self.web_fallback_combo.currentIndexChanged.connect(
             lambda _i: self._update_provider_fields()
         )
+        self._sync_fallback_choices()
         form.addRow("Provider di riserva:", self.web_fallback_combo)
 
         self.web_key_edit = QLineEdit("", w)
@@ -281,6 +282,26 @@ class SettingsDialog(QDialog):
         lay.addWidget(self._build_update_group(w))
         return page
 
+    def _sync_fallback_choices(self) -> None:
+        """Il principale non può fare da riserva: la ricerca lo ignorerebbe
+        e si resterebbe senza riserva senza saperlo (es. SearXNG con riserva
+        SearXNG). La sua voce si disattiva e, se era scelta, torna «Nessuno»."""
+        combo = getattr(self, "web_fallback_combo", None)
+        if combo is None:
+            return
+        provider = self.web_provider_combo.currentData()
+        model = combo.model()
+        for i in range(combo.count()):
+            item = model.item(i)
+            if item is not None:
+                item.setEnabled(combo.itemData(i) != provider)
+        if combo.currentData() == provider:
+            # a segnali bloccati: chi chiama aggiorna poi i campi visibili
+            # (durante la costruzione del dialogo non esistono ancora)
+            combo.blockSignals(True)
+            combo.setCurrentIndex(combo.findData(""))
+            combo.blockSignals(False)
+
     def _update_provider_fields(self) -> None:
         """Mostra i campi del provider selezionato (chiave per Ollama, URL per SearXNG)."""
         used = {self.web_provider_combo.currentData()}
@@ -294,6 +315,10 @@ class SettingsDialog(QDialog):
         form.setRowVisible(self._key_row, "ollama" in used)
         form.setRowVisible(self.searxng_edit, "searxng" in used)
 
+
+    def _fallback_value(self) -> str:
+        fallback = self.web_fallback_combo.currentData() or ""
+        return "" if fallback == self.web_provider_combo.currentData() else fallback
 
     def _clear_api_key(self) -> None:
         """Segna la chiave per la rimozione (effettiva con «Salva»)."""
@@ -609,7 +634,7 @@ class SettingsDialog(QDialog):
             "history_limit": self.hist_spin.value(),
             "web_results": self.web_spin.value(),
             "web_provider": self.web_provider_combo.currentData() or "duckduckgo",
-            "web_fallback": self.web_fallback_combo.currentData() or "",
+            "web_fallback": self._fallback_value(),
             # con il portachiavi la chiave NON finisce mai nel file di config
             "web_api_key": self._file_api_key(),
             "web_searxng_url": self.searxng_edit.text().strip() or "http://localhost:8888",

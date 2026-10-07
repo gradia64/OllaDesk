@@ -720,9 +720,7 @@ def test_web_search_fallback_provider():
 
 def test_web_fallback_setting_and_note():
     # impostazione salvata dal dialogo, predefinita «nessuno», e nota in chat
-    from unittest.mock import patch
-
-    from olladesk import config, web_search
+    from olladesk import config
     from olladesk.widgets.settings_dialog import SettingsDialog
 
     with _isolated_config():
@@ -739,6 +737,37 @@ def test_web_fallback_setting_and_note():
 
         # passaggio del provider di riserva al worker e nota in chat:
         # tests/engine_test.py (sezione 6b), dove ora vive la ricerca web
+
+
+def test_web_fallback_never_equals_provider():
+    # collaudo 0.3.0: SearXNG con riserva SearXNG era accettato, ma la
+    # ricerca ignora una riserva uguale al principale e si restava senza
+    # riserva senza saperlo
+    from olladesk import config
+    from olladesk.widgets.settings_dialog import SettingsDialog
+
+    with _isolated_config():
+        s = config.load_settings()
+        s.update(web_provider="searxng", web_fallback="searxng")   # salvato così dalla 0.3.0
+        dlg = SettingsDialog(s, lambda: [], "dark", "?")
+        try:
+            combo = dlg.web_fallback_combo
+
+            def enabled(value):
+                return combo.model().item(combo.findData(value)).isEnabled()
+
+            assert combo.currentData() == "" and dlg.collect_settings()["web_fallback"] == ""
+            assert not enabled("searxng") and enabled("duckduckgo") and enabled("ollama")
+
+            combo.setCurrentIndex(combo.findData("duckduckgo"))
+            assert dlg.collect_settings()["web_fallback"] == "duckduckgo"
+            # il principale diventa quello scelto come riserva: la riserva si azzera
+            prov = dlg.web_provider_combo
+            prov.setCurrentIndex(prov.findData("duckduckgo"))
+            assert combo.currentData() == "" and not enabled("duckduckgo") and enabled("searxng")
+            assert dlg.collect_settings()["web_fallback"] == ""
+        finally:
+            dlg.deleteLater()
 
 
 def test_think_hint_only_when_think_false_was_sent():
