@@ -812,6 +812,62 @@ def test_sources_block_in_desktop_bubble():
             win.close()
 
 
+def _tags_ollama_040():
+    """/api/tags di Ollama 0.40.0 dopo la «local compat GGUF migration»
+    (ollama/ollama#18830): nome doppio più la voce interna llamacpp:<sha>."""
+    sha = "a3d2b95350da03ff9b1943a753bb6617c49a3ee462b632a758518ec817743986"
+    det = {"parameter_size": "8.0B", "quantization_level": "Q4_K_M"}
+    return {"models": [
+        {"name": "gemma4:e4b", "digest": "537f7e16a1bb", "size": 9_600_000_000, "details": det},
+        {"name": "gemma4:e4b", "digest": sha, "size": 9_600_000_000, "details": det},
+        {"name": f"llamacpp:{sha}", "digest": sha, "size": 9_600_000_000, "details": det},
+        {"name": "coder:4b", "size": 3_300_000_000, "details": {}},
+        {"name": "llamacpp:mio-modello"},   # un nome scelto dall'utente resta
+        {"model": "solo-campo-model:latest"},
+        {"name": ""}, "non-un-dict",
+    ]}
+
+
+def test_visible_models_hides_ollama_040_duplicates():
+    from olladesk.ollama_client import visible_models
+
+    names = [m.get("name") or m.get("model") for m in visible_models(_tags_ollama_040()["models"])]
+    assert names == ["gemma4:e4b", "coder:4b", "llamacpp:mio-modello",
+                     "solo-campo-model:latest"], names
+    assert visible_models(None) == [] and visible_models({"models": []}) == []
+
+
+def test_model_lists_without_duplicates():
+    # menu dei modelli e telefono (motore) e gestore modelli: una voce per nome
+    from PySide6.QtWidgets import QApplication
+
+    from olladesk import config
+    from olladesk.engine import ChatEngine
+    from olladesk.widgets.model_manager import ModelManagerDialog
+
+    with _isolated_config():
+        QApplication.instance() or QApplication([])
+        engine = ChatEngine(config.load_settings())
+        shown: list = []
+        engine.models_changed.connect(shown.append)
+        engine._on_models(_tags_ollama_040())
+        want = ["coder:4b", "gemma4:e4b", "llamacpp:mio-modello", "solo-campo-model:latest"]
+        assert [m["name"] for m in engine.models()] == want, engine.models()
+        assert shown and shown[-1] == engine.model_names()
+        assert not any(n.startswith("llamacpp:a3d2") for n in engine.model_names())
+
+        dlg = ModelManagerDialog("http://127.0.0.1:9")
+        try:
+            dlg._on_models(_tags_ollama_040())
+            rows = [dlg.tree.topLevelItem(i).data(0, 0x0100)   # Qt.UserRole
+                    for i in range(dlg.tree.topLevelItemCount())]
+            assert rows == ["gemma4:e4b", "coder:4b", "llamacpp:mio-modello",
+                            "solo-campo-model:latest"], rows
+        finally:
+            dlg.reject()   # ferma e attende il worker di /api/tags avviato all'apertura
+            dlg.deleteLater()
+
+
 def test_web_fallback_never_equals_provider():
     # collaudo 0.3.0: SearXNG con riserva SearXNG era accettato, ma la
     # ricerca ignora una riserva uguale al principale e si restava senza

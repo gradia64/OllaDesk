@@ -14,7 +14,7 @@ from pathlib import Path
 from PySide6.QtCore import QObject, Signal
 
 from . import config, context, secrets_store, web_search
-from .ollama_client import ApiWorker, ChatWorker, format_stats
+from .ollama_client import ApiWorker, ChatWorker, format_stats, visible_models
 from .workers import WorkerRegistry
 
 
@@ -176,7 +176,7 @@ class ChatEngine(QObject):
                 "details": m.get("details", {}),
                 "size": m.get("size", 0),
             }
-            for m in data.get("models", [])
+            for m in visible_models(data.get("models"))
         ]
         self._models.sort(key=lambda m: m["name"].lower())
         self.models_changed.emit(self.model_names())

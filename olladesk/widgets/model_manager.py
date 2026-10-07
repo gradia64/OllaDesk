@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from ..ollama_client import ApiWorker, PostWorker, PullWorker, shutdown_workers
+from ..ollama_client import ApiWorker, PostWorker, PullWorker, shutdown_workers, visible_models
 
 SUGGESTED_MODELS = [
     "llama3.2:3b", "llama3.1:8b", "qwen3:8b", "qwen2.5-coder:7b",
@@ -135,7 +135,7 @@ class ModelManagerDialog(QDialog):
     def _on_models(self, data: object) -> None:
         self.refresh_btn.setEnabled(True)
         self.tree.clear()
-        models = data.get("models", []) if isinstance(data, dict) else []
+        models = visible_models(data.get("models") if isinstance(data, dict) else [])
         bold = QFont()
         bold.setBold(True)
         for m in models:

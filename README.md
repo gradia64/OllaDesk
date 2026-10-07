@@ -96,6 +96,11 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   modelli installati con dimensione/parametri/quantizzazione, **scaricamento**
   di nuovi modelli con barra di avanzamento e annullamento, ed **eliminazione**.
   Il modello selezionato per la conversazione è contrassegnato con «●».
+  Con Ollama 0.40.0, dopo la conversione dei modelli al nuovo motore, l'elenco
+  di Ollama riporta lo stesso nome due volte più una voce interna
+  `llamacpp:<sha>` ([ollama/ollama#18830](https://github.com/ollama/ollama/issues/18830)):
+  OllaDesk mostra ogni modello una volta sola e nasconde la voce interna
+  (su disco non cambia nulla; `ollama list` continua a mostrarle).
 - **Ricerca web** (🌐 nell'input, grigia da spenta e blu da attiva): prima di
   rispondere, l'app cerca sul web e allega i risultati al contesto. Sotto la
   risposta il blocco richiudibile **«🌐 Fonti»** elenca i risultati usati, con

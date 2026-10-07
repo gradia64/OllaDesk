@@ -6,6 +6,7 @@ QThread separati e comunicano con la UI tramite segnali.
 from __future__ import annotations
 
 import json
+import re
 import socket
 import time
 import urllib.error
@@ -376,6 +377,31 @@ class PullWorker(QThread):
                 resp.close()
             except Exception:
                 pass
+
+
+# voce interna creata da Ollama 0.40.0 con la «local compat GGUF migration»
+_INTERNAL_TAG_RE = re.compile(r"llamacpp:[0-9a-f]{64}")
+
+
+def visible_models(models: object) -> list[dict]:
+    """Modelli di /api/tags da mostrare: senza voci interne né doppioni.
+
+    Dopo la migrazione dei modelli al nuovo motore, Ollama 0.40.0 elenca lo
+    stesso nome due volte più una voce `llamacpp:<sha256>`
+    (ollama/ollama#18830): si nasconde la voce interna e ogni nome compare
+    una volta sola, la prima. Su disco non cambia nulla.
+    """
+    out: list[dict] = []
+    seen: set[str] = set()
+    for m in models if isinstance(models, list) else []:
+        if not isinstance(m, dict):
+            continue
+        name = m.get("name") or m.get("model") or ""
+        if not name or _INTERNAL_TAG_RE.fullmatch(name) or name in seen:
+            continue
+        seen.add(name)
+        out.append(m)
+    return out
 
 
 def format_stats(done: dict) -> str | None:
