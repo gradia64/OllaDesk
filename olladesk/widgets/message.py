@@ -34,6 +34,7 @@ class MessageWidget(QFrame):
         web: bool = False,
         parent=None,
         thinking: str = "",
+        sources: list[dict] | None = None,
     ):
         super().__init__(parent)
         self.role = role
@@ -113,6 +114,31 @@ class MessageWidget(QFrame):
         # disponibile, senza dover prima selezionare il testo
         self.label.installEventFilter(self)
         inner.addWidget(self.label)
+
+        # -- fonti della ricerca web, richiudibili (sotto al contenuto) ----
+        self._sources: list[dict] = []
+        self._sources_expanded = False
+        self.sources_btn = QToolButton(self)
+        self.sources_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.sources_btn.setStyleSheet(
+            "QToolButton { border: none; background: transparent; "
+            f"color: {self._think_color}; padding: 0; }}"
+        )
+        self.sources_btn.clicked.connect(self._on_sources_toggle)
+        self.sources_btn.hide()
+        self.sources_label = QLabel(self)
+        self.sources_label.setTextFormat(Qt.TextFormat.RichText)
+        self.sources_label.setWordWrap(True)
+        self.sources_label.setOpenExternalLinks(True)
+        self.sources_label.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+            | Qt.TextInteractionFlag.LinksAccessibleByMouse
+        )
+        self.sources_label.hide()
+        inner.addWidget(self.sources_btn, 0, Qt.AlignmentFlag.AlignLeft)
+        inner.addWidget(self.sources_label)
+        if sources:
+            self.set_sources(sources)
 
         meta_row = QHBoxLayout()
         meta_row.setContentsMargins(0, 0, 0, 0)
@@ -216,6 +242,36 @@ class MessageWidget(QFrame):
         self._stats = stats
         self._update_meta(show_ts, stats)
 
+    def set_sources(self, sources: list[dict]) -> None:
+        """Fonti della ricerca web (web_search.web_sources), richiuse."""
+        self._sources = list(sources or [])
+        self._sources_expanded = False
+        if not self._sources:
+            self.sources_btn.hide()
+            self.sources_label.hide()
+            return
+        # titoli e indirizzi arrivano dai motori di ricerca: sempre escapati,
+        # e web_sources lascia passare solo http/https
+        rows = [
+            f'[{s["n"]}] <a href="{html.escape(s["url"], quote=True)}">'
+            f'{html.escape(s["title"])}</a> '
+            f'<span style="color: {self._think_color}">— {html.escape(s["host"])}</span>'
+            for s in self._sources
+        ]
+        self.sources_label.setText("<br>".join(rows))
+        self.sources_label.setToolTip("Si aprono nel browser")
+        self.sources_btn.show()
+        self._sync_sources_widgets()
+
+    def _sync_sources_widgets(self) -> None:
+        arrow = "▾" if self._sources_expanded else "▸"
+        self.sources_btn.setText(f"{arrow} 🌐 Fonti ({len(self._sources)})")
+        self.sources_label.setVisible(self._sources_expanded)
+
+    def _on_sources_toggle(self) -> None:
+        self._sources_expanded = not self._sources_expanded
+        self._sync_sources_widgets()
+
     def set_stats(self, stats: str | None) -> None:
         """Statistiche della risposta, mostrate nella meta insieme all'orario."""
         self._stats = stats
@@ -231,6 +287,15 @@ class MessageWidget(QFrame):
         self.think_label.setStyleSheet(
             f"color: {self._think_color}; font-style: italic;"
         )
+        self.sources_btn.setStyleSheet(
+            "QToolButton { border: none; background: transparent; "
+            f"color: {self._think_color}; padding: 0; }}"
+        )
+        if self._sources:
+            expanded = self._sources_expanded
+            self.set_sources(self._sources)   # riscrive il colore del dominio
+            self._sources_expanded = expanded
+            self._sync_sources_widgets()
         self._update_meta(show_ts, self._stats)
         if self.raw:
             bg, fg, inline = theme.code_colors(theme_name)

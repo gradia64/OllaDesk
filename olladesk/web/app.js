@@ -204,9 +204,32 @@ function renderMessage(m) {
   body.innerHTML = m.html;
   box.append(body);
   setThinking({ box, body }, m.thinking_html);
+  addSources(box, m.sources);
   const meta = [fmtTime(m.ts), m.stats].filter(Boolean).join(" · ");
   if (meta) box.append(el("div", "meta", meta));
   return box;
+}
+
+// fonti della ricerca web sotto la risposta: titoli e link arrivano dai
+// motori di ricerca, quindi solo testo (mai innerHTML) e solo http/https
+function addSources(box, sources) {
+  const ok = (sources || []).filter((s) => /^https?:\/\//i.test(s.url));
+  if (!ok.length) return;
+  const d = el("details", "sources");
+  d.append(el("summary", "", "🌐 Fonti (" + ok.length + ")"));
+  const list = el("ol");
+  for (const s of ok) {
+    const li = el("li");
+    li.value = s.n;
+    const a = el("a", "", s.title);
+    a.href = s.url;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    li.append(a, el("span", "host", " — " + s.host));
+    list.append(li);
+  }
+  d.append(list);
+  box.append(d);
 }
 
 function addNote(text, isError) {
@@ -233,6 +256,7 @@ function finishPending(d) {
   if (!p.hasText && d.outcome !== "done") {
     p.box.remove();     // interrotta o fallita prima di ogni testo
   } else {
+    addSources(p.box, d.sources);
     const meta = [fmtTime(d.ts || Date.now() / 1000), d.stats].filter(Boolean).join(" · ");
     p.box.append(el("div", "meta", meta));
   }

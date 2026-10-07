@@ -372,10 +372,11 @@ class ChatArea(QWidget):
         web: bool = False,
         stats: str | None = None,
         thinking: str = "",
+        sources: list[dict] | None = None,
     ) -> MessageWidget:
         w = MessageWidget(
             role, text, ts, self.show_ts, self.theme_name, attachments, web, self,
-            thinking=thinking,
+            thinking=thinking, sources=sources,
         )
         if stats:
             w.set_stats(stats)
@@ -428,7 +429,8 @@ class ChatArea(QWidget):
             self._stream_widget.set_thinking_stream(self._think_buffer)
             QTimer.singleShot(0, self._scroll_to_bottom)
 
-    def end_stream(self, stats: str | None = None, discard_empty: bool = False) -> None:
+    def end_stream(self, stats: str | None = None, discard_empty: bool = False,
+                   sources: list[dict] | None = None) -> None:
         self._flush_stream()
         self._flush_thinking()
         w, self._stream_widget = self._stream_widget, None
@@ -440,6 +442,8 @@ class ChatArea(QWidget):
             row.deleteLater()
             return
         w.finish(stats, self.show_ts)
+        if sources:
+            w.set_sources(sources)
 
     def clear_messages(self) -> None:
         self._stream_widget = None

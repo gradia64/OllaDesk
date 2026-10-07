@@ -310,11 +310,49 @@ def format_results(query: str, results: list[tuple[str, str, str]]) -> str:
     ]
     for i, (title, url, snip) in enumerate(results, 1):
         lines.append(f"[{i}] {title}")
-        lines.append(f"URL: {url}")
+        # niente spazi né a capo nell'URL: un risultato non deve poter
+        # aggiungere righe al blocco (web_sources lo rilegge riga per riga)
+        lines.append("URL: " + "".join(str(url).split()))
         if snip:
             lines.append(snip)
         lines.append("")
     return "\n".join(lines).strip()
+
+
+_SOURCE_RE = re.compile(r"^\[(\d+)\] (.*)\nURL: (\S+)$", re.M)
+
+
+def web_sources(web_block: str) -> list[dict]:
+    """Fonti di un blocco di risultati (`format_results`), nello stesso ordine.
+
+    [{"n", "title", "url", "host"}], con la numerazione vista dal modello.
+    Solo link http/https: titoli e indirizzi arrivano dai motori di ricerca.
+    """
+    out: list[dict] = []
+    for m in _SOURCE_RE.finditer(web_block or ""):
+        url = m.group(3)
+        try:
+            parts = urllib.parse.urlsplit(url)
+            host = parts.hostname or ""
+        except ValueError:
+            continue
+        if parts.scheme not in ("http", "https") or not host:
+            continue
+        host = host.removeprefix("www.")
+        out.append({"n": int(m.group(1)), "title": m.group(2).strip() or host,
+                    "url": url, "host": host})
+    return out
+
+
+def answer_sources(messages: list[dict], idx: int) -> list[dict]:
+    """Fonti della risposta in posizione `idx`: i risultati web del messaggio
+    dell'utente che la precede (vuoto se non c'è stata ricerca)."""
+    if idx <= 0 or idx > len(messages):
+        return []
+    prev = messages[idx - 1]
+    if prev.get("role") != "user" or not prev.get("web_block"):
+        return []
+    return web_sources(prev["web_block"])
 
 
 PROVIDER_NAMES = {"duckduckgo": "DuckDuckGo", "ollama": "Ollama Cloud", "searxng": "SearXNG"}

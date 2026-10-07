@@ -59,7 +59,12 @@ class FakeSearch(QThread):
         pass
 
     def run(self):
-        self.ready.emit("RISULTATI WEB DAL TELEFONO", self._query)
+        # blocco nel formato vero: le fonti sotto la risposta si rileggono da qui
+        block = "RISULTATI WEB DAL TELEFONO\n" + web_search.format_results(self._query, [
+            ("Fonte <b>uno</b>", "https://www.uno.test/pagina", "testo"),
+            ("Non valida", "javascript:alert(1)", ""),
+        ])
+        self.ready.emit(block, self._query)
 
 
 web_search.WebSearchWorker = FakeSearch
@@ -176,8 +181,17 @@ assert k.index("user") < k.index("search") < k.index("search_done") < k.index("s
 assert s.of("user")[0]["web"] is True
 assert FakeSearch.queries == ["notizie dal telefono"]
 saved = config.load_chat(cid)["messages"]
-assert saved[-2]["web"] is True and saved[-2]["web_block"] == "RISULTATI WEB DAL TELEFONO"
+assert saved[-2]["web"] is True and saved[-2]["web_block"].startswith("RISULTATI WEB DAL TELEFONO")
 assert "RISULTATI WEB DAL TELEFONO" in fake.payloads[-1]["messages"][-1]["content"]
+# fonti sotto la risposta: nell'evento done e nella chat riaperta; solo
+# http/https, titolo come testo (lo rende il browser con textContent)
+want = [{"n": 1, "title": "Fonte <b>uno</b>", "url": "https://www.uno.test/pagina",
+         "host": "uno.test"}]
+assert s.of("done")[0]["sources"] == want, s.of("done")
+st, chat = cc.get_json(f"/api/chats/{cid}", TOKEN)
+assert chat["messages"][-1]["sources"] == want
+assert all("sources" not in m for m in chat["messages"][:-1]), "fonti solo dopo una ricerca"
+assert all("web_block" not in m for m in chat["messages"]), "il blocco completo non esce"
 s.close()
 print("3b. ricerca web dal telefono OK")
 

@@ -34,7 +34,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QObject, Qt, Signal
 
-from . import __version__, config, context, netinfo
+from . import __version__, config, context, netinfo, web_search
 from .md import md_to_html
 
 CODE_TTL = 120            # secondi di validità del codice di abbinamento
@@ -420,11 +420,12 @@ def web_stop(engine, chat_id: str) -> bool:
     return False
 
 
-def render_message(m: dict) -> dict | None:
+def render_message(m: dict, sources: list[dict] | None = None) -> dict | None:
     """Messaggio per il browser, con il Markdown già reso.
 
     Escono solo i campi mostrati: niente percorsi degli allegati, niente
-    risultati web completi né immagini.
+    risultati web completi né immagini. Di una ricerca web escono solo le
+    fonti (titolo, link http/https, dominio) sotto la risposta.
     """
     role = m.get("role")
     if role not in ("user", "assistant"):
@@ -443,12 +444,16 @@ def render_message(m: dict) -> dict | None:
             out["thinking_html"] = md_to_html(m["thinking"], *_MD_COLORS)
         if m.get("stats"):
             out["stats"] = m["stats"]
+        if sources:
+            out["sources"] = sources
     return out
 
 
 def render_chat(chat: dict) -> dict:
     """Thread HTTP: conversazione per il browser."""
-    msgs = [r for r in map(render_message, chat.get("messages", [])) if r is not None]
+    raw = chat.get("messages", [])
+    msgs = [r for r in (render_message(m, web_search.answer_sources(raw, i))
+                        for i, m in enumerate(raw)) if r is not None]
     out = {
         "id": chat.get("id"), "title": chat.get("title", ""),
         "model": chat.get("model", ""), "updated": chat.get("updated", 0),
@@ -488,12 +493,19 @@ class EventHub(QObject):
         e.generation_started.connect(lambda cid: self._push(cid, "start", {}))
         e.text_chunk.connect(lambda cid, t: self._push(cid, "text", t))
         e.think_chunk.connect(lambda cid, t: self._push(cid, "think", t))
-        e.generation_finished.connect(
-            lambda cid, outcome, stats, err: self._push(
-                cid, "done", {"outcome": outcome, "stats": stats, "error": err,
-                              "ts": config.now()}))
+        e.generation_finished.connect(self._on_finished)
         e.notice.connect(lambda cid, text: self._push(cid, "notice", {"text": text}))
         e.chats_changed.connect(lambda: self._push("", "chats", {}))
+
+    def _on_finished(self, chat_id: str, outcome: str, stats: str, err: str) -> None:
+        # arriva prima del salvataggio della risposta: l'ultimo messaggio è
+        # ancora quello dell'utente, con i risultati della ricerca web
+        chat = self._engine.chat(chat_id)
+        msgs = chat["messages"] if chat else []
+        self._push(chat_id, "done", {
+            "outcome": outcome, "stats": stats, "error": err, "ts": config.now(),
+            "sources": web_search.answer_sources(msgs, len(msgs)),
+        })
 
     def _on_busy(self, busy: bool) -> None:
         # con busy=True il motore ha già fissato la conversazione attiva

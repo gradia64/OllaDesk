@@ -97,8 +97,11 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   di nuovi modelli con barra di avanzamento e annullamento, ed **eliminazione**.
   Il modello selezionato per la conversazione è contrassegnato con «●».
 - **Ricerca web** (🌐 nell'input, grigia da spenta e blu da attiva): prima di
-  rispondere, l'app cerca sul web e allega i risultati al contesto; la risposta
-  cita le fonti. **Provider a scelta** nelle impostazioni:
+  rispondere, l'app cerca sul web e allega i risultati al contesto. Sotto la
+  risposta il blocco richiudibile **«🌐 Fonti»** elenca i risultati usati, con
+  la stessa numerazione [1], [2]… che vede il modello (anche sul telefono e
+  nelle conversazioni salvate in precedenza). **Provider a scelta** nelle
+  impostazioni:
   - *DuckDuckGo* — senza chiave API (può essere temporaneamente bloccato dalla
     sua protezione anti-bot: in quel caso l'app lo segnala chiaramente);
   - *Ollama Cloud* — endpoint ufficiale `ollama.com/api/web_search`, richiede
@@ -117,9 +120,25 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
     Se l'istanza risponde senza risultati perché i suoi motori non hanno
     risposto (tipico a connessioni fredde), l'app riprova una volta e poi
     elenca i motori in errore: di solito aiuta alzare
-    `outgoing.request_timeout` o cambiare motori nel `settings.yml`.
+    `outgoing.request_timeout` o cambiare motori nel `settings.yml`. Se
+    duckduckgo o brave vengono bloccati (CAPTCHA, «too many requests»),
+    disattivali e attiva bing o startpage:
 
-  Un **provider di riserva** facoltativo (predefinito: nessuno) viene
+    ```yaml
+    outgoing:
+      request_timeout: 6.0
+    engines:
+      - name: bing
+        disabled: false
+      - name: startpage
+        inactive: false
+        disabled: false
+      - name: duckduckgo
+        disabled: true
+    ```
+
+  Un **provider di riserva** facoltativo (predefinito: nessuno; mai lo
+  stesso del principale) viene
   provato quando il principale fallisce o non trova nulla, e una nota in
   chat dice quale ha risposto. Il messaggio compare in chat subito, mentre
   la ricerca è in corso.

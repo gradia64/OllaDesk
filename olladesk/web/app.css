@@ -198,6 +198,17 @@ details.think {
 
 details.think summary { cursor: pointer; }
 
+details.sources {
+  margin-top: 8px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+details.sources summary { cursor: pointer; }
+details.sources ol { margin: 6px 0 0; padding-left: 28px; }
+details.sources li { margin: 2px 0; overflow-wrap: anywhere; }
+details.sources .host { color: var(--muted); }
+
 /* Markdown reso da md.py (sottoinsieme Qt rich text): i colori fissi degli
    attributi bgcolor/color sono ridefiniti qui per il tema */
 .body table[bgcolor] {

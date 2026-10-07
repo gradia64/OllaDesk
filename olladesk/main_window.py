@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from . import __version__, app_update, companion, config, theme
+from . import __version__, app_update, companion, config, theme, web_search
 from .engine import ChatEngine
 from .ollama_client import shutdown_workers
 from .widgets.chat_area import ChatArea
@@ -339,11 +339,13 @@ class MainWindow(QMainWindow):
 
     def _render_chat(self, chat: dict) -> None:
         self.chat_area.clear_messages()
-        for m in chat["messages"]:
+        msgs = chat["messages"]
+        for i, m in enumerate(msgs):
+            sources = web_search.answer_sources(msgs, i) if m["role"] == "assistant" else None
             self.chat_area.add_message(
                 m["role"], m.get("display", m.get("content", "")), m.get("ts"),
                 m.get("attachments"), bool(m.get("web")), m.get("stats"),
-                thinking=m.get("thinking", ""),
+                thinking=m.get("thinking", ""), sources=sources,
             )
 
     # durante una generazione si può navigare: la risposta continua in
@@ -504,11 +506,16 @@ class MainWindow(QMainWindow):
     def _on_generation_finished(self, chat_id: str, outcome: str, stats: str, err: str) -> None:
         if not self._viewing(chat_id):
             return
+        # il segnale arriva prima del salvataggio della risposta: l'ultimo
+        # messaggio è ancora quello dell'utente, con i risultati web
+        chat = self.engine.chat(chat_id)
+        msgs = chat["messages"] if chat else []
+        sources = web_search.answer_sources(msgs, len(msgs))
         if outcome == "done":
-            self.chat_area.end_stream(stats or None)
+            self.chat_area.end_stream(stats or None, sources=sources)
             return
         # interrotta o fallita: la bolla resta solo se ha ricevuto testo
-        self.chat_area.end_stream(discard_empty=True)
+        self.chat_area.end_stream(discard_empty=True, sources=sources)
         if outcome != "failed":
             return
         extra = ""
