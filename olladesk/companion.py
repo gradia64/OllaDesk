@@ -59,7 +59,7 @@ STATIC = {
     "/favicon.ico": ("icon-192.png", "image/png"),
 }
 
-_CHAT_ID = r"[A-Za-z0-9_-]{1,64}"
+_CHAT_ID = config.CHAT_ID_PATTERN
 _CHAT_URL_RE = re.compile(rf"^/api/chats/({_CHAT_ID})$")
 _EVENTS_URL_RE = re.compile(rf"^/api/chats/({_CHAT_ID})/events$")
 

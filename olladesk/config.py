@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import time
 import uuid
@@ -153,6 +154,24 @@ def _chats_index_path() -> Path:
     return config_dir() / "chats" / "index.json"
 
 
+# id delle conversazioni: new_chat_id() produce 12 cifre esadecimali; la
+# companion accetta dalla rete solo id in questa forma
+CHAT_ID_PATTERN = r"[A-Za-z0-9_-]{1,64}"
+
+
+def _chat_path(chat_id: object) -> Path | None:
+    """File della conversazione, o None se l'id non è valido.
+
+    Un id come «../settings» o «index» non deve mai indicare un file diverso
+    da chats/<id>.json.
+    """
+    if not isinstance(chat_id, str) or chat_id == "index":
+        return None
+    if not re.fullmatch(CHAT_ID_PATTERN, chat_id):
+        return None
+    return chats_dir() / f"{chat_id}.json"
+
+
 def _migrate_legacy_chats() -> None:
     """Converte il vecchio chats.json monolitico nei file per conversazione."""
     legacy = config_dir() / "chats.json"
@@ -219,7 +238,10 @@ def load_chats() -> list[dict]:
 
 
 def load_chat(chat_id: str) -> dict | None:
-    data = _read_json(chats_dir() / f"{chat_id}.json", None)
+    path = _chat_path(chat_id)
+    if path is None:
+        return None
+    data = _read_json(path, None)
     if isinstance(data, dict) and data.get("id") == chat_id and isinstance(data.get("messages"), list):
         return data
     return None
@@ -228,9 +250,10 @@ def load_chat(chat_id: str) -> dict | None:
 def save_chat(chat: dict) -> bool:
     """Salva la conversazione (messaggi) e aggiorna l'indice. False se fallisce."""
     chat_id = chat.get("id")
-    if not chat_id:
+    path = _chat_path(chat_id)
+    if path is None:
         return False
-    if not _write_json(chats_dir() / f"{chat_id}.json", chat):
+    if not _write_json(path, chat):
         return False
     index = [e for e in _load_index() if e.get("id") != chat_id]
     index.append(_index_entry(chat))
@@ -250,42 +273,79 @@ def rename_chat(chat_id: str, title: str) -> bool:
     return save_chat(chat)
 
 
+def _attachment_path(p: object) -> Path | None:
+    """Percorso assoluto di un allegato, senza seguire l'ultimo componente.
+
+    Solo la cartella viene risolta: così un link simbolico resta un link e
+    non indica il file a cui punta.
+    """
+    if not isinstance(p, str) or not p:
+        return None
+    raw = Path(p)
+    if raw.name in ("", ".", ".."):
+        return None
+    try:
+        return raw.parent.resolve() / raw.name
+    except (OSError, RuntimeError):
+        return None
+
+
 def _attachment_paths(chat: dict | None) -> set[Path]:
-    """Percorsi risolti degli allegati citati dai messaggi di una conversazione."""
+    """Percorsi degli allegati citati dai messaggi di una conversazione."""
     out: set[Path] = set()
-    for m in (chat or {}).get("messages", []):
-        if not isinstance(m, dict):
-            continue
-        for a in m.get("attachments_meta") or []:
-            p = a.get("path") if isinstance(a, dict) else None
-            if isinstance(p, str) and p:
-                try:
-                    out.add(Path(p).resolve())
-                except (OSError, RuntimeError):
-                    pass
+    messages = (chat or {}).get("messages")
+    for m in messages if isinstance(messages, list) else []:
+        meta = m.get("attachments_meta") if isinstance(m, dict) else None
+        for a in meta if isinstance(meta, list) else []:
+            path = _attachment_path(a.get("path")) if isinstance(a, dict) else None
+            if path is not None:
+                out.add(path)
     return out
+
+
+def _all_attachment_refs() -> set[Path] | None:
+    """Allegati citati da tutti i file in chats/, o None se uno non si legge.
+
+    Si leggono i file e non l'indice: una conversazione assente dall'indice,
+    o con un id interno diverso dal nome del file, usa comunque i suoi
+    allegati.
+    """
+    refs: set[Path] = set()
+    for f in chats_dir().glob("*.json"):
+        if f.name == "index.json":
+            continue
+        data = _read_json(f, None)
+        if not isinstance(data, dict) or not isinstance(data.get("messages"), list):
+            return None
+        refs |= _attachment_paths(data)
+    return refs
 
 
 def delete_chat(chat_id: str) -> None:
     """Elimina la conversazione e gli allegati che nessun'altra usa.
 
-    Si toccano solo i file dentro la cartella privata degli allegati: un
-    percorso scritto nel JSON non può far cancellare altro.
+    Si toccano solo file regolari dentro la cartella privata degli allegati:
+    un percorso scritto nel JSON non può far cancellare altro. Se un'altra
+    conversazione non si legge gli allegati restano tutti: meglio un file
+    orfano che uno ancora citato.
     """
     orphans = _attachment_paths(load_chat(chat_id))
-    try:
-        (chats_dir() / f"{chat_id}.json").unlink()
-    except OSError:
-        pass
+    path = _chat_path(chat_id)
+    if path is not None:   # con un id non valido si toglie solo la voce dell'indice
+        try:
+            path.unlink()
+        except OSError:
+            pass
     index = [e for e in _load_index() if e.get("id") != chat_id]
     _write_json(_chats_index_path(), index)
     if not orphans:
         return
-    for e in index:
-        orphans -= _attachment_paths(load_chat(e.get("id", "")))
+    refs = _all_attachment_refs()
+    if refs is None:
+        return
     root = attachments_dir().resolve()
-    for p in orphans:
-        if root in p.parents and p.is_file():
+    for p in orphans - refs:
+        if root in p.parents and not p.is_symlink() and p.is_file():
             try:
                 p.unlink()
             except OSError:

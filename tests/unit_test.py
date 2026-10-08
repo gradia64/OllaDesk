@@ -229,6 +229,73 @@ def test_delete_chat_removes_only_unshared_attachments():
         assert not shared.exists()
 
 
+def _attachment_chat(cid, paths):
+    meta = [{"path": str(p), "name": p.name, "kind": "image"} for p in paths]
+    return {"id": cid, "title": cid, "model": "m", "updated": 1,
+            "messages": [{"role": "user", "content": "k", "attachments_meta": meta}]}
+
+
+def test_delete_chat_keeps_attachments_if_another_chat_is_unreadable():
+    # revisione 0.3.1: un allegato condiviso spariva se l'altra chat non si
+    # leggeva (JSON corrotto, id interno diverso dal nome, assente dall'indice)
+    from olladesk import config
+    with _isolated_config():
+        att = config.attachments_dir()
+        for case in ("corrotta", "id_diverso", "fuori_indice"):
+            shared = att / f"{case}.png"
+            shared.write_bytes(b"x")
+            config.save_chat(_attachment_chat("a", [shared]))
+            config.save_chat(_attachment_chat("b", [shared]))
+            b = config.chats_dir() / "b.json"
+            if case == "corrotta":
+                b.write_text("{non json", encoding="utf-8")
+            elif case == "id_diverso":
+                data = json.loads(b.read_text(encoding="utf-8"))
+                data["id"] = "altro"
+                b.write_text(json.dumps(data), encoding="utf-8")
+            else:
+                config._write_json(config._chats_index_path(),
+                                   [e for e in config.load_chats() if e["id"] != "b"])
+            config.delete_chat("a")
+            assert shared.exists(), case
+            assert config.load_chat("a") is None, case
+            b.unlink()
+
+
+def test_delete_chat_never_follows_symlinks():
+    from olladesk import config
+    with _isolated_config():
+        att = config.attachments_dir()
+        target = att / "importante.png"
+        target.write_bytes(b"x")
+        alias = att / "alias.png"
+        alias.symlink_to(target)
+        config.save_chat(_attachment_chat("a", [alias]))
+        config.delete_chat("a")
+        assert target.exists()
+
+
+def test_chat_id_never_leaves_chats_dir():
+    # revisione 0.3.1: «../settings» cancellava settings.json
+    from olladesk import config
+    with _isolated_config():
+        config.save_settings(dict(config.DEFAULT_SETTINGS))
+        settings = config.config_dir() / "settings.json"
+        assert settings.exists()
+        config.save_chat(_attachment_chat("a", []))
+        for bad in ("../settings", "index", "", "a/b", "a.b", None, 5, "x" * 65):
+            config.delete_chat(bad)
+            assert config.load_chat(bad) is None
+            assert config.save_chat({"id": bad, "messages": []}) is False
+        assert settings.exists()
+        assert [e["id"] for e in config.load_chats()] == ["a"]
+        # una voce dell'indice con un id non valido si può comunque togliere
+        config._write_json(config._chats_index_path(),
+                           config.load_chats() + [{"id": "../x", "title": "t"}])
+        config.delete_chat("../x")
+        assert [e["id"] for e in config.load_chats()] == ["a"]
+
+
 def _isolated_config():
     """Context manager: XDG_CONFIG_HOME in una cartella temporanea nuova."""
     import contextlib
