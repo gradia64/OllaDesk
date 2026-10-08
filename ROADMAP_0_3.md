@@ -64,7 +64,7 @@ Il bump di versione resta al momento del rilascio (fonte unica: `olladesk/__init
 | Funzionalità | Note |
 |---|---|
 | Copia di un messaggio dal telefono (⧉) | su HTTP l'API Clipboard non è disponibile: serve il ripiego con selezione del testo. ☑ Fatto: pulsante ⧉ sotto ogni messaggio; copia il sorgente Markdown (campo `text` di messaggi ed eventi `answer`) con Clipboard API, poi `execCommand`, poi un riquadro con il testo già selezionato (`app.js`, `app.css`, `companion.py`) |
-| Gestione dei modelli dal telefono (scarica ed elimina) | fattibile con i worker esistenti; scaricare GB dal telefono ha poco senso, priorità bassa |
+| Gestione dei modelli dal telefono (scarica ed elimina) | fattibile con i worker esistenti; scaricare GB dal telefono ha poco senso, priorità bassa. ☑ Fatto: vista «Modelli» (🧩) con scarica, avanzamento, annulla ed elimina; `engine.pull_model`/`delete_model`/`cancel_model_task` (una sola operazione alla volta; niente eliminazione mentre il PC risponde), `POST /api/models/{pull,delete,cancel}`, stato in `GET /api/models`; test `companion_models_test` |
 | Pulizia degli allegati all'eliminazione di una chat | i file in `attachments/` (foto dal telefono in `companion/`, immagini incollate sul PC) restano anche dopo l'eliminazione della chat; da rimuovere quando nessun'altra chat li usa. ☑ Fatto: `config.delete_chat` cancella gli allegati citati solo dalla chat eliminata, e solo dentro `attachments/`; test `test_delete_chat_removes_only_unshared_attachments` |
 
 ## Correzioni per la 0.3.1 (revisione post-rilascio)

@@ -353,15 +353,24 @@ def chat_snapshot(engine, hub, chat_id: str) -> dict | None:
     return snap
 
 
+def _task_info(t: dict | None) -> dict | None:
+    """Stato di scarica/elimina per il telefono (solo i campi mostrati)."""
+    if not t:
+        return None
+    return {k: t.get(k) for k in ("op", "name", "state", "pct", "status", "error", "ended")}
+
+
 def models_info(engine) -> dict:
     """Thread principale: modelli installati e stato del server."""
     return {
         "models": [
             {"name": m["name"],
+             "size": m.get("size") or 0,
              "details": {k: m.get("details", {}).get(k, "")
                          for k in ("parameter_size", "quantization_level")}}
             for m in engine.models()
         ],
+        "task": _task_info(engine.model_task()),
         "online": bool(engine.online()),
         "version": engine.version(),
         "busy": engine.busy(),
@@ -394,6 +403,21 @@ def web_send(engine, hub, chat_id: str | None, text: str, model: str, think: boo
 
 
 MAX_TITLE = 200
+# nome di un modello Ollama: «llama3.2:3b», «hf.co/utente/repo:Q4_K_M»…
+_MODEL_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,199}")
+
+
+def web_model_op(engine, op: str, name: str = "") -> tuple[int, str | None]:
+    """Thread principale: scarica, elimina o annulla dal telefono.
+
+    Restituisce (stato HTTP, messaggio d'errore o None).
+    """
+    if op == "cancel":
+        return (200, None) if engine.cancel_model_task() else (409, "nessuno scaricamento in corso")
+    err = engine.pull_model(name) if op == "pull" else engine.delete_model(name)
+    if err is None:
+        return 200, None
+    return (404 if err == "modello non installato" else 409), err
 
 
 def web_rename(engine, chat_id: str, title: str) -> bool:
@@ -841,6 +865,23 @@ class _Handler(BaseHTTPRequestHandler):
                 self._error(404, "conversazione inesistente")
                 return
             self._json(200, {"ok": True})
+            return
+        if path in ("/api/models/pull", "/api/models/delete", "/api/models/cancel"):
+            if not self._authed():
+                return
+            op = path.rsplit("/", 1)[1]
+            name = data.get("name", "")
+            if op != "cancel" and not (isinstance(name, str) and _MODEL_NAME_RE.fullmatch(name)):
+                self._error(400, "nome del modello non valido")
+                return
+            ok, res = self._main(web_model_op, self.ctx.engine, op, name)
+            if not ok:
+                return
+            status, err = res
+            if err:
+                self._error(status, err)
+            else:
+                self._json(200, {"ok": True})
             return
         self._error(404, "risorsa inesistente")
 

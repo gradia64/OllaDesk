@@ -14,7 +14,7 @@ from pathlib import Path
 from PySide6.QtCore import QObject, Signal
 
 from . import config, context, secrets_store, web_search
-from .ollama_client import ApiWorker, ChatWorker, format_stats, visible_models
+from .ollama_client import ApiWorker, ChatWorker, PostWorker, PullWorker, format_stats, visible_models
 from .workers import WorkerRegistry
 
 
@@ -37,6 +37,7 @@ class ChatEngine(QObject):
     status_changed = Signal(bool, str)        # online, versione
     models_loading = Signal(bool)             # elenco modelli in caricamento
     models_changed = Signal(list)             # nomi da mostrare ([] = nessun modello)
+    model_task_changed = Signal()             # scarica/elimina avviato, avanzato o concluso
 
     def __init__(self, settings: dict, parent=None):
         super().__init__(parent)
@@ -60,6 +61,11 @@ class ChatEngine(QObject):
         self._status_worker: ApiWorker | None = None
         self._models_worker: ApiWorker | None = None
         self._models: list[dict] = []
+        # scarica/elimina avviato dal telefono (una sola operazione alla volta):
+        # {"op": "pull"|"delete", "name", "state": "running"|"done"|"failed",
+        #  "pct": int|None, "status": str, "error": str, "ended": ts (a fine operazione)}
+        self._task: dict | None = None
+        self._task_worker = None
         self._online: bool | None = None
         self._version = "?"
 
@@ -184,6 +190,83 @@ class ChatEngine(QObject):
     def _on_models_fail(self, _err: str) -> None:
         self.models_loading.emit(False)
         self.models_changed.emit([])
+
+    # ------------------------------------------------ scarica / elimina modelli
+
+    def model_task(self) -> dict | None:
+        return dict(self._task) if self._task else None
+
+    def _task_running(self) -> bool:
+        return bool(self._task and self._task["state"] == "running")
+
+    def _start_task(self, op: str, name: str, worker) -> None:
+        self._task = {"op": op, "name": name, "state": "running",
+                      "pct": None, "status": "", "error": ""}
+        self._task_worker = worker
+        worker.finished.connect(worker.deleteLater)
+        worker.finished.connect(self._workers.clear_ref(self, "_task_worker", worker))
+        self._workers.track(worker)
+        self.model_task_changed.emit()
+        worker.start()
+
+    def _task_update(self, worker, **fields) -> None:
+        # segnali tardivi di un worker annullato o sostituito: scartati
+        if worker is not self._task_worker or self._task is None:
+            return
+        self._task.update(fields)
+        if fields.get("state") in ("done", "failed"):
+            self._task["ended"] = config.now()
+        self.model_task_changed.emit()
+
+    def pull_model(self, name: str) -> str | None:
+        """Avvia lo scaricamento di `name`. None se parte, altrimenti il motivo."""
+        if self._closed:
+            return "OllaDesk si sta chiudendo"
+        if self._task_running():
+            return "un'altra operazione sui modelli è già in corso"
+        w = PullWorker(self.settings["host"], name, self)
+        w.progress.connect(lambda d, w=w: self._on_pull_progress(w, d))
+        w.done.connect(lambda w=w: self._on_task_done(w))
+        w.failed.connect(lambda err, w=w: self._task_update(w, state="failed", error=err))
+        self._start_task("pull", name, w)
+        return None
+
+    def _on_pull_progress(self, w, data: dict) -> None:
+        total, done = data.get("total"), data.get("completed")
+        pct = int(done * 100 / total) if total and done is not None else None
+        self._task_update(w, pct=pct, status=str(data.get("status", "")))
+
+    def delete_model(self, name: str) -> str | None:
+        """Elimina `name` dal disco. None se parte, altrimenti il motivo."""
+        if self._closed:
+            return "OllaDesk si sta chiudendo"
+        if self._task_running():
+            return "un'altra operazione sui modelli è già in corso"
+        if name not in self.model_names():
+            return "modello non installato"
+        if self.busy():
+            return "il PC sta rispondendo: riprova alla fine"
+        w = PostWorker(self.settings["host"], "/api/delete", {"model": name}, self, "DELETE")
+        w.ready.connect(lambda _d, w=w: self._on_task_done(w))
+        w.failed.connect(lambda err, w=w: self._task_update(w, state="failed", error=err))
+        self._start_task("delete", name, w)
+        return None
+
+    def _on_task_done(self, w) -> None:
+        self._task_update(w, state="done", pct=100)
+        self.refresh_models()
+
+    def cancel_model_task(self) -> bool:
+        """Annulla uno scaricamento in corso (l'eliminazione non si annulla)."""
+        w = self._task_worker
+        if not self._task_running() or self._task["op"] != "pull" or w is None:
+            return False
+        w.stop()
+        self._task.update(state="failed", error="scaricamento annullato", ended=config.now())
+        self._task_worker = None   # i segnali tardivi del worker fermo si scartano
+        self._workers.retire(w)
+        self.model_task_changed.emit()
+        return True
 
     # ---------------------------------------------------------- conversazioni
 

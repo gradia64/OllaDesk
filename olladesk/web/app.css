@@ -457,3 +457,56 @@ body.composing.web-on main { padding-bottom: 224px; }
 }
 
 .attach:active { background: var(--border); }
+
+/* ------------------------------------------------------------- modelli */
+
+.pull-form { display: flex; gap: 8px; margin-bottom: 8px; }
+.pull-form input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  font-size: 16px;
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.task {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.task p { margin: 0; overflow-wrap: anywhere; }
+.task.failed { border-color: var(--error); }
+.task progress { width: 100%; }
+.task button { align-self: flex-start; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); background: transparent; }
+
+.models { margin-top: 8px; }
+.model-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  margin-bottom: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.model-text { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow-wrap: anywhere; }
+.model-text .t { font-weight: 600; }
+.model-text .m { font-size: 13px; color: var(--muted); }
+.model-del {
+  min-width: 40px;
+  min-height: 40px;
+  font-size: 18px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.model-del:disabled { opacity: 0.4; cursor: default; }

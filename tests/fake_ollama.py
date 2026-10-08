@@ -18,6 +18,10 @@ class FakeOllama:
     def __init__(self):
         self.payloads: list[dict] = []
         self.release = threading.Event()   # sblocca le risposte «lente»
+        self.models = list(MODELS)         # installati: /api/pull li aggiunge, /api/delete li toglie
+        self.pull_release = threading.Event()   # sblocca un /api/pull in attesa
+        self.pull_release.set()
+        self.deleted: list[str] = []
         fake = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -42,13 +46,39 @@ class FakeOllama:
                 elif self.path == "/api/tags":
                     self._json({"models": [
                         {"name": n, "details": {"parameter_size": "1B", "quantization_level": "Q4"}}
-                        for n in MODELS
+                        for n in fake.models
                     ]})
+                else:
+                    self.send_error(404)
+
+            def do_DELETE(self):  # noqa: N802
+                body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                if body.get("model") in fake.models:
+                    fake.models.remove(body["model"])
+                    fake.deleted.append(body["model"])
+                    self._json({})
                 else:
                     self.send_error(404)
 
             def do_POST(self):  # noqa: N802
                 body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                if self.path == "/api/pull":
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/x-ndjson")
+                    self.end_headers()
+                    try:
+                        if "errore" in body["model"]:
+                            self._line({"error": "pull rifiutato"})
+                            return
+                        self._line({"status": "pulling manifest"})
+                        self._line({"status": "pulling abc", "total": 100, "completed": 40})
+                        fake.pull_release.wait(10)
+                        if body["model"] not in fake.models:
+                            fake.models.append(body["model"])
+                        self._line({"status": "success"})
+                    except OSError:
+                        pass
+                    return
                 fake.payloads.append(body)
                 last = body["messages"][-1]["content"]
                 self.send_response(200)

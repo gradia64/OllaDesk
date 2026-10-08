@@ -4,7 +4,7 @@
 "use strict";
 
 const $ = (id) => document.getElementById(id);
-const VIEWS = ["loading", "pair", "list", "chat"];
+const VIEWS = ["loading", "pair", "list", "models", "chat"];
 
 let currentId = null;     // conversazione aperta (null = nuova)
 let inChat = false;       // vista conversazione (o nuova) attiva
@@ -27,15 +27,17 @@ function store(key, value) {
 function show(view) {
   for (const v of VIEWS) $("view-" + v).hidden = v !== view;
   inChat = view === "chat";
-  $("back").hidden = !inChat;
+  $("back").hidden = !inChat && view !== "models";
+  $("models-btn").hidden = view !== "list";
   $("new-chat").hidden = view !== "list";
   $("refresh").hidden = view !== "list" && view !== "chat";
   $("composer").hidden = !inChat;
   $("chat-menu").hidden = true;   // showChat lo mostra per le chat già salvate
   closeMenu();
   document.body.classList.toggle("composing", inChat);
+  if (view !== "models") stopModelsPoll();
   if (!inChat) {
-    $("title").textContent = "OllaDesk";
+    $("title").textContent = view === "models" ? "Modelli" : "OllaDesk";
     closeStream();
   }
 }
@@ -405,6 +407,136 @@ function openStream(id, after) {
   };
 }
 
+// ----------------------------------------------------------------- modelli
+
+let modelsTimer = null;
+let taskSeen = null;      // operazione vista in corso da questa pagina: fine da mostrare
+
+function stopModelsPoll() {
+  clearTimeout(modelsTimer);
+  modelsTimer = null;
+}
+
+function fmtSize(n) {
+  if (!n) return "";
+  const gb = n / 1e9;
+  return gb >= 1 ? gb.toFixed(1) + " GB" : Math.round(n / 1e6) + " MB";
+}
+
+function renderModels(info) {
+  const ul = $("model-list");
+  ul.replaceChildren();
+  const taskBusy = !!info.task && info.task.state === "running";
+  for (const m of info.models) {
+    const row = el("li", "model-row");
+    const text = el("div", "model-text");
+    text.append(el("span", "t", m.name));
+    const extra = [fmtSize(m.size), m.details.parameter_size, m.details.quantization_level]
+      .filter(Boolean).join(" · ");
+    if (extra) text.append(el("span", "m", extra));
+    const del = el("button", "model-del", "🗑");
+    del.type = "button";
+    del.setAttribute("aria-label", "Elimina " + m.name);
+    del.disabled = taskBusy || info.busy;
+    del.title = info.busy ? "Il PC sta rispondendo" : "Elimina dal disco del PC";
+    del.addEventListener("click", () => deleteModel(m.name));
+    row.append(text, del);
+    ul.append(row);
+  }
+  $("models-empty").hidden = info.models.length > 0;
+  $("pull-btn").disabled = taskBusy;
+  renderTask(info.task);
+}
+
+function renderTask(t) {
+  const box = $("task");
+  if (t && t.state === "running") taskSeen = "running";
+  // l'esito si mostra solo se l'operazione è stata seguita da questa pagina
+  // o è finita da poco (un minuto)
+  const fresh = t && t.state !== "running" && (taskSeen === "running" ||
+    (t.ended && Date.now() / 1000 - t.ended < 60));
+  if (!t || (t.state !== "running" && !fresh)) { box.hidden = true; return; }
+  box.hidden = false;
+  box.classList.toggle("failed", t.state === "failed");
+  const verb = t.op === "pull" ? "Scaricamento" : "Eliminazione";
+  const bar = $("task-bar");
+  const cancel = $("task-cancel");
+  if (t.state === "running") {
+    $("task-text").textContent = verb + " di " + t.name + (t.pct != null ? " — " + t.pct + "%" : "…") +
+      (t.pct == null && t.status ? " (" + t.status + ")" : "");
+    bar.hidden = t.pct == null;
+    if (t.pct != null) bar.value = t.pct;
+    cancel.hidden = t.op !== "pull";
+  } else {
+    $("task-text").textContent = t.state === "done"
+      ? "✓ " + verb + " di " + t.name + " completato"
+      : "⚠ " + verb + " di " + t.name + " non riuscito: " + t.error;
+    bar.hidden = true;
+    cancel.hidden = true;
+  }
+}
+
+let wasRunning = false;
+
+async function refreshModels() {
+  const info = await api("/api/models");
+  renderModels(info);
+  stopModelsPoll();
+  const running = !!info.task && info.task.state === "running";
+  if (running) {
+    modelsTimer = setTimeout(pollModels, 1500);
+  } else if (wasRunning) {
+    // a operazione finita il PC sta ancora ricaricando l'elenco dei modelli:
+    // un ultimo aggiornamento poco dopo
+    modelsTimer = setTimeout(pollModels, 1200);
+  }
+  wasRunning = running;
+}
+
+async function pollModels() {
+  try {
+    await refreshModels();
+  } catch (e) {
+    if (e instanceof Unauthorized) { route(); return; }
+    netError(e.message);
+    modelsTimer = setTimeout(pollModels, 4000);   // il PC può tornare raggiungibile
+  }
+}
+
+async function showModels() {
+  taskSeen = null;
+  wasRunning = false;
+  show("models");
+  await refreshModels();
+}
+
+async function modelAction(path, body) {
+  netError("");
+  try {
+    await post(path, body);
+  } catch (e) {
+    if (e instanceof Unauthorized) { route(); return; }
+    netError(e.message);
+  }
+  wasRunning = true;   // un'operazione veloce può finire prima del primo aggiornamento
+  try { await refreshModels(); } catch (e) { netError(e.message); }
+}
+
+$("pull-form").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const name = $("pull-name").value.trim();
+  if (!name) return;
+  await modelAction("/api/models/pull", { name });
+  $("pull-name").value = "";
+});
+
+function deleteModel(name) {
+  if (!confirm("Eliminare definitivamente «" + name + "» dal disco del PC?")) return;
+  modelAction("/api/models/delete", { name });
+}
+
+$("task-cancel").addEventListener("click", () => modelAction("/api/models/cancel", {}));
+
 // ---------------------------------------------------------- conversazione
 
 async function loadModels(preferred) {
@@ -666,6 +798,7 @@ async function route() {
   try {
     if (m) await showChat(decodeURIComponent(m[1]));
     else if (location.hash === "#/new") await showNewChat();
+    else if (location.hash === "#/models") await showModels();
     else await showList();
   } catch (e) {
     if (e instanceof Unauthorized) {
@@ -722,6 +855,7 @@ $("m-delete").addEventListener("click", async () => {
 });
 
 $("back").addEventListener("click", () => { location.hash = ""; });
+$("models-btn").addEventListener("click", () => { location.hash = "#/models"; });
 $("new-chat").addEventListener("click", () => { location.hash = "#/new"; });
 $("refresh").addEventListener("click", route);
 window.addEventListener("hashchange", route);

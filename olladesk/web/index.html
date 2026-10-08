@@ -21,6 +21,7 @@
 <header class="bar">
   <button id="back" class="icon" type="button" aria-label="Indietro" hidden>‹</button>
   <h1 id="title">OllaDesk</h1>
+  <button id="models-btn" class="icon" type="button" aria-label="Modelli" title="Modelli" hidden>🧩</button>
   <button id="new-chat" class="icon" type="button" aria-label="Nuova conversazione" hidden>＋</button>
   <button id="refresh" class="icon" type="button" aria-label="Aggiorna" hidden>↻</button>
   <button id="chat-menu" class="icon" type="button" aria-label="Altre azioni"
@@ -50,6 +51,22 @@
   <section id="view-list" class="view" hidden>
     <ul id="chat-list" class="list"></ul>
     <p id="list-empty" class="muted center" hidden>Nessuna conversazione salvata.</p>
+  </section>
+
+  <section id="view-models" class="view" hidden>
+    <form id="pull-form" class="pull-form" autocomplete="off">
+      <input id="pull-name" placeholder="es. llama3.2:3b" aria-label="Modello da scaricare"
+             autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="200">
+      <button id="pull-btn" type="submit" class="primary">Scarica</button>
+    </form>
+    <p class="muted small">Lo scaricamento avviene sul PC e può occupare molti GB: usalo con il Wi-Fi del PC in buona forma.</p>
+    <div id="task" class="task" hidden>
+      <p id="task-text"></p>
+      <progress id="task-bar" max="100" hidden></progress>
+      <button id="task-cancel" type="button" hidden>Annulla</button>
+    </div>
+    <ul id="model-list" class="list models"></ul>
+    <p id="models-empty" class="muted center" hidden>Nessun modello installato.</p>
   </section>
 
   <section id="view-chat" class="view" hidden>

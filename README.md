@@ -50,8 +50,10 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
     galleria, file di testo e PDF, fino a 20 MB ciascuno): le foto vengono
     ridotte sul telefono prima del caricamento e il PC le passa ai modelli
     che leggono le immagini. Dal menu «⋯» di una chat si rinomina o si
-    elimina la conversazione, anche dal PC. Restano solo sul PC le
-    impostazioni e la gestione dei modelli.
+    elimina la conversazione, anche dal PC; il pulsante ⧉ sotto ogni
+    messaggio ne copia il testo. Con 🧩 si scaricano (con avanzamento e
+    «Annulla») ed eliminano i modelli: lo scaricamento avviene sul PC. Resta
+    solo sul PC il resto delle impostazioni.
   - **Finestra «Companion»:** raccoglie tutto in un posto: attivazione e
     porta, stato e indirizzo (con «Copia indirizzo»), abbinamento e
     dispositivi. Quando è attiva, anche il pulsante 📱 della barra superiore
