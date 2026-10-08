@@ -205,9 +205,77 @@ function renderMessage(m) {
   box.append(body);
   setThinking({ box, body }, m.thinking_html);
   addSources(box, m.sources);
-  const meta = [fmtTime(m.ts), m.stats].filter(Boolean).join(" · ");
-  if (meta) box.append(el("div", "meta", meta));
+  addFoot(box, () => m.text, [fmtTime(m.ts), m.stats].filter(Boolean).join(" · "));
   return box;
+}
+
+// piè del messaggio: pulsante ⧉ a sinistra, ora e statistiche a destra
+function addFoot(box, getText, meta) {
+  const foot = el("div", "foot");
+  const btn = el("button", "copy", "⧉");
+  btn.type = "button";
+  btn.title = "Copia il messaggio";
+  btn.setAttribute("aria-label", "Copia il messaggio");
+  btn.onclick = () => copyMessage(getText() || "", btn);
+  foot.append(btn, el("div", "meta", meta));
+  box.append(foot);
+}
+
+// Su HTTP in LAN navigator.clipboard non esiste (serve un contesto sicuro):
+// si prova execCommand, e se anche quello fallisce si mostra il testo già
+// selezionato, da copiare con il menu del telefono.
+async function copyMessage(text, btn) {
+  if (!text) return;
+  let ok = false;
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      ok = true;
+    }
+  } catch (e) { /* ripiego sotto */ }
+  if (!ok) ok = legacyCopy(text);
+  if (ok) {
+    btn.textContent = "✓";
+    setTimeout(() => { btn.textContent = "⧉"; }, 1500);
+  } else {
+    showSelectable(text);
+  }
+}
+
+function legacyCopy(text) {
+  const ta = el("textarea");
+  ta.value = text;
+  ta.readOnly = true;
+  ta.style.cssText = "position:fixed;top:0;left:0;opacity:0;font-size:16px";
+  document.body.append(ta);
+  ta.select();
+  ta.setSelectionRange(0, text.length);
+  let ok = false;
+  try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
+  ta.remove();
+  return ok;
+}
+
+function showSelectable(text) {
+  const old = document.getElementById("copybox");
+  if (old) old.remove();
+  const wrap = el("div", "copybox");
+  wrap.id = "copybox";
+  const card = el("div", "card");
+  card.append(el("p", "", "Copia automatica non disponibile: tieni premuto sul testo selezionato e scegli «Copia»."));
+  const ta = el("textarea");
+  ta.value = text;
+  ta.readOnly = true;
+  ta.rows = 8;
+  const close = el("button", "", "Chiudi");
+  close.type = "button";
+  close.onclick = () => wrap.remove();
+  card.append(ta, close);
+  wrap.append(card);
+  document.body.append(wrap);
+  ta.focus();
+  ta.select();
+  ta.setSelectionRange(0, text.length);
 }
 
 // fonti della ricerca web sotto la risposta: titoli e link arrivano dai
@@ -244,7 +312,7 @@ function startPending(status) {
   body.append(el("span", "muted typing", status || ""));
   box.append(body);
   $("messages").append(box);
-  pending = { box, body, think: null, thinkBody: null, hasText: false };
+  pending = { box, body, think: null, thinkBody: null, hasText: false, raw: "" };
   scrollToEnd();
   return pending;
 }
@@ -257,8 +325,8 @@ function finishPending(d) {
     p.box.remove();     // interrotta o fallita prima di ogni testo
   } else {
     addSources(p.box, d.sources);
-    const meta = [fmtTime(d.ts || Date.now() / 1000), d.stats].filter(Boolean).join(" · ");
-    p.box.append(el("div", "meta", meta));
+    addFoot(p.box, () => p.raw,
+      [fmtTime(d.ts || Date.now() / 1000), d.stats].filter(Boolean).join(" · "));
   }
   if (d.outcome === "failed") {
     addNote((d.error || "errore") +
@@ -306,6 +374,7 @@ function openStream(id, after) {
   on("answer", (d) => {
     const p = startPending();
     p.body.innerHTML = d.html;
+    p.raw = d.text || "";
     p.hasText = !!d.html;
     setThinking(p, d.thinking_html);
     if (!p.hasText && d.thinking_html) {

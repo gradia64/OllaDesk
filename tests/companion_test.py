@@ -263,6 +263,8 @@ assert "<script>" not in user["html"] and "&lt;script&gt;" in user["html"]
 assert user["attachments"] == ["nota.txt"] and user["web"] is True
 assert "<b>grassetto</b>" in bot["html"] and "&lt;i&gt;" in bot["html"]
 assert "<i>penso</i>" in bot["thinking_html"] and bot["stats"] == "12 tok/s"
+# sorgente Markdown per il pulsante «copia»: grezzo, mai HTML
+assert "<script>" in user["text"] and "<b>" not in bot["text"] and "**grassetto**" in bot["text"], (user["text"], bot["text"])
 for secret in (b"/home/segreto", b"SEGRETO-WEB", b"image_paths", b"attachments_meta"):
     assert secret not in body, f"dato interno esposto: {secret!r}"
 assert request("GET", "/api/chats/inesistente", cookie=token)[0] == 404

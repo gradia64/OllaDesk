@@ -155,6 +155,7 @@ user = s.of("user")[0]
 assert "&lt;b&gt;" in user["html"] and "<b>" not in user["html"].replace("&lt;b&gt;", "")
 last = s.of("answer")[-1]
 assert "<b>mondo</b>" in last["html"] and "ragiono" in last["thinking_html"]
+assert "**mondo**" in last["text"] and "<b>" not in last["text"], last["text"]
 done = s.of("done")[0]
 assert done["outcome"] == "done" and done["stats"] and done["error"] == ""
 assert abs(done["ts"] - time.time()) < 60, "orario della risposta dal PC mancante"

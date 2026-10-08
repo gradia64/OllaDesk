@@ -183,11 +183,63 @@ main {
   background: var(--border);
 }
 
-.meta {
+.foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   margin-top: 6px;
+}
+
+.meta {
   font-size: 12px;
   color: var(--muted);
   text-align: right;
+}
+
+.copy {
+  min-width: 36px;
+  min-height: 32px;
+  padding: 0 8px;
+  font-size: 16px;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.copybox {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.copybox .card {
+  width: 100%;
+  max-width: 520px;
+  padding: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.copybox p { margin: 0 0 8px; font-size: 14px; }
+
+.copybox textarea {
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 8px;
+  font-size: 16px;
+  color: inherit;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
 }
 
 details.think {

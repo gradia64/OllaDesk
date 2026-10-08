@@ -434,6 +434,7 @@ def render_message(m: dict, sources: list[dict] | None = None) -> dict | None:
     out = {
         "role": role,
         "html": md_to_html(text, *_MD_COLORS),
+        "text": text,           # sorgente Markdown, per il pulsante «copia»
         "ts": m.get("ts", 0),
     }
     if role == "user":
@@ -895,7 +896,7 @@ class _Handler(BaseHTTPRequestHandler):
 
     def _flush_answer(self, st: _StreamState) -> None:
         """Rende il Markdown della risposta in costruzione (testo completo)."""
-        data = {"html": md_to_html(st.text, *_MD_COLORS)}
+        data = {"html": md_to_html(st.text, *_MD_COLORS), "text": st.text}
         if st.think:
             data["thinking_html"] = md_to_html(st.think, *_MD_COLORS)
         self._sse("answer", data)
