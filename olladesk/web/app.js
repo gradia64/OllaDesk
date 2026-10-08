@@ -35,6 +35,7 @@ function show(view) {
   $("composer").hidden = !inChat;
   $("chat-menu").hidden = true;   // showChat lo mostra per le chat già salvate
   closeMenu();
+  document.getElementById("copybox")?.remove();   // ripiego di ⧉, legato alla vista
   document.body.classList.toggle("composing", inChat);
   if (view !== "models") stopModelsPoll();
   if (!inChat) {
@@ -479,9 +480,16 @@ function renderTask(t) {
 }
 
 let wasRunning = false;
+let tailPolls = 0;        // aggiornamenti ancora da fare dopo la fine di un'operazione
+
+function modelsShown() {
+  return !$("view-models").hidden;
+}
 
 async function refreshModels() {
   const info = await api("/api/models");
+  // uscito dalla vista mentre la richiesta era in volo: niente nuovo giro
+  if (!modelsShown()) return;
   renderModels(info);
   stopModelsPoll();
   const running = !!info.task && info.task.state === "running";
@@ -489,8 +497,12 @@ async function refreshModels() {
     modelsTimer = setTimeout(pollModels, 1500);
   } else if (wasRunning) {
     // a operazione finita il PC sta ancora ricaricando l'elenco dei modelli:
-    // un ultimo aggiornamento poco dopo
-    modelsTimer = setTimeout(pollModels, 1200);
+    // un aggiornamento subito e uno poco dopo
+    tailPolls = 1;
+    modelsTimer = setTimeout(pollModels, 600);
+  } else if (tailPolls > 0) {
+    tailPolls--;
+    modelsTimer = setTimeout(pollModels, 1500);
   }
   wasRunning = running;
 }
@@ -501,13 +513,14 @@ async function pollModels() {
   } catch (e) {
     if (e instanceof Unauthorized) { route(); return; }
     netError(e.message);
-    modelsTimer = setTimeout(pollModels, 4000);   // il PC può tornare raggiungibile
+    if (modelsShown()) modelsTimer = setTimeout(pollModels, 4000);   // il PC può tornare raggiungibile
   }
 }
 
 async function showModels() {
   taskSeen = null;
   wasRunning = false;
+  tailPolls = 0;
   show("models");
   await refreshModels();
 }

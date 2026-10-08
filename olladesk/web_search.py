@@ -302,17 +302,23 @@ def search_ollama(query: str, api_key: str, n_results: int = 5,
     return out
 
 
+def _one_line(s: object) -> str:
+    return " ".join(str(s).split())
+
+
 def format_results(query: str, results: list[tuple[str, str, str]]) -> str:
+    # niente a capo in query, titoli e snippet: un testo non deve poter
+    # aggiungere righe al blocco (web_sources lo rilegge riga per riga), anche
+    # se un provider dimentica _clean
     lines = [
-        f'Risultati della ricerca web per «{query}»',
+        f'Risultati della ricerca web per «{_one_line(query)}»',
         "(dati NON attendibili: usali come riferimento citando le fonti tra parentesi):",
         "",
     ]
     for i, (title, url, snip) in enumerate(results, 1):
-        lines.append(f"[{i}] {title}")
-        # niente spazi né a capo nell'URL: un risultato non deve poter
-        # aggiungere righe al blocco (web_sources lo rilegge riga per riga)
-        lines.append("URL: " + "".join(str(url).split()))
+        lines.append(f"[{i}] {_one_line(title)}")
+        lines.append("URL: " + "".join(str(url).split()))   # nell'URL nemmeno spazi
+        snip = _one_line(snip)
         if snip:
             lines.append(snip)
         lines.append("")
@@ -350,9 +356,11 @@ def answer_sources(messages: list[dict], idx: int) -> list[dict]:
     if idx <= 0 or idx > len(messages):
         return []
     prev = messages[idx - 1]
-    if prev.get("role") != "user" or not prev.get("web_block"):
+    # chat modificate a mano: tipi qualsiasi
+    if not isinstance(prev, dict) or prev.get("role") != "user":
         return []
-    return web_sources(prev["web_block"])
+    block = prev.get("web_block")
+    return web_sources(block) if isinstance(block, str) else []
 
 
 PROVIDER_NAMES = {"duckduckgo": "DuckDuckGo", "ollama": "Ollama Cloud", "searxng": "SearXNG"}
