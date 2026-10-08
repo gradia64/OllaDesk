@@ -243,7 +243,7 @@ Dopo l'import controlla che l'impronta mostrata da gpg coincida, poi:
 
 ```bash
 gpg --import olladesk-release-key.asc
-gpg --verify olladesk_0.3.0_all.deb.sig olladesk_0.3.0_all.deb
+gpg --verify olladesk_0.3.1_all.deb.sig olladesk_0.3.1_all.deb
 # oppure tutto in una volta:
 gpg --verify SHA256SUMS.sig SHA256SUMS && sha256sum -c --ignore-missing SHA256SUMS
 ```
@@ -370,6 +370,7 @@ python3 tests/engine_test.py          # motore di chat con finto Ollama (senza r
 python3 tests/companion_test.py       # companion web: server, abbinamento, lettura (senza rete)
 python3 tests/companion_send_test.py  # companion web: invio e streaming SSE (senza rete)
 python3 tests/sync_test.py            # sincronizzazione telefono-PC dal vivo (senza rete)
+python3 tests/companion_models_test.py  # companion web: scarica ed elimina modelli (senza rete)
 ```
 
 La CI (`.github/workflows/release.yml`) esegue unit test e test offline a ogni
@@ -422,6 +423,7 @@ tests/engine_test.py        motore di chat (finto Ollama)
 tests/companion_test.py     companion web (server, abbinamento, lettura)
 tests/companion_send_test.py companion web (invio, streaming SSE, stop)
 tests/sync_test.py          sincronizzazione telefono-PC dal vivo
+tests/companion_models_test.py companion web (scarica ed elimina modelli)
 tests/fake_ollama.py        finto server Ollama per i test offline
 tests/companion_client.py   client HTTP/SSE per i test della companion
 tests/release_tools_test.py script di rilascio (chiavi e repository temporanei)

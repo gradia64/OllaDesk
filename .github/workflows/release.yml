@@ -68,6 +68,9 @@ jobs:
       - name: Sincronizzazione telefono-PC (nessuna rete)
         run: python3 tests/sync_test.py
 
+      - name: Scarica ed elimina modelli dal telefono (nessuna rete)
+        run: python3 tests/companion_models_test.py
+
       - name: Script di rilascio (verifica dei tag, firma degli allegati)
         run: python3 tests/release_tools_test.py
 
