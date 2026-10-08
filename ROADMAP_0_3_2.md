@@ -32,4 +32,4 @@ Nessun bloccante: la 0.3.1 resta pubblicata. Voci approvate il 2026-10-08.
 3. Voci 5 e 8, cioè il coordinamento delle operazioni sui modelli; la 7 si decide qui.
 4. Voci 4 e 11 (fonti), poi 9 e 10 (telefono, cosmetiche).
 
-Un commit per voce o per gruppo, con la suite offline verde su ogni commit. Note di rilascio in `packaging/release-notes/0.3.2.md`.
+Tutte implementate, un commit per gruppo, con la suite offline verde su ogni commit. Note di rilascio in `packaging/release-notes/0.3.2.md`.
