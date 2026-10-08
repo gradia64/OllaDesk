@@ -289,7 +289,7 @@ win.chat_area.set_web_search(False)
 print("5d. icona globo OK (screenshot on/off in", SHOTS + ")")
 
 # --- 6. gestione modelli -------------------------------------------------------
-dlg = ModelManagerDialog(win.settings["host"], win)
+dlg = ModelManagerDialog(win.engine, win)
 dlg.show()
 wait_ms(1500)
 app.processEvents()
@@ -300,7 +300,7 @@ dlg.name_edit.setText("modello-inesistente-xyz:1b")
 dlg._start_pull()
 wait_ms(4000)
 app.processEvents()
-assert dlg._pull_worker is None, "pull ancora in corso"
+assert win.engine.model_task()["state"] == "failed", "pull ancora in corso"
 print("6a. pull modello inesistente gestito:", dlg.progress_label.text())
 dlg.close()
 

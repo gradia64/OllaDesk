@@ -78,7 +78,10 @@ app = QApplication(sys.argv)
 host = silent_server()
 
 # --- gestore modelli: /api/tags bloccato -----------------------------------
-dlg = ModelManagerDialog(host)
+from olladesk.engine import ChatEngine  # noqa: E402
+
+engine = ChatEngine({**config.load_settings(), "host": host})
+dlg = ModelManagerDialog(engine)
 dlg.show()
 wait_ms(200)
 close_destroy_and_check(dlg, dlg._list_worker, "modelli")

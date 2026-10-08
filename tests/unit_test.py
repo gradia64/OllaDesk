@@ -948,7 +948,8 @@ def test_model_lists_without_duplicates():
         assert shown and shown[-1] == engine.model_names()
         assert not any(n.startswith("llamacpp:a3d2") for n in engine.model_names())
 
-        dlg = ModelManagerDialog("http://127.0.0.1:9")
+        engine.settings["host"] = "http://127.0.0.1:9"
+        dlg = ModelManagerDialog(engine)
         try:
             dlg._on_models(_tags_ollama_040())
             rows = [dlg.tree.topLevelItem(i).data(0, 0x0100)   # Qt.UserRole

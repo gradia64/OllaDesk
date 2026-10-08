@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from ..ollama_client import ApiWorker, PostWorker, PullWorker, shutdown_workers, visible_models
+from ..ollama_client import ApiWorker, shutdown_workers, visible_models
 
 SUGGESTED_MODELS = [
     "llama3.2:3b", "llama3.1:8b", "qwen3:8b", "qwen2.5-coder:7b",
@@ -38,22 +38,26 @@ def human_size(n: float) -> str:
 class ModelManagerDialog(QDialog):
     """Elenco dei modelli installati con pull ed eliminazione.
 
-    `changed` è True se qualcosa è stato scaricato/eliminato: il chiamante
-    può ricaricare l'elenco dei modelli alla chiusura.
+    Scaricamento ed eliminazione passano dal motore, come quelli del
+    telefono: una sola operazione alla volta, visibile da entrambi, e
+    niente eliminazione mentre il PC risponde. Chiudere il dialogo non
+    annulla uno scaricamento: continua e riappare riaprendolo.
+
+    `changed` è True se qualcosa è stato scaricato/eliminato mentre il
+    dialogo era aperto.
     """
 
-    def __init__(self, host: str, parent=None, current_model: str | None = None):
+    def __init__(self, engine, parent=None, current_model: str | None = None):
         super().__init__(parent)
         self.setWindowTitle("Gestione modelli — OllaDesk")
         self.setMinimumSize(680, 540)
-        self.host = host
+        self.engine = engine
+        self.host = engine.settings["host"]
         self.current_model = current_model   # modello selezionato nella chat
         self.changed = False
 
-        self._pull_worker: PullWorker | None = None
-        self._cancelled_pulls: list[PullWorker] = []   # annullati, in chiusura
         self._list_worker: ApiWorker | None = None
-        self._delete_worker: PostWorker | None = None
+        self._task_seen: tuple | None = None   # (op, name, state) già mostrato
 
         lay = QVBoxLayout(self)
         lay.setContentsMargins(14, 12, 14, 12)
@@ -91,7 +95,7 @@ class ModelManagerDialog(QDialog):
         lay.addWidget(self.progress_label)
         self.cancel_btn = QPushButton("✕  Annulla scaricamento", self)
         self.cancel_btn.hide()
-        self.cancel_btn.clicked.connect(self._cancel_pull)
+        self.cancel_btn.clicked.connect(self.engine.cancel_model_task)
         lay.addWidget(self.cancel_btn)
 
         # --- elenco modelli --------------------------------------------
@@ -117,6 +121,9 @@ class ModelManagerDialog(QDialog):
         btns.addWidget(self.close_btn)
         lay.addLayout(btns)
 
+        engine.model_task_changed.connect(self._on_task)
+        engine.busy_changed.connect(self._update_buttons)
+        self._on_task()   # operazione già in corso (anche dal telefono)
         self.refresh_models()
 
     # ------------------------------------------------------------- elenco
@@ -173,97 +180,32 @@ class ModelManagerDialog(QDialog):
             return None
         return item.data(0, Qt.ItemDataRole.UserRole) or item.text(0)
 
-    def _update_buttons(self) -> None:
-        self.delete_btn.setEnabled(self._selected_model() is not None and self._pull_worker is None)
+    def _update_buttons(self, *_a) -> None:
+        running = self._task_running()
+        self.pull_btn.setEnabled(not running)
+        self.name_edit.setEnabled(not running)
+        self.delete_btn.setEnabled(
+            self._selected_model() is not None and not running and not self.engine.busy()
+        )
 
-    # ------------------------------------------------------------ pull
+    # ------------------------------------------- scaricamento ed eliminazione
+
+    def _task_running(self) -> bool:
+        t = self.engine.model_task()
+        return bool(t and t["state"] == "running")
 
     def _start_pull(self) -> None:
         name = self.name_edit.text().strip()
         if not name:
             QMessageBox.information(self, "Scarica modello", "Inserisci il nome del modello (es. llama3.2:3b).")
             return
-        if self._pull_worker is not None:
-            return
-        self._pull_running_ui(True)
-        self.progress.setRange(0, 0)
-        self.progress_label.setText(f"Avvio scaricamento di {name}…")
-        self._pull_worker = PullWorker(self.host, name, self)
-        self._pull_worker.progress.connect(self._on_pull_progress)
-        self._pull_worker.done.connect(self._on_pull_done)
-        self._pull_worker.failed.connect(self._on_pull_failed)
-        self._pull_worker.finished.connect(self._pull_worker.deleteLater)
-        w = self._pull_worker
-        w.finished.connect(lambda: self._pull_worker is w and setattr(self, "_pull_worker", None))
-        w.start()
-
-    def _pull_running_ui(self, running: bool) -> None:
-        self.progress.setVisible(running)
-        self.progress_label.setVisible(running)
-        self.cancel_btn.setVisible(running)
-        self.pull_btn.setEnabled(not running)
-        self.name_edit.setEnabled(not running)
-        self.delete_btn.setEnabled(not running and self._selected_model() is not None)
-
-    def _on_pull_progress(self, data: dict) -> None:
-        if self.sender() is not self._pull_worker:
-            return
-        status = data.get("status", "")
-        total = data.get("total")
-        completed = data.get("completed")
-        if total and completed is not None:
-            pct = int(completed * 100 / total)
-            if self.progress.maximum() != 100:
-                self.progress.setRange(0, 100)
-            self.progress.setValue(pct)
-            self.progress_label.setText(
-                f"{status.split(' ')[0]}… {human_size(completed)} / {human_size(total)} ({pct}%)"
-            )
-        else:
-            self.progress.setRange(0, 0)
-            self.progress_label.setText(status or "…")
-
-    def _on_pull_done(self) -> None:
-        if self.sender() is not self._pull_worker:
-            return   # segnale tardivo di un worker annullato
-        self.changed = True
-        self._pull_running_ui(False)
-        self.progress_label.show()
-        self.progress_label.setText("✓ Scaricamento completato")
-        self.refresh_models()
-
-    def _on_pull_failed(self, err: str) -> None:
-        if self.sender() is not self._pull_worker:
-            return   # l'annullamento ha già aggiornato la UI
-        self._pull_running_ui(False)
-        self.progress_label.show()
-        self.progress_label.setText(f"⚠ {err}")
-
-    def _cancel_pull(self) -> None:
-        """Annulla lo scaricamento e ripristina SUBITO la UI.
-
-        Il worker stoppato non emette più segnali (la connessione chiusa fa
-        uscire il thread in silenzio): se non ripristiniamo qui, la barra di
-        avanzamento resta visibile e «Scarica» disabilitato.
-        """
-        w = self._pull_worker
-        if w is None:
-            return
-        w.stop()
-        # sganciato subito: si può avviare un nuovo scaricamento senza
-        # aspettare che il thread annullato termini
-        self._pull_worker = None
-        self._cancelled_pulls.append(w)
-        w.finished.connect(lambda: self._cancelled_pulls.remove(w))
-        self._pull_running_ui(False)
-        self.progress_label.show()
-        self.progress_label.setText("⚠ Scaricamento annullato")
-
-    # --------------------------------------------------------- eliminazione
+        err = self.engine.pull_model(name)
+        if err:
+            QMessageBox.information(self, "Scarica modello", f"Scaricamento non avviato: {err}.")
 
     def _delete_selected(self) -> None:
         model = self._selected_model()
-        if not model or self._delete_worker is not None:
+        if not model:
             return
         ret = QMessageBox.question(
             self,
@@ -273,40 +215,54 @@ class ModelManagerDialog(QDialog):
         )
         if ret != QMessageBox.StandardButton.Yes:
             return
-        self.delete_btn.setEnabled(False)
-        # l'API Ollama richiede DELETE /api/delete con chiave "model"
-        self._delete_worker = PostWorker(self.host, "/api/delete", {"model": model}, self, "DELETE")
-        self._delete_worker.ready.connect(lambda _d: self._on_delete_done(model))
-        self._delete_worker.failed.connect(self._on_delete_failed)
-        self._delete_worker.finished.connect(self._delete_worker.deleteLater)
-        self._delete_worker.finished.connect(lambda: setattr(self, "_delete_worker", None))
-        self._delete_worker.start()
+        err = self.engine.delete_model(model)
+        if err:
+            QMessageBox.warning(self, "Elimina modello", f"Eliminazione non avviata: {err}.")
 
-    def _on_delete_done(self, model: str) -> None:
-        self.changed = True
-        self.delete_btn.setEnabled(True)
-        self.refresh_models()
-
-    def _on_delete_failed(self, err: str) -> None:
-        self.delete_btn.setEnabled(True)
-        QMessageBox.warning(self, "Elimina modello", f"Eliminazione non riuscita:\n{err}")
-
-    def reject(self) -> None:
-        if self._pull_worker is not None and self._pull_worker.isRunning():
-            ret = QMessageBox.question(
-                self,
-                "Scaricamento in corso",
-                "Annullare lo scaricamento in corso e chiudere?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            )
-            if ret != QMessageBox.StandardButton.Yes:
-                return
-        super().reject()
+    def _on_task(self) -> None:
+        """Stato dell'operazione del motore, avviata da qui o dal telefono."""
+        t = self.engine.model_task()
+        key = (t["op"], t["name"], t["state"]) if t else None
+        running = bool(t and t["state"] == "running")
+        self.progress.setVisible(running)
+        self.cancel_btn.setVisible(running and t["op"] == "pull")
+        if t is None or (not running and self._task_seen is None):
+            # nessuna operazione, o una finita prima dell'apertura
+            self.progress_label.hide()
+        elif running:
+            self.progress_label.show()
+            if t["op"] == "delete":
+                self.progress.setRange(0, 0)
+                self.progress_label.setText(f"Eliminazione di {t['name']}…")
+            elif t["pct"] is None:
+                self.progress.setRange(0, 0)
+                self.progress_label.setText(f"{t['name']}: {t['status'] or 'avvio scaricamento'}…")
+            else:
+                self.progress.setRange(0, 100)
+                self.progress.setValue(t["pct"])
+                status = t["status"].split(" ")[0] if t["status"] else "scaricamento"
+                self.progress_label.setText(f"{t['name']}: {status}… {t['pct']}%")
+        elif key != self._task_seen:
+            self.progress_label.show()
+            if t["state"] == "done":
+                self.changed = True
+                done = "Scaricamento completato" if t["op"] == "pull" else f"«{t['name']}» eliminato"
+                self.progress_label.setText(f"✓ {done}")
+                self.refresh_models()
+            else:
+                self.progress_label.setText(f"⚠ {t['error']}")
+        self._task_seen = key
+        self._update_buttons()
 
     def done(self, r: int) -> None:
         # chiusura per qualunque via (Chiudi, Esc, X): nessun worker deve
-        # sopravvivere legato al dialogo, che il chiamante poi distrugge
-        shutdown_workers(
-            [self._list_worker, self._pull_worker, self._delete_worker, *self._cancelled_pulls]
-        )
+        # sopravvivere legato al dialogo, che il chiamante poi distrugge.
+        # L'operazione sui modelli appartiene al motore e continua
+        for sig, slot in ((self.engine.model_task_changed, self._on_task),
+                          (self.engine.busy_changed, self._update_buttons)):
+            try:
+                sig.disconnect(slot)
+            except (RuntimeError, TypeError):
+                pass
+        shutdown_workers([self._list_worker])
         super().done(r)

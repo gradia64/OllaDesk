@@ -21,6 +21,8 @@ class FakeOllama:
         self.models = list(MODELS)         # installati: /api/pull li aggiunge, /api/delete li toglie
         self.pull_release = threading.Event()   # sblocca un /api/pull in attesa
         self.pull_release.set()
+        self.delete_release = threading.Event()   # sblocca un /api/delete in attesa
+        self.delete_release.set()
         self.deleted: list[str] = []
         fake = self
 
@@ -53,6 +55,7 @@ class FakeOllama:
 
             def do_DELETE(self):  # noqa: N802
                 body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                fake.delete_release.wait(10)
                 if body.get("model") in fake.models:
                     fake.models.remove(body["model"])
                     fake.deleted.append(body["model"])
@@ -112,4 +115,6 @@ class FakeOllama:
 
     def close(self):
         self.release.set()
+        self.pull_release.set()
+        self.delete_release.set()
         self._server.shutdown()

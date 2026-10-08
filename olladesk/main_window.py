@@ -318,7 +318,7 @@ class MainWindow(QMainWindow):
                 "Attendi la fine della risposta (o premi ■ per interrompere) prima di gestire i modelli."
             )
             return
-        dlg = ModelManagerDialog(self.settings["host"], self, self.current_model())
+        dlg = ModelManagerDialog(self.engine, self, self.current_model())
         dlg.exec()
         changed = dlg.changed
         # distrutto a ogni chiusura (prima restava figlio della finestra per
@@ -438,6 +438,10 @@ class MainWindow(QMainWindow):
                 "Nessun modello disponibile.\n"
                 "Scaricalo dalla sezione «Modelli» (Ctrl+M) o controlla che Ollama sia avviato."
             )
+            return
+        refusal = self.engine.send_refusal(model)
+        if refusal:
+            self.chat_area.add_system_note(f"Invio non possibile: {refusal}.")
             return
         atts = self.chat_area.attachments()
         web_on = self.chat_area.web_search_active()

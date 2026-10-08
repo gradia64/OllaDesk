@@ -390,6 +390,9 @@ def web_send(engine, hub, chat_id: str | None, text: str, model: str, think: boo
         return busy
     if model not in engine.model_names():
         return 400, f"modello non disponibile: {model}", None
+    refusal = engine.send_refusal(model)
+    if refusal:
+        return 409, refusal, None
     # una conversazione eliminata sul PC non va ricreata in silenzio con il
     # vecchio id (le chat nuove arrivano con chat_id nullo)
     if chat_id is not None and chat_id not in {c["id"] for c in engine.chats()}:

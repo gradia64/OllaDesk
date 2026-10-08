@@ -222,6 +222,8 @@ class ChatEngine(QObject):
         """Avvia lo scaricamento di `name`. None se parte, altrimenti il motivo."""
         if self._closed:
             return "OllaDesk si sta chiudendo"
+        if not name:
+            return "nome del modello mancante"
         if self._task_running():
             return "un'altra operazione sui modelli è già in corso"
         w = PullWorker(self.settings["host"], name, self)
@@ -307,6 +309,16 @@ class ChatEngine(QObject):
 
     # ------------------------------------------------------------------ invio
 
+    def send_refusal(self, model: str) -> str | None:
+        """Motivo per cui un invio con `model` non può partire, o None.
+
+        Non copre «occupato», che i chiamanti spiegano a modo loro.
+        """
+        t = self._task
+        if t and t["state"] == "running" and t["op"] == "delete" and t["name"] == model:
+            return f"il modello «{model}» è in eliminazione"
+        return None
+
     def send(self, chat_id: str | None, text: str, model: str, *,
              attachments=(), web: bool = False, think: bool = True) -> str | None:
         """Aggiunge un messaggio utente e avvia la risposta.
@@ -315,7 +327,7 @@ class ChatEngine(QObject):
         la conversazione nasce al primo messaggio salvato. Restituisce l'id,
         oppure None se un'altra elaborazione è già in corso.
         """
-        if self.busy() or self._closed:
+        if self.busy() or self._closed or self.send_refusal(model):
             return None
         chat_id = chat_id or self.new_chat_id()
 
