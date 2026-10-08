@@ -301,8 +301,10 @@ class ChatEngine(QObject):
     def delete_chat(self, chat_id: str) -> None:
         if chat_id == self._active_id:
             self.stop()
-        config.delete_chat(chat_id)
         self._cache.pop(chat_id, None)
+        # le chat in memoria proteggono i loro allegati anche se il loro
+        # salvataggio su disco è fallito
+        config.delete_chat(chat_id, list(self._cache.values()))
         self._chats = [c for c in self._chats if c["id"] != chat_id]
         self.chat_deleted.emit(chat_id)
         self.chats_changed.emit()

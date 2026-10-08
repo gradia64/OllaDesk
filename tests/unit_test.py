@@ -275,6 +275,59 @@ def test_delete_chat_never_follows_symlinks():
         assert target.exists()
 
 
+def test_delete_chat_keeps_target_of_link_cited_elsewhere():
+    # revisione 0.3.2: B cita il link, A il file a cui punta; eliminando A il
+    # file spariva e B restava con un link rotto
+    from olladesk import config
+    with _isolated_config():
+        att = config.attachments_dir()
+        target = att / "importante.png"
+        target.write_bytes(b"x")
+        alias = att / "alias.png"
+        alias.symlink_to(target)
+        config.save_chat(_attachment_chat("a", [target]))
+        config.save_chat(_attachment_chat("b", [alias]))
+        config.delete_chat("a")
+        assert target.exists() and alias.resolve() == target
+        config.delete_chat("b")
+        assert target.exists() and alias.is_symlink()   # i link non si cancellano mai
+
+
+def test_engine_delete_keeps_attachments_of_unsaved_chats():
+    # revisione 0.3.2: una chat solo in memoria (salvataggio fallito) non
+    # proteggeva i suoi allegati
+    from PySide6.QtWidgets import QApplication
+
+    from olladesk import config
+    from olladesk.engine import ChatEngine
+    with _isolated_config():
+        QApplication.instance() or QApplication([])
+        shared = config.attachments_dir() / "condiviso.png"
+        shared.write_bytes(b"x")
+        config.save_chat(_attachment_chat("a", [shared]))
+        engine = ChatEngine(config.load_settings())
+        engine._cache["b"] = _attachment_chat("b", [shared])   # mai salvata
+        engine.delete_chat("a")
+        assert shared.exists()
+        assert config.load_chat("a") is None
+
+
+def test_load_chat_drops_invalid_messages():
+    # revisione 0.3.2: un elemento non dict in una chat modificata a mano
+    # impediva di aprirla sul PC e sul telefono
+    from olladesk import companion, config
+    with _isolated_config():
+        good = {"role": "user", "content": "ciao"}
+        config.save_chat({"id": "a", "title": "a", "messages": [
+            "oops", 5, None, ["x"], {"content": "senza ruolo"}, {"role": 3}, good,
+            {"role": "assistant", "content": "risposta"},
+        ]})
+        chat = config.load_chat("a")
+        assert [m["role"] for m in chat["messages"]] == ["user", "assistant"], chat
+        rendered = companion.render_chat(chat)
+        assert [m["text"] for m in rendered["messages"]] == ["ciao", "risposta"]
+
+
 def test_chat_id_never_leaves_chats_dir():
     # revisione 0.3.1: «../settings» cancellava settings.json
     from olladesk import config

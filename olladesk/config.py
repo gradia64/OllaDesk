@@ -11,7 +11,7 @@ import shutil
 import time
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 APP_NAME = "olladesk"
 LEGACY_APP_NAME = "ollama-gui"   # nome usato prima del rebranding: i dati vengono migrati
@@ -243,6 +243,10 @@ def load_chat(chat_id: str) -> dict | None:
         return None
     data = _read_json(path, None)
     if isinstance(data, dict) and data.get("id") == chat_id and isinstance(data.get("messages"), list):
+        # chat modificate a mano: un messaggio che non è un dict con un ruolo
+        # farebbe fallire finestra, companion e cronologia del motore
+        data["messages"] = [m for m in data["messages"]
+                            if isinstance(m, dict) and isinstance(m.get("role"), str)]
         return data
     return None
 
@@ -321,13 +325,31 @@ def _all_attachment_refs() -> set[Path] | None:
     return refs
 
 
-def delete_chat(chat_id: str) -> None:
+def _with_link_targets(refs: set[Path]) -> set[Path]:
+    """Riferimenti più i file a cui puntano quelli che sono link simbolici.
+
+    Un link citato da una chat protegge anche il suo bersaglio, che un'altra
+    chat può citare per nome: cancellarlo lascerebbe il link rotto.
+    """
+    out = set(refs)
+    for p in refs:
+        try:
+            if p.is_symlink():
+                out.add(p.resolve())
+        except (OSError, RuntimeError):
+            pass
+    return out
+
+
+def delete_chat(chat_id: str, keep_from: Iterable[dict] = ()) -> None:
     """Elimina la conversazione e gli allegati che nessun'altra usa.
 
     Si toccano solo file regolari dentro la cartella privata degli allegati:
     un percorso scritto nel JSON non può far cancellare altro. Se un'altra
     conversazione non si legge gli allegati restano tutti: meglio un file
-    orfano che uno ancora citato.
+    orfano che uno ancora citato. `keep_from`: conversazioni in memoria
+    (anche non salvate, per esempio dopo un salvataggio fallito) i cui
+    allegati restano comunque.
     """
     orphans = _attachment_paths(load_chat(chat_id))
     path = _chat_path(chat_id)
@@ -343,6 +365,9 @@ def delete_chat(chat_id: str) -> None:
     refs = _all_attachment_refs()
     if refs is None:
         return
+    for chat in keep_from:
+        refs |= _attachment_paths(chat)
+    refs = _with_link_targets(refs)
     root = attachments_dir().resolve()
     for p in orphans - refs:
         if root in p.parents and not p.is_symlink() and p.is_file():
