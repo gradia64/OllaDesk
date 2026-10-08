@@ -343,20 +343,25 @@ assert wait_until(lambda: "busy" in s.kinds())
 wait_until(lambda: False, 300)
 assert notices(s) == [], s.events
 s.close()
-# con notices_after: arriva una volta, senza id, e nient'altro si ripete
+# con notices_after: arriva una volta, con il suo id, e nient'altro si ripete
 s = SSE(f"{events}&notices_after={res['after']}", TOKEN)
 assert wait_until(lambda: notices(s)), s.events
 wait_until(lambda: False, 300)
 assert len(notices(s)) == 1 and "Ricerca web saltata" in notices(s)[0], s.events
-assert [e[0] for e in s.events if e[1] == "notice"] == [None]
 assert not {"user", "start", "answer", "done", "search"} & set(s.kinds()), s.kinds()
+ids = [e[0] for e in s.events if e[0] is not None]
+assert ids and res["after"] < ids[-1] <= snap["seq"], (ids, res, snap)
 s.close()
-# riconnessione dell'EventSource (Last-Event-ID): l'avviso non si ripete
+# riconnessione dell'EventSource: il browser rimanda come Last-Event-ID
+# l'ultimo id visto, che può essere quello dell'avviso (revisione 0.3.2:
+# senza id l'avviso si ripeteva a ogni caduta durante la prima risposta).
+# Niente si ripete e il cursore non torna indietro
 s = SSE(f"{events}&notices_after={res['after']}", TOKEN,
-        headers={"Last-Event-ID": str(snap["seq"])})
+        headers={"Last-Event-ID": str(ids[-1])})
 assert wait_until(lambda: "busy" in s.kinds())
 wait_until(lambda: False, 300)
 assert notices(s) == [], s.events
+assert not {"user", "start", "answer", "done"} & set(s.kinds()), s.kinds()
 s.close()
 
 # caricamenti mai inviati: spariscono alla scadenza e all'arresto del server

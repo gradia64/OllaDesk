@@ -38,6 +38,8 @@ function show(view) {
   document.getElementById("copybox")?.remove();   // ripiego di ⧉, legato alla vista
   document.body.classList.toggle("composing", inChat);
   if (view !== "models") stopModelsPoll();
+  // l'invio che crea una chat vale solo per l'apertura immediata di quella chat
+  if (view !== "chat") sentNew = null;
   if (!inChat) {
     $("title").textContent = view === "models" ? "Modelli" : "OllaDesk";
     closeStream();

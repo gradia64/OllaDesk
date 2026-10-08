@@ -969,9 +969,12 @@ class _Handler(BaseHTTPRequestHandler):
             st.active, st.text, st.think, st.dirty = False, "", "", False
         if not new:
             if kind == "notice" and notices_after is not None and seq > notices_after:
-                # avviso del proprio invio, che la copia della chat non contiene:
-                # senza id, per non riportare indietro il Last-Event-ID
-                self._sse(kind, data)
+                # avviso del proprio invio, che la copia della chat non contiene.
+                # Con il suo id: il browser lo rimanda come Last-Event-ID alla
+                # riconnessione, e allora notices_after non vale più (senza id,
+                # durante la prima risposta l'avviso si ripeteva). Il cursore
+                # non torna indietro: after è il massimo fra query e intestazione
+                self._sse(kind, data, seq)
             return
         if kind == "user":
             data = render_message(data)
