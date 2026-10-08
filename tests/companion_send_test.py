@@ -318,17 +318,45 @@ got, _d = jpost("/api/send", {"text": "di nuovo", "model": "finto", "chat_id": c
                               "attachments": [img["id"]]}, TOKEN)
 assert got == 400
 
-# chat nuova con 🌐 acceso e soli allegati: la ricerca salta e il telefono,
-# che apre lo stream solo dopo la risposta, deve vedere l'avviso (prima
-# finiva nel backlog che busy_changed azzera subito dopo)
+# chat nuova con 🌐 acceso e soli allegati: la ricerca salta e il telefono
+# deve vedere l'avviso. Percorso di app.js: invio, poi copia della chat,
+# poi stream con after = seq della copia, che è già oltre l'avviso
+# (revisione 0.3.1: con il solo after l'avviso non arrivava mai)
 st, solo = cc.upload("solo.png", PNG, TOKEN)
 st, res = jpost("/api/send", {"text": "", "model": "finto", "web": True,
                               "attachments": [solo["id"]]}, TOKEN)
 assert st == 200, res
-s = SSE(f"/api/chats/{res['chat_id']}/events?after={res['after']}", TOKEN)
-assert wait_until(lambda: "done" in s.kinds()), s.kinds()
-assert any("Ricerca web saltata" in n["text"] for n in s.of("notice")), s.events
-assert "search" not in s.kinds()
+new_cid = res["chat_id"]
+st, snap = cc.get_json(f"/api/chats/{new_cid}", TOKEN)
+assert st == 200 and snap["seq"] > res["after"], (snap, res)
+assert wait_until(lambda: not engine.busy())
+events = f"/api/chats/{new_cid}/events?after={snap['seq']}"
+
+
+def notices(s):
+    return [n["text"] for n in s.of("notice")]
+
+
+# senza notices_after (client della 0.3.1): l'avviso resta escluso
+s = SSE(events, TOKEN)
+assert wait_until(lambda: "busy" in s.kinds())
+wait_until(lambda: False, 300)
+assert notices(s) == [], s.events
+s.close()
+# con notices_after: arriva una volta, senza id, e nient'altro si ripete
+s = SSE(f"{events}&notices_after={res['after']}", TOKEN)
+assert wait_until(lambda: notices(s)), s.events
+wait_until(lambda: False, 300)
+assert len(notices(s)) == 1 and "Ricerca web saltata" in notices(s)[0], s.events
+assert [e[0] for e in s.events if e[1] == "notice"] == [None]
+assert not {"user", "start", "answer", "done", "search"} & set(s.kinds()), s.kinds()
+s.close()
+# riconnessione dell'EventSource (Last-Event-ID): l'avviso non si ripete
+s = SSE(f"{events}&notices_after={res['after']}", TOKEN,
+        headers={"Last-Event-ID": str(snap["seq"])})
+assert wait_until(lambda: "busy" in s.kinds())
+wait_until(lambda: False, 300)
+assert notices(s) == [], s.events
 s.close()
 
 # caricamenti mai inviati: spariscono alla scadenza e all'arresto del server

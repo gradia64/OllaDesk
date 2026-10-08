@@ -944,7 +944,8 @@ class _Handler(BaseHTTPRequestHandler):
         st.dirty = False
         st.last_sent = time.monotonic()
 
-    def _handle_event(self, ev: tuple, chat_id: str, after: int, st: _StreamState) -> None:
+    def _handle_event(self, ev: tuple, chat_id: str, after: int, st: _StreamState,
+                      notices_after: int | None = None) -> None:
         seq, cid, kind, data = ev
         if cid not in ("", chat_id):
             return
@@ -964,6 +965,10 @@ class _Handler(BaseHTTPRequestHandler):
                 self._flush_answer(st)
             st.active, st.text, st.think, st.dirty = False, "", "", False
         if not new:
+            if kind == "notice" and notices_after is not None and seq > notices_after:
+                # avviso del proprio invio, che la copia della chat non contiene:
+                # senza id, per non riportare indietro il Last-Event-ID
+                self._sse(kind, data)
             return
         if kind == "user":
             data = render_message(data)
@@ -976,7 +981,11 @@ class _Handler(BaseHTTPRequestHandler):
         generali: elenco cambiato e stato occupato.
 
         `after` (query o Last-Event-ID) è l'ultimo evento già noto al
-        client: quelli successivi del backlog vengono rispediti. Il testo
+        client: quelli successivi del backlog vengono rispediti.
+        `notices_after` (solo al primo collegamento, senza Last-Event-ID)
+        rispedisce anche gli avvisi successivi, che la copia della chat non
+        contiene: il telefono che crea una chat la apre dopo l'invio, con
+        `after` già oltre gli avvisi di quell'invio. Il testo
         arriva come HTML già reso, al massimo ogni ANSWER_INTERVAL secondi.
         """
         if self.command == "HEAD":
@@ -989,6 +998,12 @@ class _Handler(BaseHTTPRequestHandler):
             try:
                 after = max(after, int(raw))
             except ValueError:
+                pass
+        notices_after = None
+        if not self.headers.get("Last-Event-ID"):
+            try:
+                notices_after = int(query["notices_after"][0])
+            except (KeyError, ValueError):
                 pass
         hub = self.ctx.hub
         q, backlog, busy = hub.subscribe()
@@ -1004,7 +1019,7 @@ class _Handler(BaseHTTPRequestHandler):
             self.wfile.write(b"retry: 3000\n\n")
             self._sse("busy", busy)
             for ev in backlog:
-                self._handle_event(ev, chat_id, after, st)
+                self._handle_event(ev, chat_id, after, st, notices_after)
             if st.active and st.dirty:
                 self._flush_answer(st)   # testo generato prima del collegamento
             self.wfile.flush()

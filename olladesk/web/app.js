@@ -14,6 +14,7 @@ let busy = false;         // il PC sta elaborando (qualsiasi conversazione)
 let activeHere = false;   // l'elaborazione riguarda la conversazione aperta
 let haveModels = false;
 let atts = [];            // allegati della barra di scrittura: {name, state, id, chip}
+let sentNew = null;       // chat appena creata da qui: {id, after} della risposta all'invio
 const MAX_SIDE = 1600;    // lato lungo delle foto caricate (px)
 
 function store(key, value) {
@@ -345,10 +346,11 @@ function closeStream() {
   activeHere = false;
 }
 
-function openStream(id, after) {
+function openStream(id, after, noticesAfter) {
   if (stream) stream.close();   // lo stato della vista (pending, activeHere) resta
-  const es = new EventSource(
-    "/api/chats/" + encodeURIComponent(id) + "/events?after=" + after);
+  let url = "/api/chats/" + encodeURIComponent(id) + "/events?after=" + after;
+  if (noticesAfter != null) url += "&notices_after=" + noticesAfter;
+  const es = new EventSource(url);
   stream = es;
   const on = (kind, fn) => es.addEventListener(kind, (ev) => {
     if (stream === es) fn(JSON.parse(ev.data));
@@ -626,7 +628,10 @@ async function showChat(id) {
     startPending(chat.state === "search" ? "🌐 Ricerca web in corso" : "");
   }
   updateComposer();
-  openStream(id, chat.seq);
+  // chat appena creata da qui: gli avvisi dell'invio non sono nella copia
+  const na = sentNew && sentNew.id === id ? sentNew.after : null;
+  sentNew = null;
+  openStream(id, chat.seq, na);
   scrollToEnd();
 }
 
@@ -673,6 +678,7 @@ async function send() {
   store("olladesk.model", model);
   if (currentId === null) {
     // conversazione nuova: la vista si apre sull'id assegnato dal PC
+    sentNew = { id: res.chat_id, after: res.after };
     location.hash = "#/c/" + encodeURIComponent(res.chat_id);
   } else {
     activeHere = true;   // gli eventi arrivano dallo stream già aperto
