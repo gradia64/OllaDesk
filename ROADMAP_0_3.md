@@ -65,7 +65,7 @@ Il bump di versione resta al momento del rilascio (fonte unica: `olladesk/__init
 |---|---|
 | Copia di un messaggio dal telefono (⧉) | su HTTP l'API Clipboard non è disponibile: serve il ripiego con selezione del testo |
 | Gestione dei modelli dal telefono (scarica ed elimina) | fattibile con i worker esistenti; scaricare GB dal telefono ha poco senso, priorità bassa |
-| Pulizia degli allegati all'eliminazione di una chat | i file in `attachments/` (foto dal telefono in `companion/`, immagini incollate sul PC) restano anche dopo l'eliminazione della chat; da rimuovere quando nessun'altra chat li usa |
+| Pulizia degli allegati all'eliminazione di una chat | i file in `attachments/` (foto dal telefono in `companion/`, immagini incollate sul PC) restano anche dopo l'eliminazione della chat; da rimuovere quando nessun'altra chat li usa. ☑ Fatto: `config.delete_chat` cancella gli allegati citati solo dalla chat eliminata, e solo dentro `attachments/`; test `test_delete_chat_removes_only_unshared_attachments` |
 
 ## Correzioni per la 0.3.1 (revisione post-rilascio)
 

@@ -204,6 +204,31 @@ def test_chat_split_and_legacy_migration():
             os.environ["XDG_CONFIG_HOME"] = old
 
 
+def test_delete_chat_removes_only_unshared_attachments():
+    from olladesk import config
+    with _isolated_config():
+        att = config.attachments_dir()
+        own, shared = att / "own.png", att / "shared.png"
+        own.write_bytes(b"x")
+        shared.write_bytes(b"x")
+        outside = Path(tempfile.mkdtemp()) / "fuori.png"
+        outside.write_bytes(b"x")
+
+        def chat(cid, paths):
+            meta = [{"path": str(p), "name": p.name, "kind": "image"} for p in paths]
+            return {"id": cid, "title": cid, "model": "m", "updated": 1,
+                    "messages": [{"role": "user", "content": "k", "attachments_meta": meta}]}
+
+        config.save_chat(chat("a", [own, shared, outside]))
+        config.save_chat(chat("b", [shared]))
+        config.delete_chat("a")
+        assert not own.exists()          # usato solo dalla chat eliminata
+        assert shared.exists()           # usato anche da un'altra chat
+        assert outside.exists()          # fuori dalla cartella degli allegati
+        config.delete_chat("b")
+        assert not shared.exists()
+
+
 def _isolated_config():
     """Context manager: XDG_CONFIG_HOME in una cartella temporanea nuova."""
     import contextlib

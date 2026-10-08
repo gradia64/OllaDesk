@@ -250,13 +250,46 @@ def rename_chat(chat_id: str, title: str) -> bool:
     return save_chat(chat)
 
 
+def _attachment_paths(chat: dict | None) -> set[Path]:
+    """Percorsi risolti degli allegati citati dai messaggi di una conversazione."""
+    out: set[Path] = set()
+    for m in (chat or {}).get("messages", []):
+        if not isinstance(m, dict):
+            continue
+        for a in m.get("attachments_meta") or []:
+            p = a.get("path") if isinstance(a, dict) else None
+            if isinstance(p, str) and p:
+                try:
+                    out.add(Path(p).resolve())
+                except (OSError, RuntimeError):
+                    pass
+    return out
+
+
 def delete_chat(chat_id: str) -> None:
+    """Elimina la conversazione e gli allegati che nessun'altra usa.
+
+    Si toccano solo i file dentro la cartella privata degli allegati: un
+    percorso scritto nel JSON non può far cancellare altro.
+    """
+    orphans = _attachment_paths(load_chat(chat_id))
     try:
         (chats_dir() / f"{chat_id}.json").unlink()
     except OSError:
         pass
     index = [e for e in _load_index() if e.get("id") != chat_id]
     _write_json(_chats_index_path(), index)
+    if not orphans:
+        return
+    for e in index:
+        orphans -= _attachment_paths(load_chat(e.get("id", "")))
+    root = attachments_dir().resolve()
+    for p in orphans:
+        if root in p.parents and p.is_file():
+            try:
+                p.unlink()
+            except OSError:
+                pass
 
 
 def attachments_dir() -> Path:
