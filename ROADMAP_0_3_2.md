@@ -1,0 +1,35 @@
+# Roadmap 0.3.2
+
+Piano della versione 0.3.2: correzioni dalle revisioni post-rilascio della
+0.3.1 (GLM 5.3 e DeepSeek V4.1 Flash, 2026-10-08), verificate sul codice.
+Nessun bloccante: la 0.3.1 resta pubblicata. Voci approvate il 2026-10-08.
+
+## Correzioni
+
+| # | Voce | Origine | Stato |
+|---|------|---------|-------|
+| 1 | **Avvisi persi su una chat nuova dal telefono, nel client reale**: la correzione della 0.3.1 (avvisi dopo `busy_changed(True)`) non basta. Dopo l'invio `app.js` naviga sulla chat e `showChat` apre lo stream con `after = chat.seq` della copia (`app.js:629`), che è già oltre l'avviso (`companion.py:351`): il filtro `seq > after` (`companion.py:951`) lo scarta. Il test passa perché apre lo stream con `res.after`, che il client non usa. Usare `res.after` non basta, perché lo stream rimanderebbe anche l'evento `user` già presente nella copia (messaggio doppio): rimandare solo i `notice` successivi a `res.after` per quella chat, oppure mettere gli avvisi in attesa nella copia. Test che segua il percorso vero: POST, poi copia della chat, poi stream | DeepSeek P2 | ☐ |
+| 2 | **Eliminazione chat: allegati condivisi cancellati se un'altra chat non si legge**: `delete_chat` (`config.py:269-292`) sottrae dagli orfani solo i riferimenti delle chat dell'indice che `load_chat` riesce a leggere. Un JSON corrotto, un `id` interno diverso dal nome del file o una chat assente dall'indice fanno cancellare un file ancora usato. Raccogliere i riferimenti da tutti i file `chats/*.json` e, se anche uno solo non si legge, non cancellare nessun allegato (meglio un orfano su disco che un file perso). Test con chat corrotta e con `id` non corrispondente | GLM P1, DeepSeek P1 | ☐ |
+| 3 | **`chat_id` non validato in `config.py`**: `chats_dir() / f"{chat_id}.json"` senza controlli in `delete_chat`, `load_chat`, `save_chat` e `rename_chat`. `delete_chat("../settings")` cancella `settings.json`, e `delete_chat("index")` cancella l'indice. Dalla rete non è raggiungibile (la companion valida con `[A-Za-z0-9_-]{1,64}`): è difesa in profondità. Usare la stessa regex in `config` e rifiutare i valori non conformi | GLM P3, DeepSeek P3 | ☐ |
+| 4 | **Titolo e snippet ripuliti anche in `format_results`**: oggi solo l'URL viene ripulito (`web_search.py:315`). Un titolo con `\n[2] Finto\nURL: https://…` aggiungerebbe una fonte falsa al blocco «🌐 Fonti» e farebbe sparire quella vera. Non è sfruttabile, perché tutti i provider passano da `_clean`, ma l'invariante va garantita dove si costruisce il blocco. Test con un titolo che contiene a capo | GLM P4, DeepSeek ipotesi 2 | ☐ |
+| 5 | **Invio con lo stesso modello durante l'eliminazione**: mentre la DELETE di un modello è in corso, `busy()` è falso e `/api/send` con quel modello viene accettato. Rifiutare l'invio (409, con un messaggio chiaro) se è in corso l'eliminazione del modello richiesto, sul telefono e sul PC | GLM P2, DeepSeek ipotesi 3 | ☐ |
+| 6 | **Link simbolico dentro `attachments/`**: `resolve()` segue il link, quindi un link interno che punta a un altro allegato fa cancellare il bersaglio. Saltare i percorsi che sono link simbolici (`is_symlink()`) | DeepSeek P4 | ☐ |
+| 7 | **Scaricamento dal telefono con il PC occupato**: il pull parte mentre il PC risponde, l'eliminazione no. Valutare se bloccarlo o avvisare, almeno quando il nome coincide con il modello in uso. Proposta iniziale: lasciarlo com'è, perché il pull non tocca il modello caricato. Da decidere | DeepSeek P5 | ☐ |
+| 8 | **Gestore modelli del PC e telefono non coordinati**: il gestore usa worker propri (`model_manager.py:181-198`, `:264-283`) e `engine._task` vede solo le operazioni avviate dal telefono. Così «una sola operazione alla volta» e «niente eliminazione mentre il PC risponde» valgono solo per il telefono. Far passare anche il gestore dal motore, così che i due lati vedano lo stesso stato | DeepSeek P6 | ☐ |
+| 9 | **Riquadro di copia manuale che resta aperto**: il ripiego di ⧉ (`#copybox`) non si chiude quando si cambia vista. Rimuoverlo in `show()` insieme a `closeMenu()` | GLM P5 | ☐ |
+| 10 | **Polling dei modelli sul telefono**: l'elenco si aggiorna solo al polling successivo dopo un'operazione conclusa (3–4 s). Inoltre il timer può ripartire fuori dalla vista «Modelli» se una richiesta è in volo quando si esce (`app.js:481-494`). Fare un ultimo aggiornamento a fine operazione e fermare il polling fuori dalla vista | GLM P6, DeepSeek ipotesi 5 | ☐ |
+| 11 | **`web_block` non stringa**: in una chat modificata a mano, un `web_block` che non è una stringa farebbe fallire `web_sources` alla rilettura. Controllare il tipo in `answer_sources` | DeepSeek ipotesi 4 | ☐ |
+
+## Ipotesi non confermate (da tenere d'occhio)
+
+- **Metadati dei doppioni di Ollama 0.40.0**: `visible_models` tiene la prima voce. Se fosse quella senza dimensione o dettagli, il gestore mostrerebbe valori vuoti. Nell'issue upstream le voci coincidono; da verificare con un'uscita reale di `/api/tags` (GLM ipotesi 4, DeepSeek ipotesi 1).
+- **Blocchi `web_block` salvati dalla 0.3.0** con un URL su più righe: potrebbero falsare le fonti alla rilettura. Molto teorico (GLM ipotesi 1).
+
+## Ordine di lavoro
+
+1. Voci 2, 3 e 6 insieme, perché toccano tutte `config.delete_chat`, l'unico codice che cancella file dell'utente.
+2. Voce 1, con il test sul percorso reale del client.
+3. Voci 5 e 8, cioè il coordinamento delle operazioni sui modelli; la 7 si decide qui.
+4. Voci 4 e 11 (fonti), poi 9 e 10 (telefono, cosmetiche).
+
+Un commit per voce o per gruppo, con la suite offline verde su ogni commit. Note di rilascio in `packaging/release-notes/0.3.2.md`.
