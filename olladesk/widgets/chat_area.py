@@ -32,7 +32,7 @@ from .message import MessageWidget, SystemNoteWidget
 ASSISTANT_MAX_W = 860
 USER_MAX_W = 620
 # larghezza massima della colonna messaggi: centrata quando la finestra è
-# più larga, così nascondere la sidebar non stira il contenuto (→ ROADMAP #7)
+# più larga, così nascondere la sidebar non stira il contenuto
 COLUMN_MAX_W = 900
 
 FILE_FILTER = (
