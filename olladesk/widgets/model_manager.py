@@ -57,6 +57,8 @@ class ModelManagerDialog(QDialog):
         self.changed = False
 
         self._list_worker: ApiWorker | None = None
+        self._refresh_again = False   # richiesto mentre un elenco era in volo
+        self._closing = False
         self._task_seen: tuple | None = None   # (op, name, state) già mostrato
 
         lay = QVBoxLayout(self)
@@ -129,15 +131,29 @@ class ModelManagerDialog(QDialog):
     # ------------------------------------------------------------- elenco
 
     def refresh_models(self) -> None:
+        if self._closing:
+            return
         if self._list_worker is not None:
+            # l'elenco in volo può essere di prima di un'operazione appena
+            # finita: se ne chiede un altro quando arriva
+            self._refresh_again = True
             return
         self.refresh_btn.setEnabled(False)
-        self._list_worker = ApiWorker(self.host, "/api/tags", self)
-        self._list_worker.ready.connect(self._on_models)
-        self._list_worker.failed.connect(self._on_models_failed)
-        self._list_worker.finished.connect(self._list_worker.deleteLater)
-        self._list_worker.finished.connect(lambda: setattr(self, "_list_worker", None))
-        self._list_worker.start()
+        w = ApiWorker(self.host, "/api/tags", self)
+        self._list_worker = w
+        w.ready.connect(self._on_models)
+        w.failed.connect(self._on_models_failed)
+        w.finished.connect(w.deleteLater)
+        w.finished.connect(lambda: self._on_list_finished(w))
+        w.start()
+
+    def _on_list_finished(self, w) -> None:
+        if self._list_worker is not w:
+            return
+        self._list_worker = None
+        if self._refresh_again:
+            self._refresh_again = False
+            self.refresh_models()
 
     def _on_models(self, data: object) -> None:
         self.refresh_btn.setEnabled(True)
@@ -258,6 +274,7 @@ class ModelManagerDialog(QDialog):
         # chiusura per qualunque via (Chiudi, Esc, X): nessun worker deve
         # sopravvivere legato al dialogo, che il chiamante poi distrugge.
         # L'operazione sui modelli appartiene al motore e continua
+        self._closing = True
         for sig, slot in ((self.engine.model_task_changed, self._on_task),
                           (self.engine.busy_changed, self._update_buttons)):
             try:

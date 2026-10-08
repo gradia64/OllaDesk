@@ -246,6 +246,37 @@ fake.pull_release.set()
 assert wait_until(lambda: "in-fondo:1b" in engine.model_names())
 print("8. gestore modelli del PC coordinato con il telefono OK")
 
+# 9. aggiornamento chiesto mentre un elenco è in volo: si rifà alla fine
+# (revisione 0.3.2: veniva ignorato e l'elenco restava quello di prima)
+fake.tags_release.clear()
+dlg = ModelManagerDialog(engine)          # /api/tags in volo con l'elenco di adesso
+assert wait_until(lambda: dlg._list_worker is not None)
+wait_until(lambda: False, 200)            # la richiesta ha già letto l'elenco
+fake.models.append("tardivo:1b")
+dlg.refresh_models()                      # come a fine operazione
+fake.tags_release.set()
+
+
+def rows(d):
+    return [d.tree.topLevelItem(i).data(0, 0x0100) for i in range(d.tree.topLevelItemCount())]
+
+
+assert wait_until(lambda: "tardivo:1b" in rows(dlg)), rows(dlg)
+assert wait_until(lambda: dlg._list_worker is None) and not dlg._refresh_again
+# a dialogo chiuso non parte nessun nuovo elenco
+fake.tags_release.clear()
+dlg.refresh_models()
+assert wait_until(lambda: dlg._list_worker is not None)
+dlg.refresh_models()                      # rinviato alla fine di quello in volo
+in_flight = dlg._list_worker
+dlg.reject()
+fake.tags_release.set()
+wait_until(lambda: False, 300)
+assert dlg._list_worker in (None, in_flight), "nuovo elenco dopo la chiusura"
+dlg.deleteLater()
+wait_until(lambda: False, 100)
+print("9. elenco del gestore aggiornato anche con una richiesta in volo OK")
+
 srv.stop()
 wait_until(lambda: False, 200)
 fake.close()

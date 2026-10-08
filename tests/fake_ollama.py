@@ -23,6 +23,8 @@ class FakeOllama:
         self.pull_release.set()
         self.delete_release = threading.Event()   # sblocca un /api/delete in attesa
         self.delete_release.set()
+        self.tags_release = threading.Event()   # trattiene /api/tags (elenco già letto)
+        self.tags_release.set()
         self.deleted: list[str] = []
         fake = self
 
@@ -46,10 +48,12 @@ class FakeOllama:
                 if self.path == "/api/version":
                     self._json({"version": "0.0.0-finto"})
                 elif self.path == "/api/tags":
-                    self._json({"models": [
+                    tags = {"models": [
                         {"name": n, "details": {"parameter_size": "1B", "quantization_level": "Q4"}}
                         for n in fake.models
-                    ]})
+                    ]}
+                    fake.tags_release.wait(10)   # risposta con l'elenco di prima
+                    self._json(tags)
                 else:
                     self.send_error(404)
 
@@ -117,4 +121,5 @@ class FakeOllama:
         self.release.set()
         self.pull_release.set()
         self.delete_release.set()
+        self.tags_release.set()
         self._server.shutdown()
