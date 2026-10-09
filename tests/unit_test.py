@@ -132,6 +132,15 @@ def test_context_build_api_content():
     assert "Risultati della ricerca web" not in short2
 
 
+def test_context_invalid_attachment_in_previous_turn():
+    # come nel ramo include_full=True, le voci che non sono dict vanno ignorate
+    msg = {"display": "domanda",
+           "attachments_meta": ["note.txt", None, {"name": "ok.txt", "path": "/x/ok.txt"}]}
+    short, warnings = build_api_content(msg, include_full=False)
+    assert "ok.txt" in short and "note.txt" not in short
+    assert not warnings
+
+
 # --------------------------------------------------------------- updater.py
 
 def test_version_parsing():

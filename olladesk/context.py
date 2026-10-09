@@ -179,7 +179,8 @@ def build_api_content(msg: dict, include_full: bool) -> tuple[str, list[str]]:
         if web_block:
             parts.append(f"\n---\n{web_block}\n---")
     else:
-        names = [a.get("name") for a in (msg.get("attachments_meta") or []) if a.get("name")]
+        names = [a["name"] for a in (msg.get("attachments_meta") or [])
+                 if isinstance(a, dict) and a.get("name")]
         if names:
             parts.append("\n[allegati inviati in un turno precedente: " + ", ".join(names) + "]")
         if msg.get("web_block"):
