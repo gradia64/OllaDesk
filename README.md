@@ -247,7 +247,7 @@ Dopo l'import controlla che l'impronta mostrata da gpg coincida, poi:
 
 ```bash
 gpg --import olladesk-release-key.asc
-gpg --verify olladesk_0.3.2_all.deb.sig olladesk_0.3.2_all.deb
+gpg --verify olladesk_0.3.3_all.deb.sig olladesk_0.3.3_all.deb
 # oppure tutto in una volta:
 gpg --verify SHA256SUMS.sig SHA256SUMS && sha256sum -c --ignore-missing SHA256SUMS
 ```
