@@ -437,7 +437,8 @@ tests/companion_client.py   client HTTP/SSE per i test della companion
 tests/release_tools_test.py script di rilascio (chiavi e repository temporanei)
 io.github.gradia64.OllaDesk.desktop  voce per il menu applicazioni (ID dell'app)
 packaging/                  file comuni .deb/Arch, modello PKGBUILD, chiave di release
-scripts/                    build (.deb, sorgenti, Arch), firma, pubblicazione AUR, icone web
+scripts/                    build (.deb, sorgenti, Arch), firma, pubblicazione AUR, icone web,
+                            screenshot (docs/screenshots/, per AppStream)
 ```
 
 ## Licenza
