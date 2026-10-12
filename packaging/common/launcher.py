@@ -1,6 +1,7 @@
-"""Avvio di OllaDesk installato da pacchetto (.deb o Arch).
+"""Avvio di OllaDesk installato da pacchetto (.deb, Arch o AppImage).
 
-Installato in /usr/share/olladesk/launcher.py ed eseguito da /usr/bin/olladesk.
+Installato in /usr/share/olladesk/launcher.py ed eseguito da /usr/bin/olladesk
+(nell'AppImage dall'AppRun, con il Python incluso).
 
 NON `python3 -m olladesk`: con -m Python mette la cartella corrente in
 sys.path[0], davanti a tutto, e un json.py (o un checkout di olladesk/) nella

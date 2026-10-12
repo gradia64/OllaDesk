@@ -1,0 +1,13 @@
+# Dipendenze dell'AppImage (scripts/build-appimage.sh). Versioni fissate a
+# mano, con almeno due settimane di vita; requirements.txt con gli hash si
+# rigenera con: scripts/build-appimage.sh --lock. Le dipendenze indirette
+# (cryptography, cffi, jaraco.*…) le sceglie pip al momento del --lock:
+# controllarne le versioni nel diff prima del commit.
+#
+# Solo PySide6-Essentials: il pacchetto PySide6 completo porta anche gli
+# Addons (WebEngine, 3D, Multimedia…), centinaia di MB che OllaDesk non usa.
+# Le wheel di PySide6 richiedono glibc >= 2.34 (manylinux_2_34).
+PySide6-Essentials==6.11.2
+pypdf==6.19.0
+keyring==25.7.0
+qrcode==8.2

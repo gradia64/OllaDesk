@@ -1,0 +1,216 @@
+#!/bin/bash
+# Costruisce l'AppImage di OllaDesk: dist/OllaDesk-<versione>-x86_64.AppImage
+#
+# Contenuto (AppDir):
+#   AppRun                           avvio (packaging/appimage/AppRun)
+#   usr/python/                      Python portatile (python-build-standalone)
+#                                    con PySide6-Essentials, pypdf, keyring
+#                                    (Secret Service via jeepney) e qrcode
+#   usr/share/olladesk/olladesk/     pacchetto Python, marcatore «appimage»
+#   usr/share/olladesk/launcher.py   lo stesso avvio del .deb e del PKGBUILD
+#   usr/share/{applications,icons,metainfo}/  e in cima .desktop e icona
+#
+# Tutto ciò che si scarica ha la versione e lo SHA-256 fissati qui o in
+# packaging/appimage/requirements.txt (pip --require-hashes) e passa per
+# build/appimage/downloads/. La versione è letta da olladesk/__init__.py.
+#
+# Uso:  scripts/build-appimage.sh          costruisce l'AppImage
+#       scripts/build-appimage.sh --lock   rigenera requirements.txt con gli
+#                                          hash da requirements.in
+#
+# Le wheel di PySide6 richiedono glibc >= 2.34 (Debian 12, Ubuntu 22.04,
+# Fedora 35 o più recenti). Serve solo x86_64.
+# Strumenti richiesti: curl, sha256sum, dpkg-deb, binutils (readelf, objdump),
+# git; appstreamcli è facoltativo (validazione dei metadati).
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
+
+APP_ID="io.github.gradia64.OllaDesk"
+ARCH="x86_64"
+
+PBS_RELEASE="20260929"
+PBS_PYTHON="3.12.14"
+PBS_FILE="cpython-${PBS_PYTHON}+${PBS_RELEASE}-${ARCH}-unknown-linux-gnu-install_only_stripped.tar.gz"
+PBS_URL="https://github.com/astral-sh/python-build-standalone/releases/download/${PBS_RELEASE}/${PBS_FILE}"
+PBS_SHA256="ef605200f8174e87ecfc308e52a88127543f85dd5c940dc5e92cab244b98a003"
+
+APPIMAGETOOL_VERSION="1.9.1"
+APPIMAGETOOL_URL="https://github.com/AppImage/appimagetool/releases/download/${APPIMAGETOOL_VERSION}/appimagetool-${ARCH}.AppImage"
+APPIMAGETOOL_SHA256="ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0"
+
+RUNTIME_VERSION="20251108"
+RUNTIME_URL="https://github.com/AppImage/type2-runtime/releases/download/${RUNTIME_VERSION}/runtime-${ARCH}"
+RUNTIME_SHA256="2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d"
+
+WORK="$ROOT/build/appimage"
+DOWNLOADS="$WORK/downloads"
+REQ_IN="packaging/appimage/requirements.in"
+REQ_TXT="packaging/appimage/requirements.txt"
+
+if [ "$(uname -m)" != "$ARCH" ]; then
+    echo "l'AppImage si costruisce solo su $ARCH" >&2
+    exit 1
+fi
+
+# scarica una volta sola e verifica lo SHA-256 a ogni uso
+fetch() {
+    local url="$1" sha="$2" out="$DOWNLOADS/$(basename "$1")"
+    mkdir -p "$DOWNLOADS"
+    if [ ! -f "$out" ]; then
+        curl -fsSL --proto '=https' --tlsv1.2 -o "$out.part" "$url"
+        mv "$out.part" "$out"
+    fi
+    if ! echo "$sha  $out" | sha256sum -c --quiet -; then
+        echo "SHA-256 errato per $out: cancellalo e riprova" >&2
+        exit 1
+    fi
+    printf '%s\n' "$out"
+}
+
+# Python portatile estratto in $1 (python/ dentro l'archivio)
+unpack_python() {
+    local tarball
+    tarball="$(fetch "$PBS_URL" "$PBS_SHA256")"
+    mkdir -p "$1"
+    tar -xzf "$tarball" -C "$1" --strip-components=1
+}
+
+if [ "${1:-}" = "--lock" ]; then
+    TMP="$(mktemp -d)"
+    trap 'rm -rf "$TMP"' EXIT
+    unpack_python "$TMP/python"
+    # risoluzione con lo stesso Python e la stessa piattaforma dell'AppImage:
+    # il report di pip ha lo SHA-256 di ogni wheel scelta
+    "$TMP/python/bin/python3" -m pip install --isolated --quiet --dry-run \
+        --ignore-installed --only-binary=:all: --report "$TMP/report.json" -r "$REQ_IN"
+    "$TMP/python/bin/python3" - "$TMP/report.json" > "$REQ_TXT" <<'EOF'
+import json, sys
+report = json.load(open(sys.argv[1]))
+print("# Generato da scripts/build-appimage.sh --lock: non modificare a mano.")
+print("# Versioni da packaging/appimage/requirements.in, dipendenze risolte da pip.")
+for item in sorted(report["install"], key=lambda i: i["metadata"]["name"].lower()):
+    meta, info = item["metadata"], item["download_info"]
+    sha = info["archive_info"]["hashes"]["sha256"]
+    print(f'{meta["name"]}=={meta["version"]} \\\n    --hash=sha256:{sha}')
+EOF
+    echo "scritto $REQ_TXT"
+    exit 0
+fi
+
+VERSION="$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' olladesk/__init__.py)"
+if [ -z "$VERSION" ]; then
+    echo "versione non trovata in olladesk/__init__.py" >&2
+    exit 1
+fi
+
+# build riproducibile: mtime, .pyc e squashfs dall'ultimo commit
+if [ -z "${SOURCE_DATE_EPOCH:-}" ]; then
+    SOURCE_DATE_EPOCH="$(git log -1 --format=%ct 2>/dev/null || date +%s)"
+fi
+export SOURCE_DATE_EPOCH
+
+APPDIR="$WORK/AppDir"
+rm -rf "$APPDIR"
+mkdir -p "$APPDIR"
+
+# --- Python e dipendenze ----------------------------------------------------
+unpack_python "$APPDIR/usr/python"
+PY="$APPDIR/usr/python/bin/python3"
+"$PY" -m pip install --isolated --quiet --no-cache-dir --no-compile \
+    --require-hashes --only-binary=:all: --no-deps -r "$REQ_TXT"
+
+SITE="$("$PY" -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')"
+STDLIB="$("$PY" -c 'import sysconfig; print(sysconfig.get_paths()["stdlib"])')"
+
+# pip, Tk, IDLE e i test servono solo a costruire o non servono affatto
+"$PY" -m pip uninstall --isolated --quiet --yes pip
+rm -rf "$STDLIB"/{ensurepip,idlelib,tkinter,turtledemo,test,unittest/test,lib2to3} \
+       "$STDLIB"/lib-dynload/_tkinter*.so \
+       "$APPDIR"/usr/python/lib/{tcl,tk,itcl,thread}* \
+       "$APPDIR"/usr/python/lib/libtcl* "$APPDIR"/usr/python/lib/libtk* \
+       "$APPDIR"/usr/python/share \
+       "$APPDIR"/usr/python/include
+find "$APPDIR/usr/python/bin" -mindepth 1 \
+    ! -name python3 ! -name "python${PBS_PYTHON%.*}" -delete
+
+# --- Qt: solo ciò che OllaDesk usa -----------------------------------------
+"$PY" -E -s packaging/appimage/trim-qt.py "$SITE/PySide6"
+
+# Il plugin X11 di Qt 6 vuole le librerie xcb-util, che mancano in molte
+# installazioni (libxcb-cursor0 su Ubuntu 22.04, per esempio): vanno nella
+# cartella delle librerie Qt, dove il RUNPATH dei plugin le trova. Vengono
+# dai pacchetti di Ubuntu 22.04 (glibc 2.35, simboli fino alla 2.34), non dal
+# sistema che costruisce: quelle di Debian sid o Ubuntu 24.04 chiedono una
+# glibc più recente. Le librerie di base (libxcb, libX11, GL, fontconfig,
+# Wayland…) restano quelle del sistema, come in ogni AppImage.
+UBUNTU_POOL="https://archive.ubuntu.com/ubuntu/pool"
+XCB_DEBS=(
+    "universe/x/xcb-util-cursor/libxcb-cursor0_0.1.1-4ubuntu1_amd64.deb c9b5d1ad4af57397b1bd77e0a92750e34419def134c0282a0836ae9efc07cf64 libxcb-cursor.so.0"
+    "main/x/xcb-util-wm/libxcb-icccm4_0.4.1-1.1build2_amd64.deb 4dfe14a0ce681b823b740dabb3de84b3ce0958c9a404af61823b11f64047b0ef libxcb-icccm.so.4"
+    "main/x/xcb-util-image/libxcb-image0_0.4.0-2_amd64.deb b52babc3b4f2aa5241cac3a7888ce3b37d25a7f18867cae180e8cd11ec945cb9 libxcb-image.so.0"
+    "main/x/xcb-util-keysyms/libxcb-keysyms1_0.4.0-1build3_amd64.deb 1d62f96a793cc1aa0df860de3f7d83edea2fa461d97e2b3d4d7f7e7a10e55f42 libxcb-keysyms.so.1"
+    "main/x/xcb-util-renderutil/libxcb-render-util0_0.3.9-1build3_amd64.deb f87659a2369430ed2acb1cdae54a06fa9d60727a6545594e213173ddb4377727 libxcb-render-util.so.0"
+    "main/x/xcb-util/libxcb-util1_0.4.0-1build2_amd64.deb 237d51a378b93c1669ff193084ebeb6422fe1e2ea96c2e9a0099eac40992a345 libxcb-util.so.1"
+)
+XCB_TMP="$WORK/xcb"
+rm -rf "$XCB_TMP"
+for entry in "${XCB_DEBS[@]}"; do
+    read -r path sha so <<< "$entry"
+    deb="$(fetch "$UBUNTU_POOL/$path" "$sha")"
+    dpkg-deb -x "$deb" "$XCB_TMP"
+    install -m 644 "$(readlink -f "$XCB_TMP/usr/lib/x86_64-linux-gnu/$so")" "$SITE/PySide6/Qt/lib/$so"
+done
+rm -rf "$XCB_TMP"
+
+# --- OllaDesk -----------------------------------------------------------------
+SHARE="$APPDIR/usr/share/olladesk"
+mkdir -p "$SHARE"
+cp -r olladesk "$SHARE/olladesk"
+find "$SHARE" -type d -name __pycache__ -exec rm -rf {} +
+find "$SHARE" -type f -name '*.pyc' -delete
+# marcatore letto da app_update.install_method(): vale anche per l'AppImage
+# estratta, che non ha APPIMAGE e APPDIR nell'ambiente
+printf 'appimage\n' > "$SHARE/olladesk/_packaging"
+install -m 644 packaging/common/launcher.py "$SHARE/launcher.py"
+install -m 755 packaging/appimage/AppRun "$APPDIR/AppRun"
+
+# --- integrazione desktop -----------------------------------------------------
+install -D -m 644 "$APP_ID.desktop" "$APPDIR/usr/share/applications/$APP_ID.desktop"
+install -D -m 644 olladesk/assets/olladesk.svg \
+    "$APPDIR/usr/share/icons/hicolor/scalable/apps/$APP_ID.svg"
+install -D -m 644 "$APP_ID.metainfo.xml" "$APPDIR/usr/share/metainfo/$APP_ID.metainfo.xml"
+# appimagetool (e AppImageHub) cercano ancora il vecchio nome .appdata.xml
+ln -s "$APP_ID.metainfo.xml" "$APPDIR/usr/share/metainfo/$APP_ID.appdata.xml"
+ln -s "usr/share/applications/$APP_ID.desktop" "$APPDIR/$APP_ID.desktop"
+ln -s "usr/share/icons/hicolor/scalable/apps/$APP_ID.svg" "$APPDIR/$APP_ID.svg"
+ln -s "$APP_ID.svg" "$APPDIR/.DirIcon"
+
+# --- bytecode e date --------------------------------------------------------
+# l'immagine è in sola lettura: senza .pyc Python ricompilerebbe tutto a ogni
+# avvio. unchecked-hash: .pyc identici a ogni build, validi senza mtime.
+# Con -q compileall stampa solo gli errori
+"$PY" -E -s -m compileall -q -j 0 --invalidation-mode unchecked-hash \
+    "$APPDIR/usr/python/lib" "$SHARE"
+find "$APPDIR" -exec touch -h -d "@$SOURCE_DATE_EPOCH" {} +
+
+# --- compatibilità: nessun file oltre glibc 2.34, come le wheel di PySide6 ---
+"$PY" -E -s "$ROOT/packaging/appimage/check-glibc.py" "$APPDIR" 2.34
+
+# --- immagine -----------------------------------------------------------------
+TOOL="$(fetch "$APPIMAGETOOL_URL" "$APPIMAGETOOL_SHA256")"
+RUNTIME="$(fetch "$RUNTIME_URL" "$RUNTIME_SHA256")"
+chmod +x "$TOOL"
+mkdir -p dist
+OUT="dist/OllaDesk-${VERSION}-${ARCH}.AppImage"
+rm -f "$OUT"
+# metadati validati qui senza rete: appimagetool userebbe appstreamcli con
+# la rete, e gli screenshot su GitHub esistono solo dopo il push
+if command -v appstreamcli >/dev/null; then
+    appstreamcli validate-tree --no-net "$APPDIR" >/dev/null
+fi
+# extract-and-run: niente FUSE richiesto per appimagetool (CI, container)
+ARCH="$ARCH" APPIMAGE_EXTRACT_AND_RUN=1 "$TOOL" --no-appstream \
+    --runtime-file "$RUNTIME" "$APPDIR" "$OUT" >/dev/null
+echo "$OUT ($(du -h "$OUT" | cut -f1))"

@@ -1,0 +1,13 @@
+#!/bin/sh
+# Avvio dell'AppImage di OllaDesk. Il runtime monta l'immagine e imposta
+# APPIMAGE (il file .AppImage) e APPDIR (il punto di montaggio): sono le due
+# variabili che app_update.install_method() usa per riconoscere l'AppImage.
+HERE="$(dirname "$(readlink -f "$0")")"
+
+# solo il Python e il Qt dell'AppImage: niente moduli, plugin Qt o
+# impostazioni del sistema, che potrebbero essere di versioni diverse
+unset PYTHONHOME PYTHONPATH PYTHONSTARTUP \
+      QT_PLUGIN_PATH QT_QPA_PLATFORM_PLUGIN_PATH QML2_IMPORT_PATH
+
+# -E ignora le altre variabili PYTHON*, -s i pacchetti in ~/.local
+exec "$HERE/usr/python/bin/python3" -E -s "$HERE/usr/share/olladesk/launcher.py" "$@"

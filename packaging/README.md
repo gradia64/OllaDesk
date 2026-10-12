@@ -291,6 +291,7 @@ Tutti gli script funzionano anche in locale, con gli stessi risultati della CI.
 | `scripts/screenshots.py` | screenshot di `docs/screenshots/` (AppStream, README) in un ambiente isolato |
 | `scripts/build-source.sh [commit]` | `dist/olladesk-X.Y.Z.tar.gz` da `git archive` (riproducibile) |
 | `scripts/build-deb.sh` | `dist/olladesk_X.Y.Z_all.deb` (riproducibile) |
+| `scripts/build-appimage.sh [--lock]` | `dist/OllaDesk-X.Y.Z-x86_64.AppImage` (riproducibile; dipendenze in `packaging/appimage/`, `--lock` rigenera gli hash) |
 | `scripts/sign-release.sh [dir]` | firme `.sig` + `SHA256SUMS` con la sottochiave della CI; verifica con la sola chiave pubblica del repository |
 | `scripts/prepare-aur.sh` | `build/aur/PKGBUILD` da `packaging/arch/PKGBUILD.in` |
 | `scripts/build-arch.sh` | build dal tag firmato e controlli del pacchetto Arch (come root in un container Arch) |
