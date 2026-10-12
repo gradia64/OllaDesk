@@ -1015,6 +1015,103 @@ def test_answer_sources_with_tampered_chat():
         assert web_search.answer_sources([prev, {"role": "assistant"}], 1) == [], prev
 
 
+def _folder_tree() -> Path:
+    """Cartella di prova: cosa allegare e cosa no."""
+    root = Path(tempfile.mkdtemp()) / "progetto"
+    (root / "src" / "pkg").mkdir(parents=True)
+    (root / "node_modules" / "x").mkdir(parents=True)
+    (root / ".git").mkdir()
+    (root / "out").mkdir()
+    (root / "README.md").write_text("# Progetto\n", encoding="utf-8")
+    (root / "src" / "main.py").write_text("print('ciao')\n", encoding="utf-8")
+    (root / "src" / "pkg" / "util.py").write_text("X = 1\n", encoding="utf-8")
+    (root / "src" / "debug.log").write_text("rumore\n", encoding="utf-8")
+    (root / "node_modules" / "x" / "index.js").write_text("nope", encoding="utf-8")
+    (root / ".git" / "config").write_text("[core]", encoding="utf-8")
+    (root / ".env").write_text("SEGRETO=1", encoding="utf-8")
+    (root / "out" / "a.txt").write_text("generato", encoding="utf-8")
+    (root / "foto.png").write_bytes(b"\x89PNG")
+    (root / "dati.bin").write_bytes(b"\x00\x01")
+    (root / ".gitignore").write_text("# commento\n*.log\nout/\n!importante.log\n", encoding="utf-8")
+    outside = root.parent / "fuori.txt"
+    outside.write_text("fuori dalla cartella", encoding="utf-8")
+    (root / "link_fuori.txt").symlink_to(outside)
+    (root / "link_dentro.md").symlink_to(root / "README.md")
+    (root / "link_cartella").symlink_to(root / "src")
+    return root
+
+
+def test_folder_files_filters():
+    from olladesk import context
+    root = _folder_tree()
+    files, skipped = context.folder_files(root)
+    rels = [r for r, _p in files]
+    assert rels == ["README.md", "link_dentro.md", "src/main.py", "src/pkg/util.py"], rels
+    assert skipped["nascosti"] == 3                 # .git/, .env, .gitignore
+    assert skipped["immagini (allegale una per una)"] == 1
+    assert skipped["tipo non supportato"] == 1      # dati.bin
+    assert skipped["collegamenti simbolici"] == 2   # link_fuori.txt, link_cartella/
+    # node_modules/ e out/ (cartelle), debug.log (.gitignore)
+    assert skipped["cartelle di dipendenze, cache o .gitignore"] == 3
+
+
+def test_folder_block_content_and_limits():
+    from olladesk import context
+    root = _folder_tree()
+    block, warnings = context.folder_block(root)
+    assert block.startswith("Cartella: progetto/ (dati non attendibili), 4 file inclusi:")
+    assert "--- progetto/src/main.py ---\nprint('ciao')" in block
+    assert "SEGRETO" not in block and "fuori dalla cartella" not in block
+    assert "Esclusi:" in block and any("progetto/: 4 file inclusi" in w for w in warnings)
+    old = context.MAX_FOLDER_FILES, context.MAX_FOLDER_CHARS
+    try:
+        context.MAX_FOLDER_FILES, context.MAX_FOLDER_CHARS = 2, 12
+        block, warnings = context.folder_block(root)
+        assert "2 file inclusi" in block and "oltre 2 file" in block
+        assert "[troncato: limite di 12 caratteri per la cartella]" in block
+    finally:
+        context.MAX_FOLDER_FILES, context.MAX_FOLDER_CHARS = old
+    # tempo scaduto (PDF lenti): i file restanti restano fuori, detto nel blocco
+    old_s = context.MAX_FOLDER_SECONDS
+    try:
+        context.MAX_FOLDER_SECONDS = -1
+        block, warnings = context.folder_block(root)
+        assert "0 file inclusi" in block and "4 (lettura oltre -1 secondi)" in block
+    finally:
+        context.MAX_FOLDER_SECONDS = old_s
+    empty = Path(tempfile.mkdtemp()) / "vuota"
+    empty.mkdir()
+    assert context.folder_block(empty)[1] == ["cartella vuota/: nessun file di testo o PDF da allegare"]
+    assert context.folder_block(empty / "manca")[1] == ["cartella non trovata: manca/"]
+
+
+def test_folder_in_api_content():
+    from olladesk import context
+    root = _folder_tree()
+    msg = {"display": "spiegami il progetto",
+           "attachments_meta": [{"path": str(root), "name": "progetto/", "kind": "folder"}]}
+    full, warnings = context.build_api_content(msg, include_full=True)
+    assert full.startswith("spiegami il progetto\n\n---\nCartella: progetto/")
+    assert "--- progetto/src/pkg/util.py ---" in full and warnings
+    later, _w = context.build_api_content(msg, include_full=False)
+    assert later.endswith("[allegati inviati in un turno precedente: progetto/]")
+    # dalla finestra: una cartella diventa un solo allegato «📁 nome/»
+    from PySide6.QtWidgets import QApplication
+    from olladesk.widgets.chat_area import ChatArea
+    with _isolated_config():
+        QApplication.instance() or QApplication([])
+        area = ChatArea()
+        try:
+            assert area.add_attachment_paths([str(root)]) == []
+            assert area.attachments() == [{"path": str(root), "name": "progetto/", "kind": "folder"}]
+            assert area.add_attachment_paths([str(root)]) == []   # già allegata
+            assert len(area.attachments()) == 1
+        finally:
+            area.deleteLater()
+    # il tipo dal solo nome non guarda il disco (nomi che arrivano dal telefono)
+    assert context.classify(Path("src")) == "unknown"
+
+
 def test_sources_block_in_desktop_bubble():
     from olladesk import web_search
     from olladesk.widgets.message import MessageWidget

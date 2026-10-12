@@ -9,12 +9,13 @@ from __future__ import annotations
 import uuid
 from pathlib import Path
 
-from PySide6.QtCore import QEvent, QSize, Qt, QTimer, Signal
+from PySide6.QtCore import QEvent, QPoint, QSize, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QFileDialog,
     QFrame,
     QHBoxLayout,
     QLabel,
+    QMenu,
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
@@ -189,9 +190,11 @@ class ChatArea(QWidget):
 
         self.clip_btn = QToolButton(self.input_frame)
         self.clip_btn.setText("📎")
-        self.clip_btn.setToolTip("Allega file come contesto (testo, codice, PDF, immagini)")
+        self.clip_btn.setToolTip(
+            "Allega come contesto file (testo, codice, PDF, immagini) o una cartella"
+        )
         self.clip_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.clip_btn.clicked.connect(self._pick_files)
+        self.clip_btn.clicked.connect(self._attach_menu)
         fl.addWidget(self.clip_btn)
 
         self.web_btn = QToolButton(self.input_frame)
@@ -514,6 +517,18 @@ class ChatArea(QWidget):
 
     # ------------------------------------------------------------- allegati
 
+    def _attach_menu(self) -> None:
+        menu = QMenu(self)
+        menu.addAction("📄  File…", self._pick_files)
+        menu.addAction("📁  Cartella…", self._pick_folder)
+        menu.exec(self.clip_btn.mapToGlobal(self.clip_btn.rect().topLeft()
+                                            - QPoint(0, menu.sizeHint().height())))
+
+    def _pick_folder(self) -> None:
+        path = QFileDialog.getExistingDirectory(self, "Allega cartella")
+        if path:
+            self.add_attachment_paths([path])
+
     def _pick_files(self) -> None:
         paths, _f = QFileDialog.getOpenFileNames(self, "Allega file", "", FILE_FILTER)
         if paths:
@@ -529,15 +544,16 @@ class ChatArea(QWidget):
         known = {a["path"] for a in self._attachments}
         for s in paths:
             p = Path(s).expanduser()
-            kind = context.classify(p)
+            kind = "folder" if p.is_dir() else context.classify(p)
             if str(p) in known:
                 continue   # già allegato: ignora senza avvisare
             if kind == "unknown" or not p.exists():
                 rejected.append(p.name)
                 continue
-            self._attachments.append(
-                {"path": str(p), "name": p.name, "kind": kind}
-            )
+            # la barra finale distingue una cartella da un file con lo
+            # stesso nome, nei chip e nei segnaposto dei turni precedenti
+            name = (p.name or str(p)) + "/" if kind == "folder" else p.name
+            self._attachments.append({"path": str(p), "name": name, "kind": kind})
         self._refresh_attach_row()
         return rejected
 
@@ -547,7 +563,7 @@ class ChatArea(QWidget):
             if item.widget():
                 item.widget().deleteLater()
         for idx, att in enumerate(self._attachments):
-            icon = "🖼" if att["kind"] == "image" else "📄"
+            icon = {"image": "🖼", "folder": "📁"}.get(att["kind"], "📄")
             chip = QWidget(self.attach_row)
             lay = QHBoxLayout(chip)
             lay.setContentsMargins(8, 2, 4, 2)

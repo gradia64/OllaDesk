@@ -307,6 +307,28 @@ for c in list(engine.chats()):
 assert not any(c["archived"] for c in engine.chats())
 print("8a. archivio: flag, ripresa, archiviazione automatica OK")
 
+# cartella come contesto: un solo allegato, espanso nel testo per Ollama
+folder = os.path.join(tempfile.mkdtemp(), "progetto")
+os.makedirs(os.path.join(folder, "src"))
+with open(os.path.join(folder, "src", "main.py"), "w", encoding="utf-8") as fh:
+    fh.write("print('dalla cartella')\n")
+with open(os.path.join(folder, "foto.png"), "wb") as fh:
+    fh.write(b"\x89PNG")
+events.clear()
+cf = engine.send(None, "cosa fa?", "finto",
+                 attachments=[{"path": folder, "name": "progetto/", "kind": "folder"}])
+assert wait_until(lambda: not engine.busy())
+sent = payloads[-1]["messages"][-1]
+assert "--- progetto/src/main.py ---\nprint('dalla cartella')" in sent["content"]
+assert "images" not in sent   # le immagini della cartella non partono
+saved = config.load_chat(cf)["messages"][0]
+assert saved["attachments_meta"] == [{"path": folder, "name": "progetto/", "kind": "folder"}]
+assert "dalla cartella" not in str(saved)   # nel file della chat solo il percorso
+assert any("1 esclusi (immagini" in e[2] for e in events if e[0] == "notice" and e[1] == cf)
+engine.delete_chat(cf)
+assert os.path.isdir(folder)   # eliminare la chat non tocca la cartella
+print("8b. cartella come contesto OK")
+
 engine.rename_chat(cid, "  rinominata  ")
 assert engine.chat(cid)["title"] == "rinominata"
 assert config.load_chat(cid)["title"] == "rinominata"
