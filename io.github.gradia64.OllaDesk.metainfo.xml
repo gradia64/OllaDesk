@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Metadati AppStream di OllaDesk: centri software (Discover, GNOME Software),
+     AppImage e, dalla 0.4.0, Flathub. Testi in inglese con la traduzione
+     italiana (xml:lang="it"), come chiede Flathub. L'elenco delle release
+     si rigenera con scripts/metainfo-releases.py; la CI lo controlla insieme
+     ad appstreamcli validate. -->
+<component type="desktop-application">
+  <id>io.github.gradia64.OllaDesk</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+
+  <name>OllaDesk</name>
+  <summary>Chat with your local AI models through Ollama</summary>
+  <summary xml:lang="it">Chatta in locale con i tuoi modelli LLM tramite Ollama</summary>
+
+  <developer id="io.github.gradia64">
+    <name>gradia</name>
+  </developer>
+
+  <description>
+    <p>
+      OllaDesk is a native desktop client for Ollama. Chat with the language
+      models running on your computer, attach documents and images, and
+      manage your models, without your conversations leaving your machine.
+    </p>
+    <p xml:lang="it">
+      OllaDesk è un client desktop nativo per Ollama. Chatta con i modelli
+      linguistici che girano sul tuo computer, allega documenti e immagini e
+      gestisci i tuoi modelli, senza che le conversazioni lascino la tua
+      macchina.
+    </p>
+    <p>Features:</p>
+    <p xml:lang="it">Funzionalità:</p>
+    <ul>
+      <li>Streaming answers with Markdown and code blocks, and the model's reasoning for thinking models</li>
+      <li xml:lang="it">Risposte in streaming con Markdown e blocchi di codice, e il ragionamento dei modelli che pensano</li>
+      <li>Text files, PDFs and images as context, with vision models</li>
+      <li xml:lang="it">File di testo, PDF e immagini come contesto, anche per i modelli visione</li>
+      <li>Optional web search (DuckDuckGo, SearXNG or Ollama Cloud) with the sources listed under the answer</li>
+      <li xml:lang="it">Ricerca web facoltativa (DuckDuckGo, SearXNG o Ollama Cloud) con le fonti elencate sotto la risposta</li>
+      <li>Model manager to download and delete models</li>
+      <li xml:lang="it">Gestore dei modelli per scaricarli ed eliminarli</li>
+      <li>Phone companion on your local network, paired with a one-time code, with the same conversations as the desktop</li>
+      <li xml:lang="it">Companion per il telefono nella rete locale, abbinata con un codice monouso, con le stesse conversazioni del PC</li>
+      <li>Conversation history saved locally, light and dark themes, system tray icon</li>
+      <li xml:lang="it">Cronologia delle conversazioni salvata in locale, temi chiaro e scuro, icona nella tray</li>
+    </ul>
+    <p>The user interface is in Italian. OllaDesk needs an Ollama server, on this computer or on the network.</p>
+    <p xml:lang="it">L'interfaccia è in italiano. OllaDesk richiede un server Ollama, su questo computer o in rete.</p>
+  </description>
+
+  <launchable type="desktop-id">io.github.gradia64.OllaDesk.desktop</launchable>
+  <provides>
+    <binary>olladesk</binary>
+  </provides>
+
+  <url type="homepage">https://github.com/gradia64/OllaDesk</url>
+  <url type="bugtracker">https://github.com/gradia64/OllaDesk/issues</url>
+  <url type="vcs-browser">https://github.com/gradia64/OllaDesk</url>
+
+  <categories>
+    <category>Utility</category>
+    <category>Development</category>
+  </categories>
+  <keywords>
+    <keyword>ollama</keyword>
+    <keyword>llm</keyword>
+    <keyword>ai</keyword>
+    <keyword>chat</keyword>
+    <keyword xml:lang="it">intelligenza artificiale</keyword>
+  </keywords>
+
+  <supports>
+    <control>keyboard</control>
+    <control>pointing</control>
+  </supports>
+  <requires>
+    <display_length compare="ge">768</display_length>
+  </requires>
+
+  <branding>
+    <color type="primary" scheme_preference="light">#a7e3d2</color>
+    <color type="primary" scheme_preference="dark">#0b5a47</color>
+  </branding>
+
+  <screenshots>
+    <screenshot type="default">
+      <caption>Chat with code blocks and Markdown</caption>
+      <caption xml:lang="it">Chat con blocchi di codice e Markdown</caption>
+      <image>https://raw.githubusercontent.com/gradia64/OllaDesk/main/docs/screenshots/chat.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Web search with the sources under the answer, light theme</caption>
+      <caption xml:lang="it">Ricerca web con le fonti sotto la risposta, tema chiaro</caption>
+      <image>https://raw.githubusercontent.com/gradia64/OllaDesk/main/docs/screenshots/web-search.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Model manager</caption>
+      <caption xml:lang="it">Gestore dei modelli</caption>
+      <image>https://raw.githubusercontent.com/gradia64/OllaDesk/main/docs/screenshots/models.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>The same conversation on a phone, through the companion</caption>
+      <caption xml:lang="it">La stessa conversazione sul telefono, tramite la companion</caption>
+      <image>https://raw.githubusercontent.com/gradia64/OllaDesk/main/docs/screenshots/phone.png</image>
+    </screenshot>
+  </screenshots>
+
+  <content_rating type="oars-1.1"/>
+
+  <releases>
+    <release version="0.3.3" date="2026-10-09">
+      <url type="details">https://github.com/gradia64/OllaDesk/releases/tag/v0.3.3</url>
+    </release>
+    <release version="0.3.2" date="2026-10-08">
+      <url type="details">https://github.com/gradia64/OllaDesk/releases/tag/v0.3.2</url>
+    </release>
+    <release version="0.3.1" date="2026-10-08">
+      <url type="details">https://github.com/gradia64/OllaDesk/releases/tag/v0.3.1</url>
+    </release>
+    <release version="0.3.0" date="2026-10-07">
+      <url type="details">https://github.com/gradia64/OllaDesk/releases/tag/v0.3.0</url>
+    </release>
+    <release version="0.2.6" date="2026-10-05">
+      <url type="details">https://github.com/gradia64/OllaDesk/releases/tag/v0.2.6</url>
+    </release>
+    <release version="0.2.5" date="2026-10-03">
+      <url type="details">https://github.com/gradia64/OllaDesk/releases/tag/v0.2.5</url>
+    </release>
+    <release version="0.2.4" date="2026-10-02">
+      <url type="details">https://github.com/gradia64/OllaDesk/releases/tag/v0.2.4</url>
+    </release>
+    <release version="0.2.3" date="2026-10-01">
+      <url type="details">https://github.com/gradia64/OllaDesk/releases/tag/v0.2.3</url>
+    </release>
+  </releases>
+</component>

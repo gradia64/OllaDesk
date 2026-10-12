@@ -54,7 +54,7 @@ esegue, in ordine:
 
 | Job       | Cosa fa |
 |-----------|---------|
-| `test`    | unit test, test offline (worker, controllo aggiornamenti, motore di chat, companion web, sincronizzazione), test degli script di rilascio |
+| `test`    | `.desktop` e metadati AppStream validi, unit test, test offline (worker, controllo aggiornamenti, motore di chat, companion web, sincronizzazione), test degli script di rilascio |
 | `verify`  | il tag è annotato e firmato dalla sottochiave dei tag (`scripts/verify-tag.sh`); tag = `__version__`; note di rilascio presenti (`scripts/release-notes.sh`) |
 | `dist`    | tarball sorgente, `.deb`, lintian. Niente firme: qui non ci sono secret |
 | `arch`    | in un container `archlinux:base-devel`: PKGBUILD che clona il tag da GitHub e ne **verifica la firma**, `check()`, namcap, installazione e avvio di prova |
@@ -221,7 +221,12 @@ gh api repos/gradia64/OllaDesk/git/tags/$(git rev-parse vX.Y.Z) --jq .verificati
    sono, quindi rileggile.
    ```bash
    scripts/release-notes.sh X.Y.Z
+   scripts/metainfo-releases.py --date AAAA-MM-GG   # data prevista del tag
    ```
+   Il secondo comando aggiunge la versione ai metadati AppStream
+   (`io.github.gradia64.OllaDesk.metainfo.xml`): il job `test` fallisce se
+   una nota non ha la sua voce. Dopo il bump, rigenera gli screenshot con
+   `scripts/screenshots.py`, che mostrano la versione nella barra laterale.
    Porta `__version__` in `olladesk/__init__.py` alla nuova versione,
    committa e fai il push di `main` con la CI verde (`tests/release_tools_test.py`
    fallisce se la versione del codice non ha le sue note).
@@ -282,6 +287,8 @@ Tutti gli script funzionano anche in locale, con gli stessi risultati della CI.
 | `scripts/release-keys.sh` | impronte e ruoli delle chiavi (letto dagli altri script) |
 | `scripts/verify-tag.sh <tag>` | il tag è firmato dalla sottochiave dei tag |
 | `scripts/release-notes.sh <versione>` | note di rilascio della versione (`packaging/release-notes/`), con i controlli del job `verify` |
+| `scripts/metainfo-releases.py [--date D] [--check]` | elenco delle release nei metadati AppStream, da `packaging/release-notes/` e dalle date dei tag |
+| `scripts/screenshots.py` | screenshot di `docs/screenshots/` (AppStream, README) in un ambiente isolato |
 | `scripts/build-source.sh [commit]` | `dist/olladesk-X.Y.Z.tar.gz` da `git archive` (riproducibile) |
 | `scripts/build-deb.sh` | `dist/olladesk_X.Y.Z_all.deb` (riproducibile) |
 | `scripts/sign-release.sh [dir]` | firme `.sig` + `SHA256SUMS` con la sottochiave della CI; verifica con la sola chiave pubblica del repository |

@@ -35,12 +35,14 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      - name: Dipendenze di sistema (runtime Qt offscreen + validazione .desktop)
+      - name: Dipendenze di sistema (runtime Qt offscreen + validazione .desktop e AppStream)
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq desktop-file-utils libegl1 libgl1 \
+          sudo apt-get install -y -qq desktop-file-utils appstream libegl1 libgl1 \
             libxkbcommon0 libdbus-1-3 libfontconfig1
           desktop-file-validate io.github.gradia64.OllaDesk.desktop
+          appstreamcli validate --no-net --explain io.github.gradia64.OllaDesk.metainfo.xml
+          scripts/metainfo-releases.py --check   # una release per ogni nota in packaging/release-notes/
 
       - name: Dipendenze test (PySide6 per i worker Qt)
         run: python3 -m pip install --quiet "PySide6>=6.6,<7"   # come pyproject.toml, senza salti di versione maggiore

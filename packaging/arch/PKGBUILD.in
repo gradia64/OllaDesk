@@ -52,6 +52,8 @@ package() {
     "$pkgdir/usr/share/applications/io.github.gradia64.OllaDesk.desktop"
   install -Dm644 olladesk/assets/olladesk.svg \
     "$pkgdir/usr/share/icons/hicolor/scalable/apps/io.github.gradia64.OllaDesk.svg"
+  install -Dm644 io.github.gradia64.OllaDesk.metainfo.xml \
+    "$pkgdir/usr/share/metainfo/io.github.gradia64.OllaDesk.metainfo.xml"
 
   install -d "$pkgdir/usr/share/man/man1"
   sed -e "s/@VERSION@/$pkgver/" \
