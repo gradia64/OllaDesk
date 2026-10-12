@@ -194,11 +194,16 @@ ln -s "$APP_ID.svg" "$APPDIR/.DirIcon"
 # avvio. unchecked-hash: .pyc identici a ogni build, validi senza mtime;
 # -s/-p: nei .pyc il percorso è /usr/…, non la cartella in cui si costruisce.
 # Con -q compileall stampa solo gli errori
-"$PY" -E -s -m compileall -q -j 0 --invalidation-mode unchecked-hash \
+# -B e i __pycache__ cancellati prima: i .pyc scritti dagli import durante la
+# build (pip, compileall stesso) cambiano da una macchina all'altra
+find "$APPDIR" -type d -name __pycache__ -prune -exec rm -rf {} +
+"$PY" -B -E -s -m compileall -q -f -j 0 --invalidation-mode unchecked-hash \
     -s "$APPDIR" -p / "$APPDIR/usr/python/lib" "$SHARE"
 # RECORD serve solo a pip uninstall e contiene gli hash degli script con il
 # percorso assoluto della build nello shebang (script già rimossi)
 find "$SITE" -path '*.dist-info/RECORD' -delete
+# permessi indipendenti dall'umask di chi costruisce (squashfs li conserva)
+chmod -R u+rwX,go+rX,go-w "$APPDIR"
 find "$APPDIR" -exec touch -h -d "@$SOURCE_DATE_EPOCH" {} +
 
 # --- compatibilità: nessun file oltre glibc 2.34, come le wheel di PySide6 ---
