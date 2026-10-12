@@ -407,8 +407,10 @@ function openStream(id, after, noticesAfter) {
       try {
         const d = await api("/api/chats");
         const me = d.chats.find((c) => c.id === currentId);
-        if (me) $("title").textContent = me.title || "Conversazione";   // rinominata
-        else if (d.active !== currentId) chatGone();
+        if (me) {
+          $("title").textContent = me.title || "Conversazione";   // rinominata
+          setArchived(me.archived === true);   // archiviata o ripristinata dal PC
+        } else if (d.active !== currentId) chatGone();
       } catch (e) { /* riprova al prossimo evento */ }
     }, 300);
   });
