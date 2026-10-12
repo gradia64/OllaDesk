@@ -373,6 +373,10 @@ def test_workflow_verifica_il_tag_e_isola_i_secret(tmp, keys):
     assert "scripts/release-notes.sh" in jobs["verify"]
     assert "--notes-file" in jobs["publish"] and "--generate-notes" not in text
     assert "needs: verify" in jobs["arch"] and "verify" in jobs["dist"].split("\n")[0]
+    # l'AppImage: dopo test e verify, provata, e firmata con il resto in publish
+    assert "verify" in jobs["appimage"].split("\n")[0]
+    assert "smoke-test.sh" in jobs["appimage"]
+    assert "appimage" in jobs["publish"].split("\n")[0] and "name: appimage" in jobs["publish"]
     # nessun job firma tag o esporta chiavi
     assert "git tag" not in text and "export-secret-keys" not in text
     # i secret solo nel job publish, nell'environment protetto

@@ -210,7 +210,11 @@ rm -f "$OUT"
 if command -v appstreamcli >/dev/null; then
     appstreamcli validate-tree --no-net "$APPDIR" >/dev/null
 fi
-# extract-and-run: niente FUSE richiesto per appimagetool (CI, container)
-ARCH="$ARCH" APPIMAGE_EXTRACT_AND_RUN=1 "$TOOL" --no-appstream \
+# extract-and-run: niente FUSE richiesto per appimagetool (CI, container);
+# la copia estratta va in una cartella nostra, non in /tmp
+rm -rf "$WORK/tmp"
+mkdir -p "$WORK/tmp"
+ARCH="$ARCH" APPIMAGE_EXTRACT_AND_RUN=1 TMPDIR="$WORK/tmp" "$TOOL" --no-appstream \
     --runtime-file "$RUNTIME" "$APPDIR" "$OUT" >/dev/null
+rm -rf "$WORK/tmp"
 echo "$OUT ($(du -h "$OUT" | cut -f1))"
