@@ -327,9 +327,12 @@ st, res = jpost("/api/send", {"text": "", "model": "finto", "web": True,
                               "attachments": [solo["id"]]}, TOKEN)
 assert st == 200, res
 new_cid = res["chat_id"]
+# la copia si legge a risposta finita: letta prima, gli eventi della
+# risposta (answer, done) sono più recenti e tornano giustamente nello
+# stream, e il controllo qui sotto fallirebbe a seconda dei tempi
+assert wait_until(lambda: not engine.busy())
 st, snap = cc.get_json(f"/api/chats/{new_cid}", TOKEN)
 assert st == 200 and snap["seq"] > res["after"], (snap, res)
-assert wait_until(lambda: not engine.busy())
 events = f"/api/chats/{new_cid}/events?after={snap['seq']}"
 
 
