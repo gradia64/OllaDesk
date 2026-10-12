@@ -191,10 +191,14 @@ ln -s "$APP_ID.svg" "$APPDIR/.DirIcon"
 
 # --- bytecode e date --------------------------------------------------------
 # l'immagine è in sola lettura: senza .pyc Python ricompilerebbe tutto a ogni
-# avvio. unchecked-hash: .pyc identici a ogni build, validi senza mtime.
+# avvio. unchecked-hash: .pyc identici a ogni build, validi senza mtime;
+# -s/-p: nei .pyc il percorso è /usr/…, non la cartella in cui si costruisce.
 # Con -q compileall stampa solo gli errori
 "$PY" -E -s -m compileall -q -j 0 --invalidation-mode unchecked-hash \
-    "$APPDIR/usr/python/lib" "$SHARE"
+    -s "$APPDIR" -p / "$APPDIR/usr/python/lib" "$SHARE"
+# RECORD serve solo a pip uninstall e contiene gli hash degli script con il
+# percorso assoluto della build nello shebang (script già rimossi)
+find "$SITE" -path '*.dist-info/RECORD' -delete
 find "$APPDIR" -exec touch -h -d "@$SOURCE_DATE_EPOCH" {} +
 
 # --- compatibilità: nessun file oltre glibc 2.34, come le wheel di PySide6 ---
