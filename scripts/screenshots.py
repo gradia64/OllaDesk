@@ -196,16 +196,18 @@ class Marionette:
 
 def phone_shot(url: str, token: str, cookie: str, path: str) -> None:
     profile = tempfile.mkdtemp(prefix="olladesk_ff_")
-    port = free_port()
-    with open(os.path.join(profile, "user.js"), "w") as f:
-        f.write(f'user_pref("marionette.port", {port});\n'
-                'user_pref("layout.css.devPixelsPerPx", "2.0");\n'
-                'user_pref("ui.systemUsesDarkTheme", 1);\n'
-                'user_pref("browser.shell.checkDefaultBrowser", false);\n')
-    ff = subprocess.Popen(["firefox", "--headless", "--marionette", "--no-remote",
-                           "--profile", profile],
-                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    ff = None
     try:
+        # dentro il try: se Firefox manca o non parte, il profilo va via lo stesso
+        port = free_port()
+        with open(os.path.join(profile, "user.js"), "w") as f:
+            f.write(f'user_pref("marionette.port", {port});\n'
+                    'user_pref("layout.css.devPixelsPerPx", "2.0");\n'
+                    'user_pref("ui.systemUsesDarkTheme", 1);\n'
+                    'user_pref("browser.shell.checkDefaultBrowser", false);\n')
+        ff = subprocess.Popen(["firefox", "--headless", "--marionette", "--no-remote",
+                               "--profile", profile],
+                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         for _ in range(100):
             try:
                 m = Marionette(port)
@@ -258,8 +260,9 @@ def phone_shot(url: str, token: str, cookie: str, path: str) -> None:
             f.write(base64.b64decode(png))
         m.cmd("WebDriver:DeleteSession")
     finally:
-        ff.terminate()
-        ff.wait(10)
+        if ff is not None:
+            ff.terminate()
+            ff.wait(10)
         shutil.rmtree(profile, ignore_errors=True)
 
 
