@@ -109,6 +109,9 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.3.4" date="2026-10-12">
+      <url type="details">https://github.com/gradia64/OllaDesk/releases/tag/v0.3.4</url>
+    </release>
     <release version="0.3.3" date="2026-10-09">
       <url type="details">https://github.com/gradia64/OllaDesk/releases/tag/v0.3.3</url>
     </release>
