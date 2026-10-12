@@ -129,6 +129,10 @@ class _NumberStepper(QWidget):
     def setSuffix(self, suffix: str) -> None:  # noqa: N802 (API Qt)
         self.spin.setSuffix(suffix)
 
+    # testo mostrato al minimo dell'intervallo (es. «mai» per 0 giorni)
+    def setSpecialValueText(self, text: str) -> None:  # noqa: N802 (API Qt)
+        self.spin.setSpecialValueText(text)
+
     # il focus va al campo, non al contenitore vuoto
     def setFocusPolicy(self, policy: Qt.FocusPolicy) -> None:  # noqa: N802
         self.spin.setFocusPolicy(policy)

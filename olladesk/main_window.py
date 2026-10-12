@@ -79,6 +79,7 @@ class MainWindow(QMainWindow):
 
         # avvio: pagina predefinita di benvenuto; le conversazioni salvate si
         # aprono solo se l'utente le sceglie dalla colonna di sinistra
+        self._archive_idle_chats()
         self.sidebar.set_chats(self.engine.chats(), None)
 
         self._status_timer = QTimer(self)
@@ -177,6 +178,7 @@ class MainWindow(QMainWindow):
         self.sidebar.chatSelected.connect(self._open_chat)
         self.sidebar.chatRenamed.connect(self._rename_chat)
         self.sidebar.chatDeleted.connect(self._delete_chat)
+        self.sidebar.chatArchived.connect(self._archive_chat)
         self.sidebar.modelsRequested.connect(self._open_models)
         self.sidebar.companionRequested.connect(self._open_companion)
         self.sidebar.settingsRequested.connect(self.open_settings)
@@ -386,6 +388,19 @@ class MainWindow(QMainWindow):
     def _rename_chat(self, chat_id: str, title: str) -> None:
         self.engine.rename_chat(chat_id, title)
         self.sidebar.set_chats(self.engine.chats(), chat_id)
+
+    def _archive_idle_chats(self) -> None:
+        """Archiviazione automatica (Impostazioni), all'avvio e quando cambia."""
+        try:
+            days = int(self.settings.get("archive_after_days") or 0)
+        except (TypeError, ValueError):
+            days = 0
+        self.engine.archive_idle(days)
+
+    def _archive_chat(self, chat_id: str, archived: bool) -> None:
+        # la chat aperta resta aperta: archiviare la toglie solo dall'elenco
+        self.engine.set_archived(chat_id, archived)
+        self.sidebar.set_chats(self.engine.chats(), self._view_id)
 
     def _delete_chat(self, chat_id: str) -> None:
         self.engine.delete_chat(chat_id)
@@ -747,6 +762,8 @@ class MainWindow(QMainWindow):
         # tray e companion possono essere cambiate nelle impostazioni
         self._sync_tray()
         self._sync_companion()
+        self._archive_idle_chats()
+        self.sidebar.set_chats(self.engine.chats(), self._view_id)
 
     # -------------------------------------------------------------------- chiusura
 

@@ -123,21 +123,27 @@ $("pair-form").addEventListener("submit", (ev) => {
 let listActive = null;     // conversazione che sta rispondendo (elenco)
 let listTimer = null;
 
+function chatLink(c) {
+  const a = el("a");
+  a.href = "#/c/" + encodeURIComponent(c.id);
+  a.dataset.id = c.id;
+  const t = el("span", "t", c.title || "Conversazione");
+  t.prepend(el("span", "badge", "● "));
+  a.append(t);
+  a.append(el("span", "m", [c.model, fmtTime(c.updated)].filter(Boolean).join(" · ")));
+  const li = el("li");
+  li.append(a);
+  return li;
+}
+
 function renderList(data) {
-  const ul = $("chat-list");
-  ul.replaceChildren();
-  for (const c of data.chats) {
-    const a = el("a");
-    a.href = "#/c/" + encodeURIComponent(c.id);
-    a.dataset.id = c.id;
-    const t = el("span", "t", c.title || "Conversazione");
-    t.prepend(el("span", "badge", "● "));
-    a.append(t);
-    a.append(el("span", "m", [c.model, fmtTime(c.updated)].filter(Boolean).join(" · ")));
-    const li = el("li");
-    li.append(a);
-    ul.append(li);
-  }
+  // le archiviate in fondo, in un riquadro chiuso: fuori dall'elenco, non perse
+  const main = data.chats.filter((c) => !c.archived);
+  const archived = data.chats.filter((c) => c.archived);
+  $("chat-list").replaceChildren(...main.map(chatLink));
+  $("archive-list").replaceChildren(...archived.map(chatLink));
+  $("archive-sum").textContent = "🗄 Archivio (" + archived.length + ")";
+  $("archive").hidden = archived.length === 0;
   $("list-empty").hidden = data.chats.length > 0;
   listActive = data.active;
   markActive();
@@ -145,7 +151,7 @@ function renderList(data) {
 
 function markActive() {
   // pallino sulla conversazione che sta rispondendo (anche dal PC)
-  for (const a of $("chat-list").querySelectorAll("a")) {
+  for (const a of document.querySelectorAll("#chat-list a, #archive-list a")) {
     a.classList.toggle("active", a.dataset.id === listActive);
   }
 }
@@ -631,6 +637,7 @@ async function showChat(id) {
   ]);
   currentId = id;
   $("title").textContent = chat.title || "Conversazione";
+  setArchived(chat.archived === true);
   $("chat-model").textContent = chat.model || "";
   $("messages").replaceChildren(...chat.messages.map(renderMessage));
   if (chat.model && [...$("model").options].some((o) => o.value === chat.model)) {
@@ -856,6 +863,24 @@ $("m-rename").addEventListener("click", async () => {
   try {
     await post("/api/rename", { chat_id: currentId, title: title.trim() });
     $("title").textContent = title.trim();
+  } catch (e) {
+    if (e.status === 404) chatGone(); else addNote(e.message, true);
+  }
+});
+
+let currentArchived = false;
+
+function setArchived(archived) {
+  currentArchived = archived;
+  $("m-archive").textContent = archived ? "↩ Ripristina" : "🗄 Archivia";
+}
+
+$("m-archive").addEventListener("click", async () => {
+  closeMenu();
+  if (!currentId) return;
+  try {
+    await post("/api/archive", { chat_id: currentId, archived: !currentArchived });
+    setArchived(!currentArchived);
   } catch (e) {
     if (e.status === 404) chatGone(); else addNote(e.message, true);
   }

@@ -21,6 +21,7 @@ class ChatSidebar(QWidget):
     chatSelected = Signal(str)      # id conversazione
     chatRenamed = Signal(str, str)  # id, nuovo titolo
     chatDeleted = Signal(str)       # id
+    chatArchived = Signal(str, bool)  # id, True = archivia / False = ripristina
     modelsRequested = Signal()
     companionRequested = Signal()
     settingsRequested = Signal()
@@ -50,6 +51,13 @@ class ChatSidebar(QWidget):
         self.new_btn.clicked.connect(self.newChatRequested.emit)
         lay.addWidget(self.new_btn)
 
+        # intestazione della vista «Archivio»: senza, l'elenco sembra quello solito
+        self.archive_label = QLabel("🗄  Archivio: conversazioni archiviate", self)
+        self.archive_label.setObjectName("metaLabel")
+        self.archive_label.setWordWrap(True)
+        self.archive_label.hide()
+        lay.addWidget(self.archive_label)
+
         self.list = QListWidget(self)
         self.list.setFrameShape(QListWidget.Shape.NoFrame)
         self.list.setVerticalScrollMode(QListWidget.ScrollMode.ScrollPerPixel)
@@ -57,6 +65,15 @@ class ChatSidebar(QWidget):
         self.list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.list.customContextMenuRequested.connect(self._on_menu)
         lay.addWidget(self.list, 1)
+
+        # passa dall'elenco principale all'archivio e ritorno; nascosto finché
+        # non c'è nulla di archiviato
+        self.archive_btn = QPushButton(self)
+        self.archive_btn.setObjectName("archiveBtn")
+        self.archive_btn.setFlat(True)
+        self.archive_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.archive_btn.clicked.connect(self._toggle_archive)
+        lay.addWidget(self.archive_btn)
 
         self.models_btn = QPushButton("🧩  Modelli", self)
         self.models_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -76,14 +93,24 @@ class ChatSidebar(QWidget):
         lay.addWidget(self.settings_btn)
 
         self._chats: list[dict] = []
+        self._show_archived = False   # vista «Archivio» al posto dell'elenco
+        self._current_id: str | None = None
+        self._sync_archive_btn(0)
 
     # ------------------------------------------------------------------ API
 
     def set_chats(self, chats: list[dict], current_id: str | None = None) -> None:
         self._chats = sorted(chats, key=lambda c: c.get("updated", 0), reverse=True)
+        self._current_id = current_id
+        archived = [c for c in self._chats if c.get("archived")]
+        if self._show_archived and not archived:
+            self._show_archived = False   # archivio svuotato: torna all'elenco
+        shown = archived if self._show_archived else [
+            c for c in self._chats if not c.get("archived")]
+        self._sync_archive_btn(len(archived))
         self.list.blockSignals(True)
         self.list.clear()
-        for c in self._chats:
+        for c in shown:
             title = c.get("title") or "Conversazione"
             item = QListWidgetItem(self._elide(title))
             item.setData(Qt.ItemDataRole.UserRole, c["id"])
@@ -94,6 +121,23 @@ class ChatSidebar(QWidget):
         self.list.blockSignals(False)
 
     # -------------------------------------------------------------- interni
+
+    def showing_archive(self) -> bool:
+        return self._show_archived
+
+    def _sync_archive_btn(self, n_archived: int) -> None:
+        if self._show_archived:
+            self.archive_btn.setText("←  Conversazioni")
+            self.archive_btn.setToolTip("Torna all'elenco delle conversazioni")
+        else:
+            self.archive_btn.setText(f"🗄  Archivio ({n_archived})")
+            self.archive_btn.setToolTip("Conversazioni archiviate: fuori dall'elenco, non eliminate")
+        self.archive_btn.setVisible(self._show_archived or n_archived > 0)
+        self.archive_label.setVisible(self._show_archived)
+
+    def _toggle_archive(self) -> None:
+        self._show_archived = not self._show_archived
+        self.set_chats(self._chats, self._current_id)
 
     @staticmethod
     def _elide(text: str, n: int = 30) -> str:
@@ -109,9 +153,15 @@ class ChatSidebar(QWidget):
         chat_id = item.data(Qt.ItemDataRole.UserRole)
         menu = QMenu(self)
         act_rename = menu.addAction("✏  Rinomina")
+        if self._show_archived:
+            act_archive = menu.addAction("↩  Ripristina")
+        else:
+            act_archive = menu.addAction("🗄  Archivia")
         act_del = menu.addAction("🗑  Elimina")
         chosen = menu.exec(self.list.mapToGlobal(pos))
-        if chosen is act_rename:
+        if chosen is act_archive:
+            self.chatArchived.emit(chat_id, not self._show_archived)
+        elif chosen is act_rename:
             from PySide6.QtWidgets import QInputDialog
 
             current = item.toolTip()   # titolo completo (il testo è abbreviato)

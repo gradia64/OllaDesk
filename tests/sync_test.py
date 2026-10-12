@@ -205,6 +205,35 @@ assert h.post_json("/api/delete", {"chat_id": "chat_b"}, TOKEN)[0] == 404
 fake.release.set()
 print("5. rinomina ed eliminazione dal telefono, PC aggiornato OK")
 
+# ------------------------------- 6. archivio dal telefono
+
+for body, status in (({"chat_id": "chat_a"}, 400),
+                     ({"chat_id": "chat_a", "archived": "sì"}, 400),
+                     ({"chat_id": "nessuna", "archived": True}, 404)):
+    assert h.post_json("/api/archive", body, TOKEN)[0] == status, body
+
+
+def sidebar_ids():
+    return [win.sidebar.list.item(i).data(256) for i in range(win.sidebar.list.count())]
+
+
+assert "chat_a" in sidebar_ids() and win.sidebar.archive_btn.isHidden()
+assert h.post_json("/api/archive", {"chat_id": "chat_a", "archived": True}, TOKEN)[0] == 200
+assert config.load_chat("chat_a")["archived"] is True
+assert wait_until(lambda: "chat_a" not in sidebar_ids())
+assert not win.sidebar.archive_btn.isHidden()
+st, data = h.get_json("/api/chats", TOKEN)
+assert st == 200 and next(c for c in data["chats"] if c["id"] == "chat_a")["archived"] is True
+st, data = h.get_json("/api/chats/chat_a", TOKEN)
+assert st == 200 and data["archived"] is True
+# vista «Archivio» sul PC, poi ripristino dal telefono
+win.sidebar.archive_btn.click()
+assert win.sidebar.showing_archive() and sidebar_ids() == ["chat_a"]
+assert h.post_json("/api/archive", {"chat_id": "chat_a", "archived": False}, TOKEN)[0] == 200
+assert wait_until(lambda: not win.sidebar.showing_archive() and "chat_a" in sidebar_ids())
+assert "archived" not in config.load_chat("chat_a")
+print("6. archivio dal telefono, PC aggiornato OK")
+
 win._really_quit = True
 win.close()
 wait_until(lambda: False, 200)

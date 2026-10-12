@@ -43,6 +43,9 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "app_update_check": True,       # controllo automatico all'avvio (max 1 volta al giorno)
     "app_update_last_check": 0.0,   # epoch dell'ultimo controllo riuscito
     "app_update_skip": "",          # versione per cui l'utente ha scelto «Salta»
+    # archivio: le chat senza messaggi da N giorni vanno nell'archivio
+    # all'avvio (0 = mai, solo a mano)
+    "archive_after_days": 0,
 }
 
 
@@ -194,6 +197,8 @@ def _index_entry(chat: dict) -> dict:
         "title": chat.get("title", "Conversazione"),
         "model": chat.get("model", ""),
         "updated": chat.get("updated", 0),
+        # nel file della chat, non solo qui: _rebuild_index lo ritrova
+        "archived": chat.get("archived") is True,
     }
 
 
@@ -274,6 +279,18 @@ def rename_chat(chat_id: str, title: str) -> bool:
     if chat is None:
         return False
     chat["title"] = title
+    return save_chat(chat)
+
+
+def set_chat_archived(chat_id: str, archived: bool) -> bool:
+    """Archivia o ripristina, nel file della conversazione E nell'indice."""
+    chat = load_chat(chat_id)
+    if chat is None:
+        return False
+    if archived:
+        chat["archived"] = True
+    else:
+        chat.pop("archived", None)
     return save_chat(chat)
 
 

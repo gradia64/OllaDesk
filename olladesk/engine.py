@@ -282,7 +282,8 @@ class ChatEngine(QObject):
             )
         # tiene allineato l'elenco in memoria (ordine e titolo nella sidebar)
         entry = {"id": chat["id"], "title": chat.get("title", "Conversazione"),
-                 "model": chat.get("model", ""), "updated": chat.get("updated", 0)}
+                 "model": chat.get("model", ""), "updated": chat.get("updated", 0),
+                 "archived": chat.get("archived") is True}
         self._chats = [e for e in self._chats if e["id"] != chat["id"]] + [entry]
         self.chats_changed.emit()
 
@@ -297,6 +298,34 @@ class ChatEngine(QObject):
             config.rename_chat(chat_id, title.strip())
         self._chats = config.load_chats()
         self.chats_changed.emit()
+
+    def set_archived(self, chat_id: str, archived: bool) -> None:
+        """Archivia (fuori dall'elenco principale) o ripristina una conversazione."""
+        cached = self._cache.get(chat_id)
+        if cached is not None:
+            # come per rename_chat: il prossimo salvataggio della copia in
+            # memoria riscriverebbe lo stato vecchio
+            if archived:
+                cached["archived"] = True
+            else:
+                cached.pop("archived", None)
+            self._persist(cached)
+        else:
+            config.set_chat_archived(chat_id, archived)
+        self._chats = config.load_chats()
+        self.chats_changed.emit()
+
+    def archive_idle(self, days: int, now: float | None = None) -> int:
+        """Archivia le conversazioni senza messaggi da `days` giorni; quante."""
+        if days <= 0:
+            return 0
+        limit = (config.now() if now is None else now) - days * 86400
+        idle = [c["id"] for c in self._chats
+                if not c.get("archived") and c.get("updated", 0) < limit
+                and c["id"] != self._active_id]
+        for chat_id in idle:
+            self.set_archived(chat_id, True)
+        return len(idle)
 
     def delete_chat(self, chat_id: str) -> None:
         if chat_id == self._active_id:
@@ -477,6 +506,7 @@ class ChatEngine(QObject):
         chat["messages"].append(msg)
         chat["model"] = model
         chat["updated"] = ts
+        chat.pop("archived", None)   # una chat ripresa torna nell'elenco
         self.user_message_added.emit(chat_id, msg)
         self._persist(chat)
         if start:

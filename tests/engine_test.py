@@ -285,6 +285,28 @@ assert any("Ricerca web saltata" in n for n in notes)
 order = names()
 assert order.index("busy_changed") < order.index("notice") < order.index("user_message_added"), order
 
+# archivio: la copia in memoria e il file restano allineati, una chat
+# ripresa esce dall'archivio, l'archiviazione automatica guarda l'inattività
+def archived(chat_id):
+    return next(c for c in engine.chats() if c["id"] == chat_id)["archived"]
+
+
+engine.set_archived(cid, True)
+assert archived(cid) and engine.chat(cid)["archived"] is True
+assert config.load_chat(cid)["archived"] is True
+engine.send(cid, "di nuovo", "finto")
+assert wait_until(lambda: not engine.busy())
+assert not archived(cid) and "archived" not in config.load_chat(cid)
+now = config.now()
+assert engine.archive_idle(0) == 0
+assert engine.archive_idle(30, now=now + 31 * 86400) == len(engine.chats())
+assert all(c["archived"] for c in engine.chats())
+assert engine.archive_idle(30, now=now + 31 * 86400) == 0   # già archiviate
+for c in list(engine.chats()):
+    engine.set_archived(c["id"], False)
+assert not any(c["archived"] for c in engine.chats())
+print("8a. archivio: flag, ripresa, archiviazione automatica OK")
+
 engine.rename_chat(cid, "  rinominata  ")
 assert engine.chat(cid)["title"] == "rinominata"
 assert config.load_chat(cid)["title"] == "rinominata"

@@ -176,6 +176,21 @@ class SettingsDialog(QDialog):
         self.hist_spin.setToolTip("Quanti messaggi precedenti vengono inviati al modello come contesto")
         form.addRow("Contesto inviato al modello:", self.hist_spin)
 
+        self.archive_spin = IntStepper(w)
+        self.archive_spin.setRange(0, 3650)
+        try:
+            self.archive_spin.setValue(int(s.get("archive_after_days") or 0))
+        except (TypeError, ValueError):
+            self.archive_spin.setValue(0)
+        self.archive_spin.setSuffix(" giorni")
+        self.archive_spin.setSpecialValueText("mai")
+        self.archive_spin.setToolTip(
+            "Le conversazioni senza messaggi da questo numero di giorni vanno\n"
+            "nell'archivio (in fondo alla colonna di sinistra), all'avvio.\n"
+            "Non vengono eliminate. «mai»: si archivia solo a mano (tasto destro)."
+        )
+        form.addRow("Archivia le chat inattive dopo:", self.archive_spin)
+
         self.web_spin = IntStepper(w)
         self.web_spin.setRange(3, 10)
         self.web_spin.setValue(int(s.get("web_results", 5)))
@@ -632,6 +647,7 @@ class SettingsDialog(QDialog):
             "tray_icon": self.tray_chk.isChecked(),
             "close_to_tray": self.close_tray_chk.isChecked(),
             "history_limit": self.hist_spin.value(),
+            "archive_after_days": self.archive_spin.value(),
             "web_results": self.web_spin.value(),
             "web_provider": self.web_provider_combo.currentData() or "duckduckgo",
             "web_fallback": self._fallback_value(),

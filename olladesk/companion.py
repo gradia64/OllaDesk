@@ -329,7 +329,7 @@ def chat_index(engine, hub) -> dict:
     """
     items = [
         {"id": c["id"], "title": c.get("title", ""), "model": c.get("model", ""),
-         "updated": c.get("updated", 0)}
+         "updated": c.get("updated", 0), "archived": c.get("archived") is True}
         for c in engine.chats()
     ]
     items.sort(key=lambda c: c["updated"], reverse=True)
@@ -431,6 +431,14 @@ def web_rename(engine, chat_id: str, title: str) -> bool:
     return True
 
 
+def web_archive(engine, chat_id: str, archived: bool) -> bool:
+    """Thread principale: archivia o ripristina dal telefono."""
+    if chat_id not in {c["id"] for c in engine.chats()}:
+        return False
+    engine.set_archived(chat_id, archived)
+    return True
+
+
 def web_delete(engine, chat_id: str) -> bool:
     """Thread principale: elimina dal telefono (ferma la sua risposta, se c'è)."""
     if chat_id not in {c["id"] for c in engine.chats()}:
@@ -485,6 +493,7 @@ def render_chat(chat: dict) -> dict:
     out = {
         "id": chat.get("id"), "title": chat.get("title", ""),
         "model": chat.get("model", ""), "updated": chat.get("updated", 0),
+        "archived": chat.get("archived") is True,
         "messages": msgs,
     }
     for k in ("seq", "state"):
@@ -847,7 +856,7 @@ class _Handler(BaseHTTPRequestHandler):
             if ok:
                 self._json(200, {"stopped": stopped})
             return
-        if path in ("/api/rename", "/api/delete"):
+        if path in ("/api/rename", "/api/archive", "/api/delete"):
             if not self._authed():
                 return
             chat_id = data.get("chat_id")
@@ -860,6 +869,12 @@ class _Handler(BaseHTTPRequestHandler):
                     self._error(400, f"titolo vuoto o più lungo di {MAX_TITLE} caratteri")
                     return
                 ok, found = self._main(web_rename, self.ctx.engine, chat_id, title.strip())
+            elif path == "/api/archive":
+                archived = data.get("archived")
+                if not isinstance(archived, bool):
+                    self._error(400, "«archived» deve essere true o false")
+                    return
+                ok, found = self._main(web_archive, self.ctx.engine, chat_id, archived)
             else:
                 ok, found = self._main(web_delete, self.ctx.engine, chat_id)
             if not ok:

@@ -21,6 +21,12 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
 - **Cronologia conversazioni** nella barra laterale (con la versione di
   OllaDesk nell'intestazione): nuova chat, selezione, rinomina (tasto destro)
   ed eliminazione; persistenza su disco.
+- **Archivio delle conversazioni** (tasto destro → «Archivia»): la chat esce
+  dall'elenco senza essere eliminata e si ritrova con «🗄 Archivio (N)» in
+  fondo alla barra laterale, da cui si apre o si ripristina. Scrivere un
+  nuovo messaggio in una chat archiviata la riporta nell'elenco. Facoltativa
+  l'archiviazione automatica all'avvio delle chat senza messaggi da un certo
+  numero di giorni (Impostazioni → Interfaccia, spenta di default).
 - **Allegati come contesto** (📎 nell'input): file di testo e codice (inlinati
   nel messaggio), PDF (richiede il pacchetto opzionale `pypdf`) e immagini
   (inviate in base64 ai modelli visione: llava, llama3.2-vision, gemma3…).
@@ -49,8 +55,9 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   - **Dal telefono:** allegati con 📎 (foto dalla fotocamera o dalla
     galleria, file di testo e PDF, fino a 20 MB ciascuno): le foto vengono
     ridotte sul telefono prima del caricamento e il PC le passa ai modelli
-    che leggono le immagini. Dal menu «⋯» di una chat si rinomina o si
-    elimina la conversazione, anche dal PC; il pulsante ⧉ sotto ogni
+    che leggono le immagini. Dal menu «⋯» di una chat si rinomina, si
+    archivia (o ripristina) o si elimina la conversazione, anche dal PC; le
+    archiviate stanno in un riquadro chiuso in fondo all'elenco; il pulsante ⧉ sotto ogni
     messaggio ne copia il testo. Con 🧩 si scaricano (con avanzamento e
     «Annulla») ed eliminano i modelli: lo scaricamento avviene sul PC. Resta
     solo sul PC il resto delle impostazioni.
@@ -170,7 +177,8 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   scuro/chiaro/**sistema** (segue KDE Plasma, anche a caldo quando lo cambi),
   dimensione del carattere, streaming on/off, invio con Invio, orario nei
   messaggi, icona nella tray, quantità di contesto
-  inviata al modello, prompt di sistema predefinito, risultati ricerca web.
+  inviata al modello, archiviazione automatica delle chat inattive, prompt di
+  sistema predefinito, risultati ricerca web.
 - **Impostazioni → scheda «Parametri modelli»**: profilo di parametri separato
   per ogni modello (temperatura, top_k, top_p, min_p, num_ctx, num_predict,
   penalità di ripetizione/presenza/frequenza, seed, sequenze di stop, mirostat,

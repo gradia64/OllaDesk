@@ -390,6 +390,26 @@ def test_rename_survives_next_save():
         assert config.load_chats()[0]["title"] == "Nuovo"
 
 
+def test_archive_flag_in_file_and_index():
+    # archiviare scrive il flag nel file della chat: un indice ricostruito
+    # lo ritrova, e ripristinare lo toglie
+    from olladesk import config
+    with _isolated_config():
+        assert config.load_settings()["archive_after_days"] == 0
+        config.save_chat({"id": "a1", "title": "A", "updated": 1, "messages": []})
+        config.save_chat({"id": "a2", "title": "B", "updated": 2, "messages": []})
+        assert config.set_chat_archived("a1", True)
+        assert config.load_chat("a1")["archived"] is True
+        flags = {c["id"]: c["archived"] for c in config.load_chats()}
+        assert flags == {"a1": True, "a2": False}, flags
+        (config.chats_dir() / "index.json").unlink()
+        assert {c["id"]: c["archived"] for c in config.load_chats()} == flags
+        assert config.set_chat_archived("a1", False)
+        assert "archived" not in config.load_chat("a1")
+        assert not any(c["archived"] for c in config.load_chats())
+        assert config.set_chat_archived("nessuna", True) is False
+
+
 def test_index_rebuilt_when_corrupt_or_missing():
     from olladesk import config
     with _isolated_config():

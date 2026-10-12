@@ -28,6 +28,7 @@
           aria-haspopup="true" aria-expanded="false" hidden>⋯</button>
   <div id="menu" class="menu" role="menu" hidden>
     <button id="m-rename" type="button" role="menuitem">✏️ Rinomina</button>
+    <button id="m-archive" type="button" role="menuitem">🗄 Archivia</button>
     <button id="m-delete" type="button" role="menuitem" class="danger">🗑 Elimina</button>
   </div>
 </header>
@@ -50,6 +51,10 @@
 
   <section id="view-list" class="view" hidden>
     <ul id="chat-list" class="list"></ul>
+    <details id="archive" class="archive" hidden>
+      <summary id="archive-sum"></summary>
+      <ul id="archive-list" class="list"></ul>
+    </details>
     <p id="list-empty" class="muted center" hidden>Nessuna conversazione salvata.</p>
   </section>
 

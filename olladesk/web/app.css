@@ -154,6 +154,10 @@ main {
 
 .list .m { font-size: 13px; color: var(--muted); }
 
+/* conversazioni archiviate: in fondo all'elenco, chiuse */
+details.archive { margin-top: 14px; }
+details.archive summary { cursor: pointer; padding: 8px 4px; color: var(--muted); }
+
 .msg {
   margin: 10px 0;
   padding: 10px 14px;
