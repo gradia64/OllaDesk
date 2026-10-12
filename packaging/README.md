@@ -350,7 +350,8 @@ vengono da Ubuntu 22.04 apposta: quelle di Debian sid o Ubuntu 24.04
 chiedono una glibc più recente, e `check-glibc.py` le rifiuterebbe.
 
 La build è riproducibile: stesso commit, stesso SHA-256 (in locale e nella
-CI, che lo scrive nel riepilogo del job). Il `.desktop` dell'AppImage ha
-`StartupWMClass` uguale all'ID dell'app, a differenza di quello del `.deb`:
-Gear Lever e AppImageLauncher lo installano con un altro nome, e Plasma lo
-collega alla finestra solo così.
+CI, che lo scrive nel riepilogo del job). In ogni `.desktop` `StartupWMClass`
+è l'ID dell'app, che è anche il nome dell'applicazione Qt (quindi la classe
+del `WM_CLASS` su X11) e l'app_id su Wayland: Gear Lever e AppImageLauncher
+installano il `.desktop` con un altro nome, e i desktop lo collegano alla
+finestra solo così.

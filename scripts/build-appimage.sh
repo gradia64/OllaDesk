@@ -179,13 +179,10 @@ install -m 644 packaging/common/launcher.py "$SHARE/launcher.py"
 install -m 755 packaging/appimage/AppRun "$APPDIR/AppRun"
 
 # --- integrazione desktop -----------------------------------------------------
+# StartupWMClass è l'ID: Gear Lever (olladesk.desktop) e AppImageLauncher
+# (appimagekit_<hash>-OllaDesk.desktop) rinominano il .desktop che
+# installano, e i desktop lo collegano alla finestra solo così (app.py)
 install -D -m 644 "$APP_ID.desktop" "$APPDIR/usr/share/applications/$APP_ID.desktop"
-# Gear Lever (olladesk.desktop) e AppImageLauncher (appimagekit_<hash>-OllaDesk
-# .desktop) rinominano il .desktop che installano: Plasma lo collega alla
-# finestra solo se StartupWMClass è uguale all'app_id dichiarato dall'AppImage
-# (app.py). Nel .deb resta OllaDesk, il WM_CLASS di X11
-sed -i "s/^StartupWMClass=.*/StartupWMClass=$APP_ID/" \
-    "$APPDIR/usr/share/applications/$APP_ID.desktop"
 install -D -m 644 olladesk/assets/olladesk.svg \
     "$APPDIR/usr/share/icons/hicolor/scalable/apps/$APP_ID.svg"
 install -D -m 644 "$APP_ID.metainfo.xml" "$APPDIR/usr/share/metainfo/$APP_ID.metainfo.xml"
@@ -220,7 +217,9 @@ TOOL="$(fetch "$APPIMAGETOOL_URL" "$APPIMAGETOOL_SHA256")"
 RUNTIME="$(fetch "$RUNTIME_URL" "$RUNTIME_SHA256")"
 chmod +x "$TOOL"
 mkdir -p dist
-OUT="dist/OllaDesk-${VERSION}-${ARCH}.AppImage"
+# percorso assoluto: appimagetool fa chdir($OWD) se OWD è nell'ambiente
+# (la lasciano le AppImage, per esempio un terminale avviato da una di esse)
+OUT="$ROOT/dist/OllaDesk-${VERSION}-${ARCH}.AppImage"
 rm -f "$OUT"
 # metadati validati qui senza rete: appimagetool userebbe appstreamcli con
 # la rete, e gli screenshot su GitHub esistono solo dopo il push
@@ -234,4 +233,4 @@ mkdir -p "$WORK/tmp"
 ARCH="$ARCH" APPIMAGE_EXTRACT_AND_RUN=1 TMPDIR="$WORK/tmp" "$TOOL" --no-appstream \
     --runtime-file "$RUNTIME" "$APPDIR" "$OUT" >/dev/null
 rm -rf "$WORK/tmp"
-echo "$OUT ($(du -h "$OUT" | cut -f1))"
+echo "dist/$(basename "$OUT") ($(du -h "$OUT" | cut -f1))"

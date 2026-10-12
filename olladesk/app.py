@@ -35,7 +35,11 @@ def _desktop_file_installed() -> bool:
 
 def main() -> int:
     app = QApplication(sys.argv)
-    app.setApplicationName("OllaDesk")
+    # il nome dell'applicazione Qt è l'ID: su X11 diventa la classe del
+    # WM_CLASS, che i desktop confrontano con StartupWMClass (uguale all'ID
+    # in ogni .desktop, anche se Gear Lever o AppImageLauncher lo rinominano).
+    # Titoli e finestre usano il nome mostrato; il portachiavi ha un nome suo
+    app.setApplicationName(APP_ID)
     app.setApplicationDisplayName("OllaDesk")
     app.setOrganizationDomain("olladesk.local")
     # l'uscita passa SOLO dal quit esplicito nel closeEvent della finestra
