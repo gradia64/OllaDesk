@@ -315,6 +315,42 @@ le modifiche non committate non finiscono nel tarball.
 
 `packaging/common/` contiene launcher (`launcher.py`, `olladesk.sh`) e manpage
 (`olladesk.1.in`) usati sia dal `.deb` sia dal PKGBUILD, così i due pacchetti
-installano lo stesso layout. Il file `olladesk/_packaging` (`deb` o `arch`),
-scritto al momento del packaging, dice al controllo aggiornamenti dell'app
-quali istruzioni mostrare.
+installano lo stesso layout (anche l'AppImage usa `launcher.py`). Il file
+`olladesk/_packaging` (`deb`, `arch` o `appimage`), scritto al momento del
+packaging, dice al controllo aggiornamenti dell'app quali istruzioni
+mostrare; l'AppImage montata si riconosce anche da `APPIMAGE` e `APPDIR`.
+
+## AppImage
+
+`scripts/build-appimage.sh` mette insieme pezzi scaricati, tutti con
+versione e SHA-256 fissati: un download con un hash diverso ferma la build.
+
+| Pezzo | Dove è fissato |
+|-------|----------------|
+| Python portatile (python-build-standalone) | `PBS_*` in `build-appimage.sh` |
+| appimagetool e runtime type2 | `APPIMAGETOOL_*`, `RUNTIME_*` |
+| librerie xcb-util di Ubuntu 22.04 | `XCB_DEBS` |
+| wheel Python (PySide6-Essentials, pypdf, keyring, qrcode e dipendenze) | `packaging/appimage/requirements.txt` |
+
+Il resto di `packaging/appimage/`:
+
+| File | Ruolo |
+|------|-------|
+| `AppRun` | avvio: ignora `PYTHON*` e i plugin Qt del sistema |
+| `requirements.in` | versioni scelte a mano; `build-appimage.sh --lock` ne ricava `requirements.txt` con gli hash |
+| `trim-qt.py` | tiene i moduli e plugin Qt usati e le sole librerie che servono loro (voci NEEDED) |
+| `check-glibc.py` | ferma la build se un file chiede più di glibc 2.34, il minimo delle wheel di PySide6 |
+| `smoke-test.sh`, `smoke_check.py` | prova dell'AppImage costruita (job `appimage` e in locale) |
+
+Per aggiornare una dipendenza: nuova versione in `requirements.in` (o nelle
+variabili dello script, con il suo SHA-256 dalla pagina della release),
+`scripts/build-appimage.sh --lock`, controllo nel diff delle dipendenze
+indirette scelte da pip, poi build e `smoke-test.sh`. Le librerie xcb-util
+vengono da Ubuntu 22.04 apposta: quelle di Debian sid o Ubuntu 24.04
+chiedono una glibc più recente, e `check-glibc.py` le rifiuterebbe.
+
+La build è riproducibile: stesso commit, stesso SHA-256 (in locale e nella
+CI, che lo scrive nel riepilogo del job). Il `.desktop` dell'AppImage ha
+`StartupWMClass` uguale all'ID dell'app, a differenza di quello del `.deb`:
+Gear Lever e AppImageLauncher lo installano con un altro nome, e Plasma lo
+collega alla finestra solo così.

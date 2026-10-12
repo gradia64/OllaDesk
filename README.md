@@ -182,7 +182,7 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
 
 ## Requisiti
 
-- Python 3.10+ con PySide6
+- Python 3.10+ con PySide6 (l'AppImage li include già)
 - Un server Ollama in esecuzione (`ollama serve`) con almeno un modello
 
 ## Installazione su Arch Linux (AUR)
@@ -211,6 +211,64 @@ file `olladesk-release-key.asc` allegato a ogni release
 (`gpg --import olladesk-release-key.asc`) dopo averne controllato l'impronta.
 Ogni release include anche il pacchetto già costruito
 (`olladesk-<versione>-1-any.pkg.tar.zst`, installabile con `sudo pacman -U`).
+
+## AppImage (qualunque distribuzione)
+
+Dalla 0.3.4 ogni release include `OllaDesk-<versione>-x86_64.AppImage`: un
+solo file con dentro Python, Qt e le dipendenze facoltative (PDF,
+portachiavi, QR code), da scaricare e avviare senza installare nulla.
+
+```bash
+chmod +x OllaDesk-*-x86_64.AppImage
+./OllaDesk-*-x86_64.AppImage
+```
+
+Prima di avviarla verifica la firma, come per gli altri file (sezione
+«Verifica delle firme»):
+
+```bash
+gpg --verify OllaDesk-0.3.4-x86_64.AppImage.sig OllaDesk-0.3.4-x86_64.AppImage
+```
+
+**Requisiti.** Sistema a 64 bit x86_64 con glibc 2.34 o più recente:
+Debian 12, Ubuntu 22.04, Fedora 35, openSUSE Tumbleweed o successive (è il
+minimo di PySide6). Dal sistema l'AppImage usa solo le librerie che ogni
+desktop ha già: OpenGL/EGL, xkbcommon, fontconfig, D-Bus, GLib, Kerberos
+(`libgssapi_krb5`) e X11 o Wayland. Per montarsi le serve FUSE
+(`fusermount3`, pacchetto `fuse3`); dove manca, per esempio in un
+container, si avvia con `./OllaDesk-*.AppImage --appimage-extract-and-run`.
+Ollama non è incluso: va installato a parte.
+
+**Menu e icona.** Avviata così com'è, OllaDesk non compare nel menu e nella
+barra delle applicazioni ha un'icona generica. Per integrarla usa
+[Gear Lever](https://flathub.org/apps/it.mijorus.gearlever) o
+[AppImageLauncher](https://github.com/TheAssassin/AppImageLauncher): copiano
+l'AppImage in una cartella fissa e installano voce di menu e icona, che su
+Plasma compare anche nella barra. Per farlo a mano, dalla cartella in cui
+tieni l'AppImage:
+
+```bash
+./OllaDesk-*-x86_64.AppImage --appimage-extract 'usr/share/*'   # solo usr/share, circa 1 MB
+sed "s|^Exec=.*|Exec=$PWD/$(ls OllaDesk-*-x86_64.AppImage)|" \
+    squashfs-root/usr/share/applications/io.github.gradia64.OllaDesk.desktop \
+    > ~/.local/share/applications/io.github.gradia64.OllaDesk.desktop
+install -Dm644 squashfs-root/usr/share/icons/hicolor/scalable/apps/io.github.gradia64.OllaDesk.svg \
+    ~/.local/share/icons/hicolor/scalable/apps/io.github.gradia64.OllaDesk.svg
+rm -r squashfs-root
+```
+
+**Aggiornamenti.** L'AppImage non si aggiorna da sola: quando esce una
+versione nuova, OllaDesk lo segnala (Impostazioni → Interfaccia) e indica
+il file da scaricare. Basta sostituire il vecchio `.AppImage` con il nuovo
+(con Gear Lever o AppImageLauncher, aprendo il file nuovo). Con
+l'integrazione a mano il nome del file è scritto nel `.desktop`: dopo
+l'aggiornamento ripeti i comandi qui sopra.
+
+**Da sapere.** Chat, impostazioni e dispositivi abbinati sono in
+`~/.config/olladesk`, la stessa cartella del `.deb` e del pacchetto AUR:
+passando all'AppImage ritrovi tutto, ma non aprire due OllaDesk insieme. La
+chiave API passa dal portachiavi tramite Secret Service (KWallet su Plasma,
+GNOME Keyring altrove). Solo x86_64: niente build per ARM.
 
 ## Installazione su Debian
 
@@ -382,8 +440,10 @@ python3 tests/companion_models_test.py  # companion web: scarica ed elimina mode
 ```
 
 La CI (`.github/workflows/release.yml`) esegue unit test e test offline a ogni
-push e pull request; sui tag `v*` costruisce tarball, `.deb` e pacchetto Arch,
-li firma e li pubblica (release GitHub e AUR). Dettagli per chi pubblica:
+push e pull request; sui tag `v*` costruisce tarball, `.deb`, AppImage e
+pacchetto Arch, li firma e li pubblica (release GitHub e AUR). L'AppImage si
+prova con `packaging/appimage/smoke-test.sh`, che esegue i test offline con
+il suo Python. Dettagli per chi pubblica:
 [packaging/README.md](packaging/README.md).
 
 Per leggere i PDF come allegati:
@@ -437,9 +497,9 @@ tests/companion_client.py   client HTTP/SSE per i test della companion
 tests/release_tools_test.py script di rilascio (chiavi e repository temporanei)
 io.github.gradia64.OllaDesk.desktop  voce per il menu applicazioni (ID dell'app)
 io.github.gradia64.OllaDesk.metainfo.xml  metadati AppStream (centri software)
-packaging/                  file comuni .deb/Arch, modello PKGBUILD, chiave di release
-scripts/                    build (.deb, sorgenti, Arch), firma, pubblicazione AUR, icone web,
-                            screenshot (docs/screenshots/, per AppStream)
+packaging/                  file comuni .deb/Arch, modello PKGBUILD, AppImage, chiave di release
+scripts/                    build (.deb, AppImage, sorgenti, Arch), firma, pubblicazione AUR,
+                            icone web, screenshot (docs/screenshots/, per AppStream)
 ```
 
 ## Licenza
