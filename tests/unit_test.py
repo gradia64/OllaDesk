@@ -1038,6 +1038,7 @@ def _folder_tree() -> Path:
     (root / "link_fuori.txt").symlink_to(outside)
     (root / "link_dentro.md").symlink_to(root / "README.md")
     (root / "link_cartella").symlink_to(root / "src")
+    os.mkfifo(root / "blocca.txt")   # aprirla bloccherebbe l'interfaccia
     return root
 
 
@@ -1051,6 +1052,9 @@ def test_folder_files_filters():
     assert skipped["immagini (allegale una per una)"] == 1
     assert skipped["tipo non supportato"] == 1      # dati.bin
     assert skipped["collegamenti simbolici"] == 2   # link_fuori.txt, link_cartella/
+    assert skipped["file speciali"] == 1            # la FIFO blocca.txt
+    note = context.extract_text(root / "blocca.txt")[1]   # anche allegata da sola
+    assert note == "blocca.txt non è un file normale: ignorato"
     # node_modules/ e out/ (cartelle), debug.log (.gitignore)
     assert skipped["cartelle di dipendenze, cache o .gitignore"] == 3
 

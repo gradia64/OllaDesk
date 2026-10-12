@@ -144,6 +144,10 @@ def extract_text(path: Path, limit: int = MAX_TEXT_CHARS,
     `deadline` (time.monotonic) ferma la lettura di un PDF tra una pagina e
     l'altra.
     """
+    # pipe, socket, dispositivi: open() su una FIFO chiamata «x.txt» blocca
+    # per sempre il thread dell'interfaccia
+    if not path.is_file():
+        return "", f"{path.name} non è un file normale: ignorato"
     if classify(path) == "pdf":
         text, note = _pdf_text(path, limit, deadline)
     else:
@@ -266,6 +270,9 @@ def folder_files(root: Path) -> tuple[list[tuple[str, Path]], dict[str, int]]:
                 except (OSError, ValueError):
                     skip("collegamenti simbolici")
                     continue
+            if not p.is_file():   # FIFO, socket, dispositivi
+                skip("file speciali")
+                continue
             kind = classify(p)
             if kind == "image":
                 skip("immagini (allegale una per una)")

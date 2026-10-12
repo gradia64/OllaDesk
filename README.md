@@ -36,8 +36,8 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   che contiene, ciascuno con il percorso relativo. Restano fuori i file e le
   cartelle nascosti, dipendenze e cache (`node_modules`, `__pycache__`,
   `venv`, `build`, `dist`…), ciò che esclude il `.gitignore` in cima alla
-  cartella (senza negazioni né `.gitignore` interni), le immagini e i
-  collegamenti simbolici che escono dalla cartella. Limiti: 200 file, 10 PDF,
+  cartella (senza negazioni né `.gitignore` interni), le immagini, i file
+  speciali (pipe, socket) e i collegamenti simbolici che escono dalla cartella. Limiti: 200 file, 10 PDF,
   30.000 caratteri per file e 200.000 in tutto, 2 secondi di lettura (prima
   i file di testo, poi i PDF). Un avviso riassume cosa è rimasto fuori, e il
   modello riceve lo stesso elenco. La cartella si legge al momento
