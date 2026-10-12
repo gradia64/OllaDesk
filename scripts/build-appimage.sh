@@ -55,17 +55,28 @@ if [ "$(uname -m)" != "$ARCH" ]; then
     exit 1
 fi
 
-# scarica una volta sola e verifica lo SHA-256 a ogni uso
+sha_ok() {   # sha_ok <sha256> <file>
+    echo "$1  $2" | sha256sum -c --quiet - >/dev/null 2>&1
+}
+
+# scarica una volta sola e verifica lo SHA-256 a ogni uso: un file in cache
+# con l'hash sbagliato (disco, copia interrotta) si riscarica una volta, un
+# download con l'hash sbagliato non entra mai in cache
 fetch() {
     local url="$1" sha="$2" out="$DOWNLOADS/$(basename "$1")"
     mkdir -p "$DOWNLOADS"
+    if [ -f "$out" ] && ! sha_ok "$sha" "$out"; then
+        echo "$(basename "$out") in cache con SHA-256 errato: lo riscarico" >&2
+        rm -f "$out"
+    fi
     if [ ! -f "$out" ]; then
         curl -fsSL --proto '=https' --tlsv1.2 -o "$out.part" "$url"
+        if ! sha_ok "$sha" "$out.part"; then
+            rm -f "$out.part"
+            echo "SHA-256 errato per $url: download rifiutato" >&2
+            exit 1
+        fi
         mv "$out.part" "$out"
-    fi
-    if ! echo "$sha  $out" | sha256sum -c --quiet -; then
-        echo "SHA-256 errato per $out: cancellalo e riprova" >&2
-        exit 1
     fi
     printf '%s\n' "$out"
 }
@@ -145,8 +156,8 @@ find "$APPDIR/usr/python/bin" -mindepth 1 \
 # cartella delle librerie Qt, dove il RUNPATH dei plugin le trova. Vengono
 # dai pacchetti di Ubuntu 22.04 (glibc 2.35, simboli fino alla 2.34), non dal
 # sistema che costruisce: quelle di Debian sid o Ubuntu 24.04 chiedono una
-# glibc più recente. Le librerie di base (libxcb, libX11, GL, fontconfig,
-# Wayland…) restano quelle del sistema, come in ogni AppImage.
+# glibc più recente. Le librerie di base (libxcb, libX11, libxkbcommon, GL,
+# fontconfig, Wayland…) restano quelle del sistema, come in ogni AppImage.
 UBUNTU_POOL="https://archive.ubuntu.com/ubuntu/pool"
 XCB_DEBS=(
     "universe/x/xcb-util-cursor/libxcb-cursor0_0.1.1-4ubuntu1_amd64.deb c9b5d1ad4af57397b1bd77e0a92750e34419def134c0282a0836ae9efc07cf64 libxcb-cursor.so.0"
@@ -155,6 +166,12 @@ XCB_DEBS=(
     "main/x/xcb-util-keysyms/libxcb-keysyms1_0.4.0-1build3_amd64.deb 1d62f96a793cc1aa0df860de3f7d83edea2fa461d97e2b3d4d7f7e7a10e55f42 libxcb-keysyms.so.1"
     "main/x/xcb-util-renderutil/libxcb-render-util0_0.3.9-1build3_amd64.deb f87659a2369430ed2acb1cdae54a06fa9d60727a6545594e213173ddb4377727 libxcb-render-util.so.0"
     "main/x/xcb-util/libxcb-util1_0.4.0-1build2_amd64.deb 237d51a378b93c1669ff193084ebeb6422fe1e2ea96c2e9a0099eac40992a345 libxcb-util.so.1"
+    # estensioni di libxcb e xkbcommon-x11: ci sono su ogni desktop X11, ma
+    # non nei sistemi minimi (container, sessioni solo Wayland)
+    "main/libx/libxcb/libxcb-render0_1.14-3ubuntu3_amd64.deb 26d331ed6e1219485dbd6a35b7c9cf552e1470f41bf2158b44a1331405f05250 libxcb-render.so.0"
+    "main/libx/libxcb/libxcb-shape0_1.14-3ubuntu3_amd64.deb 71666977d7aa11877d7af663231cabf4bde60b033947b83358522c6f43873b3d libxcb-shape.so.0"
+    "main/libx/libxcb/libxcb-xkb1_1.14-3ubuntu3_amd64.deb 4cf69af3ff6a60b63f9f6ea6e7d27471114c6bcbcf3f981f7b88f361029e5eb8 libxcb-xkb.so.1"
+    "main/libx/libxkbcommon/libxkbcommon-x11-0_1.4.0-1_amd64.deb e29c40fab6e0f055218aee4c7e60cd61ea82283229d7ac7ac02e226e92a5b0d5 libxkbcommon-x11.so.0"
 )
 XCB_TMP="$WORK/xcb"
 rm -rf "$XCB_TMP"

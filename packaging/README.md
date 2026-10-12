@@ -57,7 +57,7 @@ esegue, in ordine:
 | `test`    | `.desktop` e metadati AppStream validi, unit test, test offline (worker, controllo aggiornamenti, motore di chat, companion web, sincronizzazione), test degli script di rilascio |
 | `verify`  | il tag è annotato e firmato dalla sottochiave dei tag (`scripts/verify-tag.sh`); tag = `__version__`; note di rilascio presenti (`scripts/release-notes.sh`) |
 | `dist`    | tarball sorgente, `.deb`, lintian. Niente firme: qui non ci sono secret |
-| `appimage` | `scripts/build-appimage.sh`, poi `packaging/appimage/smoke-test.sh`: controlli con il Python dell'AppImage, test offline, avvio offscreen. SHA-256 nel riepilogo del job, da confrontare con una build locale |
+| `appimage` | `scripts/build-appimage.sh`, poi `packaging/appimage/smoke-test.sh`: controlli con il Python dell'AppImage, test offline, avvio offscreen e su X11 (xvfb). SHA-256 nel riepilogo del job, da confrontare con una build locale |
 | `arch`    | in un container `archlinux:base-devel`: PKGBUILD che clona il tag da GitHub e ne **verifica la firma**, `check()`, namcap, installazione e avvio di prova |
 | `publish` | **attende la tua approvazione** (environment `release`), poi: firma di tutti gli artefatti con la sottochiave della CI, release GitHub con la descrizione da `packaging/release-notes/X.Y.Z.md`, push del PKGBUILD su AUR |
 
@@ -347,7 +347,10 @@ variabili dello script, con il suo SHA-256 dalla pagina della release),
 `scripts/build-appimage.sh --lock`, controllo nel diff delle dipendenze
 indirette scelte da pip, poi build e `smoke-test.sh`. Le librerie xcb-util
 vengono da Ubuntu 22.04 apposta: quelle di Debian sid o Ubuntu 24.04
-chiedono una glibc più recente, e `check-glibc.py` le rifiuterebbe.
+chiedono una glibc più recente, e `check-glibc.py` le rifiuterebbe. Con
+`xvfb-run` installato `smoke-test.sh` avvia l'app anche su X11, l'unico modo
+per caricare davvero il plugin xcb e quindi accorgersi di una libreria
+mancante.
 
 La build è riproducibile: stesso commit, stesso SHA-256 (in locale e nella
 CI, che lo scrive nel riepilogo del job). In ogni `.desktop` `StartupWMClass`
