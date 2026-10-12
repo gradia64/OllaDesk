@@ -180,6 +180,12 @@ install -m 755 packaging/appimage/AppRun "$APPDIR/AppRun"
 
 # --- integrazione desktop -----------------------------------------------------
 install -D -m 644 "$APP_ID.desktop" "$APPDIR/usr/share/applications/$APP_ID.desktop"
+# Gear Lever (olladesk.desktop) e AppImageLauncher (appimagekit_<hash>-OllaDesk
+# .desktop) rinominano il .desktop che installano: Plasma lo collega alla
+# finestra solo se StartupWMClass è uguale all'app_id dichiarato dall'AppImage
+# (app.py). Nel .deb resta OllaDesk, il WM_CLASS di X11
+sed -i "s/^StartupWMClass=.*/StartupWMClass=$APP_ID/" \
+    "$APPDIR/usr/share/applications/$APP_ID.desktop"
 install -D -m 644 olladesk/assets/olladesk.svg \
     "$APPDIR/usr/share/icons/hicolor/scalable/apps/$APP_ID.svg"
 install -D -m 644 "$APP_ID.metainfo.xml" "$APPDIR/usr/share/metainfo/$APP_ID.metainfo.xml"
