@@ -21,7 +21,8 @@
 # Le wheel di PySide6 richiedono glibc >= 2.34 (Debian 12, Ubuntu 22.04,
 # Fedora 35 o più recenti). Serve solo x86_64.
 # Strumenti richiesti: curl, sha256sum, dpkg-deb, binutils (readelf, objdump),
-# git; appstreamcli è facoltativo (validazione dei metadati).
+# file (per appimagetool), git; appstreamcli è facoltativo (validazione dei
+# metadati).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -118,14 +119,15 @@ mkdir -p "$APPDIR"
 # --- Python e dipendenze ----------------------------------------------------
 unpack_python "$APPDIR/usr/python"
 PY="$APPDIR/usr/python/bin/python3"
-"$PY" -m pip install --isolated --quiet --no-cache-dir --no-compile \
+# root-user-action: nei container si costruisce da root, ed è voluto
+"$PY" -m pip install --isolated --quiet --root-user-action=ignore --no-cache-dir --no-compile \
     --require-hashes --only-binary=:all: --no-deps -r "$REQ_TXT"
 
 SITE="$("$PY" -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')"
 STDLIB="$("$PY" -c 'import sysconfig; print(sysconfig.get_paths()["stdlib"])')"
 
 # pip, Tk, IDLE e i test servono solo a costruire o non servono affatto
-"$PY" -m pip uninstall --isolated --quiet --yes pip
+"$PY" -m pip uninstall --isolated --quiet --root-user-action=ignore --yes pip
 rm -rf "$STDLIB"/{ensurepip,idlelib,tkinter,turtledemo,test,unittest/test,lib2to3} \
        "$STDLIB"/lib-dynload/_tkinter*.so \
        "$APPDIR"/usr/python/lib/{tcl,tk,itcl,thread}* \
