@@ -163,7 +163,7 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
 - **Aggiornamenti di OllaDesk**: all'avvio, al massimo una volta al giorno,
   l'app controlla su GitHub se è uscita una nuova versione e, in quel caso,
   mostra un avviso nella barra superiore con le istruzioni adatte a come è
-  stata installata (.deb, AUR, pip o sorgenti). Solo un avviso: nessun
+  stata installata (.deb, AUR, AppImage, pip o sorgenti). Solo un avviso: nessun
   download né installazione automatica. Si può saltare una versione, verificare
   a mano o disattivare il controllo in Impostazioni → Interfaccia.
 - **Impostazioni → scheda «Interfaccia»**: URL del server Ollama, tema

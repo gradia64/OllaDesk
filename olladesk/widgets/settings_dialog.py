@@ -335,7 +335,7 @@ class SettingsDialog(QDialog):
 
         self._install_method = app_update.install_method()
         method_label = {
-            "deb": "pacchetto .deb", "arch": "pacchetto AUR",
+            "deb": "pacchetto .deb", "arch": "pacchetto AUR", "appimage": "AppImage",
             "source": "sorgenti (git)", "pip": "pacchetto Python",
         }[self._install_method]
         row = QHBoxLayout()

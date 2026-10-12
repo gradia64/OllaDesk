@@ -536,6 +536,29 @@ def test_app_update_install_method_and_hint():
     assert app_update.download_page("deb") == app_update.RELEASES_PAGE
 
 
+def test_app_update_appimage():
+    from olladesk import app_update
+    d = Path(tempfile.mkdtemp())
+    appdir = d / "squashfs-root"
+    pkg = appdir / "usr" / "share" / "olladesk" / "olladesk"
+    pkg.mkdir(parents=True)
+    env = {"APPIMAGE": str(d / "OllaDesk.AppImage"), "APPDIR": str(appdir)}
+    assert app_update.install_method(pkg, env) == "appimage"
+    # APPIMAGE ereditata (es. terminale avviato da un'AppImage): un .deb resta .deb
+    deb = d / "usr" / "share" / "olladesk" / "olladesk"
+    deb.mkdir(parents=True)
+    (deb / app_update.MARKER_NAME).write_text("deb\n", encoding="utf-8")
+    assert app_update.install_method(deb, env) == "deb"
+    assert app_update.install_method(pkg, {"APPIMAGE": env["APPIMAGE"]}) == "pip"
+    assert app_update.install_method(pkg, {"APPDIR": env["APPDIR"]}) == "pip"
+    # AppImage estratta (--appimage-extract): niente ambiente, vale il marcatore
+    (pkg / app_update.MARKER_NAME).write_text("appimage\n", encoding="utf-8")
+    assert app_update.install_method(pkg, {}) == "appimage"
+    hint = app_update.update_hint("appimage", "0.3.4")
+    assert "OllaDesk-0.3.4-" in hint and ".AppImage" in hint and "chmod +x" in hint
+    assert app_update.download_page("appimage") == app_update.RELEASES_PAGE
+
+
 def test_settings_keep_app_update_keys():
     # le chiavi nuove devono sopravvivere al filtro di load_settings
     from olladesk import config

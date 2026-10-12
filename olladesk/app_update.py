@@ -5,6 +5,9 @@ GitHub e suggerisce come aggiornare in base a come l'app è stata installata:
 
 - ``deb``    pacchetto .deb (scripts/build-deb.sh scrive il marcatore)
 - ``arch``   pacchetto Arch/AUR (il PKGBUILD scrive il marcatore)
+- ``appimage`` AppImage: il runtime imposta APPIMAGE e APPDIR, e il
+  pacchetto deve stare dentro APPDIR (scripts/build-appimage.sh scrive
+  anche il marcatore, che vale per un'AppImage estratta)
 - ``source`` checkout git (cartella .git accanto al pacchetto)
 - ``pip``    tutto il resto (pipx/pip)
 
@@ -14,6 +17,8 @@ Il controllo automatico parte all'avvio al massimo una volta ogni 24 ore
 from __future__ import annotations
 
 import json
+import os
+import platform
 import time
 import urllib.error
 import urllib.request
@@ -33,16 +38,34 @@ AUR_PAGE = "https://aur.archlinux.org/packages/olladesk"
 CHECK_INTERVAL = 24 * 3600   # secondi tra due controlli automatici
 
 _PACKAGE_DIR = Path(__file__).resolve().parent
-MARKER_NAME = "_packaging"   # contenuto: "deb" | "arch"
+MARKER_NAME = "_packaging"   # contenuto: "deb" | "arch" | "appimage"
 
 
-def install_method(package_dir: Path = _PACKAGE_DIR) -> str:
-    """Come è stata installata l'app: "deb" | "arch" | "source" | "pip"."""
+def _inside_appimage(package_dir: Path, env) -> bool:
+    """True se il pacchetto gira dall'AppImage indicata dall'ambiente.
+
+    APPIMAGE da sola non basta: la ereditano anche i programmi avviati da
+    un'AppImage, per esempio un terminale, e un OllaDesk installato con il
+    .deb e lanciato da lì non è un'AppImage.
+    """
+    appdir = env.get("APPDIR")
+    if not env.get("APPIMAGE") or not appdir:
+        return False
+    try:
+        return package_dir.resolve().is_relative_to(Path(appdir).resolve())
+    except OSError:
+        return False
+
+
+def install_method(package_dir: Path = _PACKAGE_DIR, env=None) -> str:
+    """Come è stata installata l'app: "deb" | "arch" | "appimage" | "source" | "pip"."""
+    if _inside_appimage(package_dir, os.environ if env is None else env):
+        return "appimage"
     try:
         marker = (package_dir / MARKER_NAME).read_text(encoding="utf-8").strip()
     except OSError:
         marker = ""
-    if marker in ("deb", "arch"):
+    if marker in ("deb", "arch", "appimage"):
         return marker
     if (package_dir.parent / ".git").exists():
         return "source"
@@ -60,6 +83,14 @@ def update_hint(method: str, version: str) -> str:
         return (
             "Aggiorna dal pacchetto AUR «olladesk» con il tuo helper "
             "(es. yay -Syu olladesk) oppure ricostruiscilo con makepkg."
+        )
+    if method == "appimage":
+        current = os.environ.get("APPIMAGE")
+        where = f" ({current})" if current else ""
+        return (
+            f"Scarica OllaDesk-{version}-{platform.machine()}.AppImage dalla pagina "
+            f"della release, rendilo eseguibile (chmod +x) e usalo al posto "
+            f"dell'AppImage attuale{where}."
         )
     if method == "source":
         return "Aggiorna il checkout: git pull, poi riavvia OllaDesk."
