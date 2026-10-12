@@ -13,11 +13,14 @@ from olladesk.config import load_settings
 from olladesk.main_window import MainWindow
 
 ICON = Path(__file__).resolve().parent / "assets" / "olladesk.svg"
-DESKTOP_FILE_NAME = "olladesk.desktop"
+# ID dell'app in forma DNS inversa: nome del .desktop e dell'icona installati,
+# app_id su Wayland (setDesktopFileName) e, nella 0.4.0, ID del Flatpak
+APP_ID = "io.github.gradia64.OllaDesk"
+DESKTOP_FILE_NAME = f"{APP_ID}.desktop"
 
 
 def _desktop_file_installed() -> bool:
-    """True se olladesk.desktop è installato nelle cartelle applicazioni XDG.
+    """True se il .desktop dell'app è installato nelle cartelle applicazioni XDG.
 
     Qt registra l'app presso xdg-desktop-portal solo se l'ID dichiarato ha un
     .desktop installato: senza, il portal risponde «App info not found» e Qt
@@ -41,7 +44,7 @@ def main() -> int:
     # terminare l'app per sbaglio
     app.setQuitOnLastWindowClosed(False)
     if _desktop_file_installed():
-        app.setDesktopFileName("olladesk")
+        app.setDesktopFileName(APP_ID)
     if ICON.exists():
         app.setWindowIcon(QIcon(str(ICON)))
 

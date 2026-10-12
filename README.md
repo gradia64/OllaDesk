@@ -294,15 +294,19 @@ Nel `.desktop` puoi allora usare `Exec=olladesk` al posto del percorso assoluto.
 ### Integrazione con KDE Plasma (menu applicazioni)
 
 ```bash
-cp olladesk.desktop ~/.local/share/applications/
-install -Dm644 olladesk/assets/olladesk.svg ~/.local/share/icons/hicolor/scalable/apps/olladesk.svg
+cp io.github.gradia64.OllaDesk.desktop ~/.local/share/applications/
+install -Dm644 olladesk/assets/olladesk.svg \
+    ~/.local/share/icons/hicolor/scalable/apps/io.github.gradia64.OllaDesk.svg
 update-desktop-database ~/.local/share/applications
 ```
 
 Il `.desktop` usa `Exec=olladesk` (l'entry point installato con `pipx`/`pip`)
-e `Icon=olladesk` (l'icona copiata qui sopra nel tema `hicolor`). Se avvii
-l'app dai sorgenti senza installarla, sostituisci `Exec=` con
-`python3 /percorso/di/OllaDesk/main.py`.
+e `Icon=io.github.gradia64.OllaDesk` (l'icona copiata qui sopra nel tema
+`hicolor`). Se avvii l'app dai sorgenti senza installarla, sostituisci `Exec=`
+con `python3 /percorso/di/OllaDesk/main.py`.
+
+Fino alla 0.3.3 i file si chiamavano `olladesk.desktop` e `olladesk.svg`: se
+li avevi copiati a mano, cancellali per non avere OllaDesk due volte nel menu.
 
 ## Scorciatoie
 
@@ -431,7 +435,7 @@ tests/companion_models_test.py companion web (scarica ed elimina modelli)
 tests/fake_ollama.py        finto server Ollama per i test offline
 tests/companion_client.py   client HTTP/SSE per i test della companion
 tests/release_tools_test.py script di rilascio (chiavi e repository temporanei)
-olladesk.desktop            voce per il menu applicazioni di KDE
+io.github.gradia64.OllaDesk.desktop  voce per il menu applicazioni (ID dell'app)
 packaging/                  file comuni .deb/Arch, modello PKGBUILD, chiave di release
 scripts/                    build (.deb, sorgenti, Arch), firma, pubblicazione AUR, icone web
 ```

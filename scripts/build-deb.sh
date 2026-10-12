@@ -5,8 +5,8 @@
 #   /usr/share/olladesk/olladesk/    pacchetto Python (con assets)
 #   /usr/share/olladesk/launcher.py  avvio (sys.path[0] = /usr/share/olladesk)
 #   /usr/bin/olladesk                launcher shell → python3 launcher.py
-#   /usr/share/applications/olladesk.desktop
-#   /usr/share/icons/hicolor/scalable/apps/olladesk.svg
+#   /usr/share/applications/io.github.gradia64.OllaDesk.desktop
+#   /usr/share/icons/hicolor/scalable/apps/io.github.gradia64.OllaDesk.svg
 #   /usr/share/doc/olladesk/copyright
 #
 # La versione è letta da olladesk/__init__.py (unica fonte, come pyproject).
@@ -53,9 +53,10 @@ install -m 644 packaging/common/launcher.py "$PKG/usr/share/olladesk/launcher.py
 install -m 755 packaging/common/olladesk.sh "$PKG/usr/bin/olladesk"
 
 # --- desktop e icona -------------------------------------------------------
-install -m 644 olladesk.desktop "$PKG/usr/share/applications/olladesk.desktop"
+install -m 644 io.github.gradia64.OllaDesk.desktop \
+    "$PKG/usr/share/applications/io.github.gradia64.OllaDesk.desktop"
 install -m 644 olladesk/assets/olladesk.svg \
-    "$PKG/usr/share/icons/hicolor/scalable/apps/olladesk.svg"
+    "$PKG/usr/share/icons/hicolor/scalable/apps/io.github.gradia64.OllaDesk.svg"
 
 # --- metadati pacchetto ----------------------------------------------------
 cat > "$PKG/DEBIAN/control" <<EOF

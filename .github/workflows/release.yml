@@ -40,7 +40,7 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq desktop-file-utils libegl1 libgl1 \
             libxkbcommon0 libdbus-1-3 libfontconfig1
-          desktop-file-validate olladesk.desktop
+          desktop-file-validate io.github.gradia64.OllaDesk.desktop
 
       - name: Dipendenze test (PySide6 per i worker Qt)
         run: python3 -m pip install --quiet "PySide6>=6.6,<7"   # come pyproject.toml, senza salti di versione maggiore
