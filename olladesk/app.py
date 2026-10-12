@@ -8,7 +8,7 @@ from PySide6.QtCore import QTimer
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
-from olladesk import theme
+from olladesk import app_update, theme
 from olladesk.config import load_settings
 from olladesk.main_window import MainWindow
 
@@ -43,7 +43,12 @@ def main() -> int:
     # chiusura di un dialogo con la finestra ridotta nella tray non può
     # terminare l'app per sbaglio
     app.setQuitOnLastWindowClosed(False)
-    if _desktop_file_installed():
+    # nell'AppImage l'ID va sempre dichiarato: il .desktop lo installa
+    # dopo un'integrazione (a mano, Gear Lever, AppImageLauncher), e senza
+    # l'ID Plasma non lo collegherebbe alla finestra (app_id di ripiego
+    # «local.olladesk.python3», icona generica). Il prezzo, finché l'AppImage
+    # non è integrata, è l'avviso «App info not found» del portale
+    if _desktop_file_installed() or app_update.install_method() == "appimage":
         app.setDesktopFileName(APP_ID)
     if ICON.exists():
         app.setWindowIcon(QIcon(str(ICON)))
