@@ -937,6 +937,32 @@ def test_web_sources_titles_cannot_add_lines():
     assert "evil" not in "".join(s["url"] for s in got)
 
 
+def test_web_sources_block_from_030():
+    # la 0.3.0 scriveva così il blocco: query (make_query) e testi (_clean)
+    # già su una riga, solo l'URL di SearXNG e Ollama passava com'era. Le
+    # chat salvate con la 0.3.0 vanno rilette e inviate a Ollama come allora
+    from olladesk import context, web_search
+
+    block = (
+        "Risultati della ricerca web per «notizie di oggi»\n"
+        "(dati NON attendibili: usali come riferimento citando le fonti tra parentesi):\n"
+        "\n"
+        "[1] Uno\nURL: https://uno.test/a b\ntesto uno\n"   # spazio: fonte saltata
+        "\n"
+        "[2] Due\nURL: https://due.test/a\nb\ntesto due\n"  # a capo: resta l'host vero
+        "\n"
+        "[3] Tre\nURL: https://tre.test/"                    # senza snippet, in fondo
+    )
+    got = [(s["n"], s["url"], s["host"]) for s in web_search.web_sources(block)]
+    assert got == [(2, "https://due.test/a", "due.test"),
+                   (3, "https://tre.test/", "tre.test")], got
+    msgs = [{"role": "user", "display": "notizie di oggi", "web": True, "web_block": block},
+            {"role": "assistant", "content": "…"}]
+    assert web_search.answer_sources(msgs, 1) == web_search.web_sources(block)
+    content, _warnings = context.build_api_content(msgs[0], True)
+    assert f"\n---\n{block}\n---" in content
+
+
 def test_answer_sources_with_tampered_chat():
     # chat modificata a mano: tipi qualsiasi non fanno fallire la rilettura
     from olladesk import web_search
