@@ -1059,6 +1059,51 @@ def test_folder_files_filters():
     assert skipped["cartelle di dipendenze, cache o .gitignore"] == 3
 
 
+def test_folder_gitignore_like_git():
+    # revisione 0.3.4: «**/x» non escludeva i file annidati (finivano nel
+    # contesto) e «/x» escludeva anche quelli nelle sottocartelle. Risultati
+    # confrontati con git check-ignore
+    from olladesk import context
+    root = Path(tempfile.mkdtemp()) / "repo"
+    paths = ["config.json", "src/config.json", "out/a.txt", "sub/out/b.txt",
+             "src/secrets.yaml", "a/b/secret/t.txt", "x.log", "deep/y.log",
+             "docs/build/z.txt", "lib/a/b/c/x.txt", "foo/bar/baz.md",
+             "tmp/one/two.txt", "data1.csv", "data22.csv", "abc/logs/k.txt", "notes.md"]
+    for rel in paths:
+        f = root / rel
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text("x", encoding="utf-8")
+    (root / ".gitignore").write_text(
+        "/config.json\n/out\n**/secrets.yaml\n**/secret/\n*.log\ndocs/build\n"
+        "lib/**/x.txt\nfoo/**\ntmp/*/two.txt\ndata?.csv\nlogs/\n", encoding="utf-8")
+    kept = sorted(rel for rel, _p in context.folder_files(root)[0])
+    assert kept == ["data22.csv", "notes.md", "src/config.json", "sub/out/b.txt"], kept
+
+
+def test_folder_skips_credentials_and_bounds_the_walk():
+    from olladesk import context
+    root = Path(tempfile.mkdtemp()) / "segreti"
+    root.mkdir()
+    for n in ("prod.env", "app.env.local", "credentials.json", "secrets.yaml", "token.json",
+              "server.pem", "id_ed25519", "gcp-service-account.json", "README.md", "envelope.txt"):
+        (root / n).write_text("SEGRETO", encoding="utf-8")
+    files, skipped = context.folder_files(root)
+    assert sorted(r for r, _p in files) == ["README.md", "envelope.txt"], files
+    assert skipped["possibili credenziali (allegale una per una)"] == 8
+    # le cartelle contano nel limite di voci, e la scadenza vale anche per la visita
+    tree = Path(tempfile.mkdtemp()) / "albero"
+    for i in range(30):
+        (tree / f"d{i}").mkdir(parents=True)
+    old = context.MAX_FOLDER_SCAN
+    try:
+        context.MAX_FOLDER_SCAN = 10
+        assert context.folder_files(tree)[1] == {"oltre il limite di voci esaminate": 1}
+    finally:
+        context.MAX_FOLDER_SCAN = old
+    assert context.folder_files(tree, deadline=0.0)[1] == {
+        f"lettura oltre {context.MAX_FOLDER_SECONDS:g} secondi": 1}
+
+
 def test_folder_block_content_and_limits():
     from olladesk import context
     root = _folder_tree()
@@ -1080,7 +1125,7 @@ def test_folder_block_content_and_limits():
     try:
         context.MAX_FOLDER_SECONDS = -1
         block, warnings = context.folder_block(root)
-        assert "0 file inclusi" in block and "4 (lettura oltre -1 secondi)" in block
+        assert "0 file inclusi" in block and "1 (lettura oltre -1 secondi)" in block
     finally:
         context.MAX_FOLDER_SECONDS = old_s
     empty = Path(tempfile.mkdtemp()) / "vuota"

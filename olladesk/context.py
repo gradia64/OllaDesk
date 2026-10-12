@@ -12,6 +12,7 @@ from __future__ import annotations
 import base64
 import fnmatch
 import os
+import re
 import time
 from pathlib import Path
 
@@ -180,8 +181,46 @@ MAX_FOLDER_SCAN = 5000        # voci esaminate: la home intera non blocca l'app
 MAX_FOLDER_SECONDS = 2.0
 
 
-def _gitignore_rules(root: Path) -> list[tuple[str, bool, bool]]:
-    """Regole del .gitignore in cima alla cartella: (modello, solo cartelle, ancorato).
+def _gitignore_regex(pattern: str, anchored: bool) -> re.Pattern:
+    """Un modello del .gitignore come espressione regolare sul percorso relativo.
+
+    Come in git: «*» e «?» non attraversano «/», «**/» vale per qualsiasi
+    numero di cartelle (anche zero), «/**» per tutto ciò che c'è sotto. Un
+    modello non ancorato vale a ogni livello.
+    """
+    out, i = [], 0
+    while i < len(pattern):
+        if pattern.startswith("**/", i):
+            out.append("(?:.*/)?")
+            i += 3
+        elif pattern.startswith("/**", i) and i + 3 == len(pattern):
+            out.append("/.*")
+            i += 3
+        elif pattern.startswith("**", i):
+            out.append(".*")
+            i += 2
+        elif pattern[i] == "*":
+            out.append("[^/]*")
+            i += 1
+        elif pattern[i] == "?":
+            out.append("[^/]")
+            i += 1
+        elif pattern[i] == "[" and "]" in pattern[i + 2:]:
+            end = pattern.index("]", i + 2)
+            body = pattern[i + 1:end].replace("\\", "\\\\")
+            if body.startswith("!"):
+                body = "^" + body[1:]
+            out.append(f"[{body}]")
+            i = end + 1
+        else:
+            out.append(re.escape(pattern[i]))
+            i += 1
+    prefix = "" if anchored else "(?:.*/)?"
+    return re.compile(prefix + "".join(out))
+
+
+def _gitignore_rules(root: Path) -> list[tuple[re.Pattern, bool]]:
+    """Regole del .gitignore in cima alla cartella: (espressione, solo cartelle).
 
     Un sottoinsieme della sintassi di git: niente negazioni («!») né .gitignore
     nelle sottocartelle. Git non viene eseguito: la configurazione di un
@@ -197,33 +236,47 @@ def _gitignore_rules(root: Path) -> list[tuple[str, bool, bool]]:
         if not line or line.startswith(("#", "!")):
             continue
         dir_only = line.endswith("/")
-        line = line.strip("/")
+        line = line.rstrip("/")
+        # come git: ancorato alla cima se ha una barra all'inizio o in mezzo
+        # («/build», «docs/build»), a ogni livello altrimenti («build/»,
+        # «*.log»); «**/x» vale a ogni livello anche se contiene una barra
+        anchored = "/" in line
+        line = line.lstrip("/")
         if not line:
             continue
-        # «build/» vale a ogni livello, «docs/build» solo dalla cima
-        anchored = "/" in line
-        rules.append((line, dir_only, anchored))
+        rules.append((_gitignore_regex(line, anchored), dir_only))
     return rules
 
 
 def _ignored(rel: str, is_dir: bool, rules) -> bool:
-    name = rel.rsplit("/", 1)[-1]
-    for pattern, dir_only, anchored in rules:
-        if dir_only and not is_dir:
-            continue
-        target = rel if anchored else name
-        if fnmatch.fnmatchcase(target, pattern.replace("**/", "")):
-            return True
-    return False
+    return any(rx.fullmatch(rel) for rx, dir_only in rules if is_dir or not dir_only)
 
 
-def folder_files(root: Path) -> tuple[list[tuple[str, Path]], dict[str, int]]:
+# nomi tipici di file con credenziali: in una cartella entrerebbero nel
+# contesto senza che l'utente li abbia scelti uno per uno (da soli si possono
+# ancora allegare)
+SECRET_NAME_PATTERNS = (
+    "*.env", "*.env.*", "credentials", "credentials.*", "secret.*", "secrets.*",
+    "token.*", "tokens.*", "*.pem", "*.key", "*.p12", "*.pfx", "*.keystore",
+    "id_rsa*", "id_dsa*", "id_ecdsa*", "id_ed25519*", "*service-account*.json",
+)
+
+
+def _looks_secret(name: str) -> bool:
+    low = name.lower()
+    return any(fnmatch.fnmatchcase(low, p) for p in SECRET_NAME_PATTERNS)
+
+
+def folder_files(root: Path, deadline: float | None = None
+                 ) -> tuple[list[tuple[str, Path]], dict[str, int]]:
     """File della cartella da allegare, e quante voci sono state escluse e perché.
 
     Restituisce ([(percorso relativo, percorso)], {motivo: quante}). Si
     tengono i file che `classify` riconosce come testo o PDF; si saltano i
     nascosti, le cartelle di FOLDER_SKIP_DIRS, ciò che il .gitignore esclude,
-    le immagini e i collegamenti simbolici che escono dalla cartella.
+    i probabili file di credenziali, le immagini e i collegamenti simbolici
+    che escono dalla cartella. La visita si ferma dopo MAX_FOLDER_SCAN voci
+    (file e cartelle) o alla scadenza `deadline` (time.monotonic).
     """
     root = root.resolve()
     rules = _gitignore_rules(root)
@@ -235,7 +288,19 @@ def folder_files(root: Path) -> tuple[list[tuple[str, Path]], dict[str, int]]:
 
     scanned = 0
     pdfs = 0
+    def stop(reason: str) -> bool:
+        skip(reason)
+        return True
+
     for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+        # le cartelle contano quanto i file: un albero di sole cartelle
+        # vuote non deve bloccare l'interfaccia
+        scanned += 1
+        if scanned > MAX_FOLDER_SCAN and stop("oltre il limite di voci esaminate"):
+            return files, skipped
+        if deadline is not None and time.monotonic() > deadline \
+                and stop(f"lettura oltre {MAX_FOLDER_SECONDS:g} secondi"):
+            return files, skipped
         here = Path(dirpath)
         rel_dir = here.relative_to(root).as_posix()
         rel_dir = "" if rel_dir == "." else rel_dir + "/"
@@ -263,6 +328,9 @@ def folder_files(root: Path) -> tuple[list[tuple[str, Path]], dict[str, int]]:
                 continue
             if _ignored(rel, False, rules):
                 skip("cartelle di dipendenze, cache o .gitignore")
+                continue
+            if _looks_secret(f):
+                skip("possibili credenziali (allegale una per una)")
                 continue
             if p.is_symlink():
                 try:
@@ -302,13 +370,14 @@ def folder_block(root: Path) -> tuple[str, list[str]]:
     name = (root.name or str(root)) + "/"
     if not root.is_dir():
         return "", [f"cartella non trovata: {name}"]
+    # la scadenza vale per tutto: visita e lettura
+    deadline = time.monotonic() + MAX_FOLDER_SECONDS
     try:
-        files, skipped = folder_files(root)
+        files, skipped = folder_files(root, deadline)
     except OSError as e:
         return "", [f"impossibile leggere la cartella {name}: {e}"]
     warnings: list[str] = []
     budget = MAX_FOLDER_CHARS
-    deadline = time.monotonic() + MAX_FOLDER_SECONDS
     parts: list[str] = []
     included: list[str] = []
 
