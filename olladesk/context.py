@@ -16,6 +16,8 @@ import re
 import time
 from pathlib import Path
 
+from .i18n import _
+
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
 PDF_EXTS = {".pdf"}
 TEXT_EXTS = {
@@ -25,6 +27,14 @@ TEXT_EXTS = {
     ".sh", ".bash", ".zsh", ".c", ".h", ".cpp", ".hpp", ".cc", ".rs", ".go",
     ".java", ".kt", ".rb", ".php", ".lua", ".sql", ".tex", ".diff", ".patch",
     ".service", ".desktop", ".gitignore", ".env", ".dockerfile", ".cmake",
+    # moduli JS/TS, framework web, altri linguaggi e configurazioni comuni
+    ".mjs", ".cjs", ".mts", ".cts", ".vue", ".svelte", ".astro", ".less",
+    ".sass", ".jsonc", ".json5", ".cs", ".fs", ".swift", ".dart", ".scala",
+    ".groovy", ".gradle", ".pl", ".pm", ".r", ".jl", ".hs", ".ex", ".exs",
+    ".erl", ".clj", ".zig", ".nim", ".vim", ".fish", ".ps1", ".bat", ".cmd",
+    ".proto", ".graphql", ".gql", ".tf", ".hcl", ".nix", ".mk", ".properties",
+    ".rules", ".socket", ".timer", ".spec", ".po", ".pot", ".qml", ".ui",
+    ".svg", ".adoc", ".org", ".lock",
 }
 MAX_TEXT_CHARS = 120_000
 
@@ -32,7 +42,9 @@ MAX_TEXT_CHARS = 120_000
 _NO_SUFFIX_FILES = {
     ".gitignore", ".gitattributes", ".gitmodules", ".env", ".bashrc", ".zshrc",
     ".profile", ".editorconfig", ".vimrc", ".tmux.conf", "dockerfile",
-    "makefile", "license", "readme",
+    "makefile", "license", "readme", "copying", "authors", "changelog",
+    "containerfile", "gemfile", "rakefile", "procfile", "justfile",
+    "vagrantfile", "pkgbuild", ".npmrc", ".prettierrc", ".eslintrc",
 }
 
 
@@ -80,14 +92,14 @@ def image_to_b64(path) -> tuple[str | None, str | None]:
     try:
         size = p.stat().st_size
         if size > MAX_IMAGE_BYTES:
-            return None, f"immagine {p.name} troppo grande ({size // (1024 * 1024)} MB, massimo 20 MB): non inviata"
+            return None, _('immagine {name} troppo grande ({size} MB, massimo 20 MB): non inviata').format(name=p.name, size=size // (1024 * 1024))
         data = p.read_bytes()
     except OSError as e:
-        return None, f"impossibile leggere l'immagine {p.name}: {e.strerror or e}"
+        return None, _("impossibile leggere l'immagine {name}: {error}").format(name=p.name, error=e.strerror or e)
     if p.suffix.lower() not in _NATIVE_IMAGE_EXTS:
         data = _to_png(p)
         if data is None:
-            return None, f"formato dell'immagine {p.name} non supportato: non inviata"
+            return None, _("formato dell'immagine {name} non supportato: non inviata").format(name=p.name)
     return base64.b64encode(data).decode("ascii"), None
 
 
@@ -108,9 +120,10 @@ def context_overflow_note(messages: list[dict], num_ctx: int | None) -> str | No
     if used <= limit * 0.9:
         return None
     return (
-        f"il contesto stimato (~{used} token) supera la finestra del modello ({limit} token): "
-        "Ollama scarterà l'inizio del prompt. Aumenta «num_ctx» in Impostazioni → "
-        "Parametri modelli, oppure riduci allegati e cronologia."
+        _('il contesto stimato (~{used} token) supera la finestra del modello '
+          "({limit} token): Ollama scarterà l'inizio del prompt. Aumenta "
+          '«num_ctx» in Impostazioni → Parametri modelli, oppure riduci allegati '
+          'e cronologia.').format(used=used, limit=limit)
     )
 
 
@@ -118,7 +131,7 @@ def _pdf_text(path: Path, limit: int, deadline: float | None = None) -> tuple[st
     try:
         from pypdf import PdfReader
     except ImportError:
-        return "", "pypdf non installato: impossibile leggere i PDF (`pip install pypdf`)"
+        return "", _("pypdf non installato: impossibile leggere i PDF (`pip install pypdf`)")
     try:
         reader = PdfReader(str(path))
         # pagina per pagina, fino a `limit` caratteri: l'estrazione è lenta
@@ -135,7 +148,7 @@ def _pdf_text(path: Path, limit: int, deadline: float | None = None) -> tuple[st
                 break
         return "\n".join(chunks), None
     except Exception as e:
-        return "", f"impossibile leggere il PDF {path.name}: {e}"
+        return "", _('impossibile leggere il PDF {name}: {error}').format(name=path.name, error=e)
 
 
 def extract_text(path: Path, limit: int = MAX_TEXT_CHARS,
@@ -148,7 +161,7 @@ def extract_text(path: Path, limit: int = MAX_TEXT_CHARS,
     # pipe, socket, dispositivi: open() su una FIFO chiamata «x.txt» blocca
     # per sempre il thread dell'interfaccia
     if not path.is_file():
-        return "", f"{path.name} non è un file normale: ignorato"
+        return "", _('{name} non è un file normale: ignorato').format(name=path.name)
     if classify(path) == "pdf":
         text, note = _pdf_text(path, limit, deadline)
     else:
@@ -157,9 +170,9 @@ def extract_text(path: Path, limit: int = MAX_TEXT_CHARS,
                 # legge solo la quota necessaria: un log da 1 GB non finisce in memoria
                 text, note = fh.read(limit + 1), None
         except OSError as e:
-            return "", f"impossibile leggere {path.name}: {e}"
+            return "", _('impossibile leggere {name}: {error}').format(name=path.name, error=e)
     if len(text) > limit:
-        text = text[:limit] + f"\n…[troncato a {limit} caratteri]"
+        text = text[:limit] + _('\n…[troncato a {limit} caratteri]').format(limit=limit)
     return text, note
 
 
@@ -179,6 +192,7 @@ MAX_FOLDER_SCAN = 5000        # voci esaminate: la home intera non blocca l'app
 # la cartella si legge all'invio, nel thread dell'interfaccia: oltre questo
 # tempo i file restanti (di solito PDF lenti) restano fuori
 MAX_FOLDER_SECONDS = 2.0
+MAX_UNSUPPORTED_NAMES = 5     # file non supportati nominati nell'avviso
 
 
 def _gitignore_regex(pattern: str, anchored: bool) -> re.Pattern:
@@ -267,7 +281,8 @@ def _looks_secret(name: str) -> bool:
     return any(fnmatch.fnmatchcase(low, p) for p in SECRET_NAME_PATTERNS)
 
 
-def folder_files(root: Path, deadline: float | None = None
+def folder_files(root: Path, deadline: float | None = None,
+                 unsupported: list[str] | None = None,
                  ) -> tuple[list[tuple[str, Path]], dict[str, int]]:
     """File della cartella da allegare, e quante voci sono state escluse e perché.
 
@@ -277,7 +292,11 @@ def folder_files(root: Path, deadline: float | None = None
     i probabili file di credenziali, le immagini e i collegamenti simbolici
     che escono dalla cartella. La visita si ferma dopo MAX_FOLDER_SCAN voci
     (file e cartelle) o alla scadenza `deadline` (time.monotonic).
+    In `unsupported`, se data, finiscono i percorsi relativi dei file di
+    tipo non supportato: l'avviso li nomina, così si sa cosa manca.
     """
+    if unsupported is None:
+        unsupported = []
     root = root.resolve()
     rules = _gitignore_rules(root)
     files: list[tuple[str, Path]] = []
@@ -296,10 +315,10 @@ def folder_files(root: Path, deadline: float | None = None
         # le cartelle contano quanto i file: un albero di sole cartelle
         # vuote non deve bloccare l'interfaccia
         scanned += 1
-        if scanned > MAX_FOLDER_SCAN and stop("oltre il limite di voci esaminate"):
+        if scanned > MAX_FOLDER_SCAN and stop(_("oltre il limite di voci esaminate")):
             return files, skipped
         if deadline is not None and time.monotonic() > deadline \
-                and stop(f"lettura oltre {MAX_FOLDER_SECONDS:g} secondi"):
+                and stop(_('lettura oltre {seconds:g} secondi').format(seconds=MAX_FOLDER_SECONDS)):
             return files, skipped
         here = Path(dirpath)
         rel_dir = here.relative_to(root).as_posix()
@@ -310,16 +329,16 @@ def folder_files(root: Path, deadline: float | None = None
             if d.startswith("."):
                 skip("nascosti")
             elif d in FOLDER_SKIP_DIRS or _ignored(rel, True, rules):
-                skip("cartelle di dipendenze, cache o .gitignore")
+                skip(_("cartelle di dipendenze, cache o .gitignore"))
             elif (here / d).is_symlink():
-                skip("collegamenti simbolici")
+                skip(_("collegamenti simbolici"))
             else:
                 keep.append(d)
         dirnames[:] = keep   # os.walk scende solo in queste
         for f in sorted(filenames):
             scanned += 1
             if scanned > MAX_FOLDER_SCAN:
-                skip("oltre il limite di voci esaminate")
+                skip(_("oltre il limite di voci esaminate"))
                 return files, skipped
             rel = rel_dir + f
             p = here / f
@@ -327,34 +346,35 @@ def folder_files(root: Path, deadline: float | None = None
                 skip("nascosti")
                 continue
             if _ignored(rel, False, rules):
-                skip("cartelle di dipendenze, cache o .gitignore")
+                skip(_("cartelle di dipendenze, cache o .gitignore"))
                 continue
             if _looks_secret(f):
-                skip("possibili credenziali (allegale una per una)")
+                skip(_("possibili credenziali (allegale una per una)"))
                 continue
             if p.is_symlink():
                 try:
                     p.resolve().relative_to(root)
                 except (OSError, ValueError):
-                    skip("collegamenti simbolici")
+                    skip(_("collegamenti simbolici"))
                     continue
             if not p.is_file():   # FIFO, socket, dispositivi
-                skip("file speciali")
+                skip(_("file speciali"))
                 continue
             kind = classify(p)
             if kind == "image":
-                skip("immagini (allegale una per una)")
+                skip(_("immagini (allegale una per una)"))
                 continue
             if kind not in ("text", "pdf"):
-                skip("tipo non supportato")
+                skip(_("tipo non supportato"))
+                unsupported.append(rel)
                 continue
             if kind == "pdf":
                 pdfs += 1
                 if pdfs > MAX_FOLDER_PDFS:
-                    skip(f"oltre {MAX_FOLDER_PDFS} PDF")
+                    skip(_('oltre {max} PDF').format(max=MAX_FOLDER_PDFS))
                     continue
             if len(files) >= MAX_FOLDER_FILES:
-                skip(f"oltre {MAX_FOLDER_FILES} file")
+                skip(_('oltre {max} file').format(max=MAX_FOLDER_FILES))
                 continue
             files.append((rel, p))
     return files, skipped
@@ -369,13 +389,14 @@ def folder_block(root: Path) -> tuple[str, list[str]]:
     """
     name = (root.name or str(root)) + "/"
     if not root.is_dir():
-        return "", [f"cartella non trovata: {name}"]
+        return "", [_('cartella non trovata: {name}').format(name=name)]
     # la scadenza vale per tutto: visita e lettura
     deadline = time.monotonic() + MAX_FOLDER_SECONDS
     try:
-        files, skipped = folder_files(root, deadline)
+        unsupported: list[str] = []
+        files, skipped = folder_files(root, deadline, unsupported)
     except OSError as e:
-        return "", [f"impossibile leggere la cartella {name}: {e}"]
+        return "", [_('impossibile leggere la cartella {name}: {error}').format(name=name, error=e)]
     warnings: list[str] = []
     budget = MAX_FOLDER_CHARS
     parts: list[str] = []
@@ -389,10 +410,10 @@ def folder_block(root: Path) -> tuple[str, list[str]]:
     files.sort(key=lambda f: classify(f[1]) == "pdf")
     for rel, p in files:
         if budget <= 0:
-            skip(f"oltre {MAX_FOLDER_CHARS} caratteri")
+            skip(_('oltre {max} caratteri').format(max=MAX_FOLDER_CHARS))
             continue
         if time.monotonic() > deadline:
-            skip(f"lettura oltre {MAX_FOLDER_SECONDS:g} secondi")
+            skip(_('lettura oltre {seconds:g} secondi').format(seconds=MAX_FOLDER_SECONDS))
             continue
         text, note = extract_text(p, min(MAX_FOLDER_FILE_CHARS, budget), deadline)
         if note:
@@ -400,20 +421,25 @@ def folder_block(root: Path) -> tuple[str, list[str]]:
         if not text.strip():
             continue
         if len(text) > budget:
-            text = text[:budget] + f"\n…[troncato: limite di {MAX_FOLDER_CHARS} caratteri per la cartella]"
+            text = text[:budget] + _('\n…[troncato: limite di {max} caratteri per la cartella]').format(max=MAX_FOLDER_CHARS)
         budget -= len(text)
         included.append(name + rel)
         parts.append(f"--- {name}{rel} ---\n{text}")
-    lines = [f"Cartella: {name} (dati non attendibili), {len(included)} file inclusi:"]
+    lines = [_('Cartella: {name} (dati non attendibili), {n} file inclusi:').format(name=name, n=len(included))]
     lines += included
     if skipped:
-        lines.append("Esclusi: " + ", ".join(f"{n} ({why})" for why, n in skipped.items()))
-        warnings.append(
-            f"cartella {name}: {len(included)} file inclusi, "
-            + ", ".join(f"{n} esclusi ({why})" for why, n in skipped.items())
+        lines.append(_("Esclusi: ") + ", ".join(f"{n} ({why})" for why, n in skipped.items()))
+        note = (
+            _('cartella {name}: {n} file inclusi, ').format(name=name, n=len(included))
+            + ", ".join(_('{n} esclusi ({why})').format(n=n, why=why) for why, n in skipped.items())
         )
+        if unsupported:
+            shown = unsupported[:MAX_UNSUPPORTED_NAMES]
+            more = len(unsupported) - len(shown)
+            note += _(" — non supportati: ") + ", ".join(shown) + (_(' e altri {more}').format(more=more) if more else "")
+        warnings.append(note)
     if not included:
-        warnings.append(f"cartella {name}: nessun file di testo o PDF da allegare")
+        warnings.append(_('cartella {name}: nessun file di testo o PDF da allegare').format(name=name))
     return "\n".join(lines) + ("\n\n" + "\n\n".join(parts) if parts else ""), warnings
 
 
@@ -459,10 +485,10 @@ def build_api_content(msg: dict, include_full: bool) -> tuple[str, list[str]]:
                 warnings.append(note)
             if content.strip():
                 parts.append(
-                    f"\n---\nAllegato: {p.name} (dati non attendibili)\n---\n{content}\n---"
+                    _('\n---\nAllegato: {name} (dati non attendibili)\n---\n{content}\n---').format(name=p.name, content=content)
                 )
             elif not note:
-                warnings.append(f"nessun testo estratto da {p.name}")
+                warnings.append(_('nessun testo estratto da {name}').format(name=p.name))
         web_block = msg.get("web_block")
         if web_block:
             parts.append(f"\n---\n{web_block}\n---")
@@ -470,8 +496,8 @@ def build_api_content(msg: dict, include_full: bool) -> tuple[str, list[str]]:
         names = [a["name"] for a in (msg.get("attachments_meta") or [])
                  if isinstance(a, dict) and a.get("name")]
         if names:
-            parts.append("\n[allegati inviati in un turno precedente: " + ", ".join(names) + "]")
+            parts.append(_("\n[allegati inviati in un turno precedente: ") + ", ".join(names) + "]")
         if msg.get("web_block"):
-            parts.append("\n[una ricerca web era stata allegata in un turno precedente]")
+            parts.append(_("\n[una ricerca web era stata allegata in un turno precedente]"))
 
     return "\n".join(parts), warnings

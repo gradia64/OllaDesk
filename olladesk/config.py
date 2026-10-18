@@ -13,12 +13,15 @@ import uuid
 from pathlib import Path
 from typing import Any, Iterable
 
+from .i18n import _
+
 APP_NAME = "olladesk"
 LEGACY_APP_NAME = "ollama-gui"   # nome usato prima del rebranding: i dati vengono migrati
 
 DEFAULT_SETTINGS: dict[str, Any] = {
     "host": "http://localhost:11434",
     "theme": "dark",            # "dark" | "light" | "system"
+    "language": "auto",         # "auto" (lingua del sistema) | "it" | "en" | "fr" | "de" | "es"
     "font_size": 10,
     "send_on_enter": True,
     "show_timestamps": False,
@@ -194,7 +197,7 @@ def _migrate_legacy_chats() -> None:
 def _index_entry(chat: dict) -> dict:
     return {
         "id": chat["id"],
-        "title": chat.get("title", "Conversazione"),
+        "title": chat.get("title", _("Conversazione")),
         "model": chat.get("model", ""),
         "updated": chat.get("updated", 0),
         # nel file della chat, non solo qui: _rebuild_index lo ritrova

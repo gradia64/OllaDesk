@@ -17,6 +17,7 @@ Licencia: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
 ## Funcionalidades
 
 - **Chat estilo ChatGPT**: burbujas usuario/asistente, respuesta en *streaming* token a token, botón para interrumpir la generación, estadísticas (token, tok/s, duración), renderizado Markdown (bloques de código, listas, negritas, enlaces…), botón de copia para cada respuesta. La columna de mensajes tiene ancho máximo fijo y permanece centrada incluso cuando la barra lateral está oculta (Ctrl+B): el contenido no se estira a toda la ventana.
+- **Interfaz multilingüe**: italiano, inglés, francés, alemán y español, también en el companion web. Sigue el idioma del sistema (los idiomas aún no traducidos usan el inglés) o se elige en Ajustes → Interfaz → «Idioma»; se aplica tras reiniciar. Los catálogos están en `olladesk/locale/*.po` y se actualizan con `python3 scripts/i18n.py update`.
 - **Historial de conversaciones** en la barra lateral (con la versión de OllaDesk en el encabezado): nueva chat, selección, renombrar (clic derecho) y eliminación; persistencia en disco.
 - **Archivo de conversaciones** (clic derecho → «Archivar»): la chat sale de la lista sin eliminarse y se encuentra con «🗄 Archivo (N)» al final de la barra lateral, desde donde se abre o se restaura. Escribir un nuevo mensaje en una chat archivada la devuelve a la lista. Opcional el archivado automático al iniciar las chats sin mensajes desde cierto número de días (Configuración → Interfaz, desactivado por defecto).
 - **Adjuntos como contexto** (📎 en el input): archivos de texto y código (insertados en el mensaje), PDF (requiere el paquete opcional `pypdf`) e imágenes (enviadas en base64 a los modelos de visión: llava, llama3.2-vision, gemma3…). Los adjuntos aparecen como chips sobre el input y en la burbuja del mensaje.
@@ -274,6 +275,7 @@ olladesk/
   config.py                 persistencia (settings, parámetros, chat) + migración
   theme.py                  temas oscuro/claro/sistema (Fusion + QSS)
   md.py                     Markdown → HTML (subset Qt rich text)
+  i18n.py                   traducciones de la interfaz (catálogos en locale/*.po)
   context.py                adjuntos: texto/PDF/imágenes como contexto
   web_search.py             búsqueda web (DuckDuckGo/Ollama Cloud/SearXNG) + worker
   updater.py                actualizaciones de Ollama (release GitHub + pkexec)

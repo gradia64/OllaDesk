@@ -4,6 +4,33 @@
 "use strict";
 
 const $ = (id) => document.getElementById(id);
+
+// testi nella lingua di OllaDesk sul PC (/api/i18n): la chiave è il testo
+// italiano, che resta anche se le traduzioni non arrivano
+let STRINGS = {};
+function tr(s) { return STRINGS[s] || s; }
+// tr con segnaposto: trf("Elimina {name}", { name })
+function trf(s, vars) {
+  return tr(s).replace(/\{(\w+)\}/g, (m, k) => (k in vars ? String(vars[k]) : m));
+}
+
+async function loadStrings() {
+  try {
+    const res = await fetch("/api/i18n", { credentials: "same-origin", cache: "no-store" });
+    if (res.ok) {
+      const data = await res.json();
+      STRINGS = data.strings || {};
+      document.documentElement.lang = data.lang || "it";
+    }
+  } catch (e) { /* PC non raggiungibile: testi in italiano */ }
+  for (const e of document.querySelectorAll("[data-i18n]")) e.textContent = tr(e.textContent.trim());
+  for (const e of document.querySelectorAll("[data-i18n-attr]")) {
+    for (const a of e.dataset.i18nAttr.split(" ")) {
+      const v = e.getAttribute(a);
+      if (v) e.setAttribute(a, tr(v));
+    }
+  }
+}
 const VIEWS = ["loading", "pair", "list", "models", "chat"];
 
 let currentId = null;     // conversazione aperta (null = nuova)
@@ -41,7 +68,7 @@ function show(view) {
   // l'invio che crea una chat vale solo per l'apertura immediata di quella chat
   if (view !== "chat") sentNew = null;
   if (!inChat) {
-    $("title").textContent = view === "models" ? "Modelli" : "OllaDesk";
+    $("title").textContent = view === "models" ? tr("Modelli") : "OllaDesk";
     closeStream();
   }
 }
@@ -58,13 +85,13 @@ async function api(path, options) {
   try {
     res = await fetch(path, { credentials: "same-origin", cache: "no-store", ...options });
   } catch (e) {
-    throw new Error("PC non raggiungibile: OllaDesk è aperto e sulla stessa rete?");
+    throw new Error(tr("PC non raggiungibile: OllaDesk è aperto e sulla stessa rete?"));
   }
   if (res.status === 401) throw new Unauthorized();
   let data = {};
   try { data = await res.json(); } catch (e) { /* corpo vuoto */ }
   if (!res.ok) {
-    const err = new Error(data.error || "errore " + res.status);
+    const err = new Error(data.error || trf("errore {status}", { status: res.status }));
     err.status = res.status;
     throw err;
   }
@@ -98,6 +125,13 @@ function scrollToEnd() {
   window.scrollTo(0, document.body.scrollHeight);
 }
 
+// durante lo stream si scende solo se si era già in fondo: chi risale a
+// rileggere non viene riportato giù a ogni aggiornamento
+function nearEnd() {
+  const doc = document.documentElement;
+  return window.innerHeight + window.scrollY >= doc.scrollHeight - 40;
+}
+
 // ------------------------------------------------------------ abbinamento
 
 async function pair(code) {
@@ -127,7 +161,7 @@ function chatLink(c) {
   const a = el("a");
   a.href = "#/c/" + encodeURIComponent(c.id);
   a.dataset.id = c.id;
-  const t = el("span", "t", c.title || "Conversazione");
+  const t = el("span", "t", c.title || tr("Conversazione"));
   t.prepend(el("span", "badge", "● "));
   a.append(t);
   a.append(el("span", "m", [c.model, fmtTime(c.updated)].filter(Boolean).join(" · ")));
@@ -142,7 +176,7 @@ function renderList(data) {
   const archived = data.chats.filter((c) => c.archived);
   $("chat-list").replaceChildren(...main.map(chatLink));
   $("archive-list").replaceChildren(...archived.map(chatLink));
-  $("archive-sum").textContent = "🗄 Archivio (" + archived.length + ")";
+  $("archive-sum").textContent = trf("🗄 Archivio ({n})", { n: archived.length });
   $("archive").hidden = archived.length === 0;
   $("list-empty").hidden = data.chats.length > 0;
   listActive = data.active;
@@ -194,7 +228,7 @@ function setThinking(target, html) {
   if (!html) return;
   if (!target.think) {
     target.think = el("details", "think");
-    target.think.append(el("summary", "", "🧠 Pensiero"));
+    target.think.append(el("summary", "", tr("🧠 Pensiero")));
     target.thinkBody = el("div", "body");
     target.think.append(target.thinkBody);
     target.box.insertBefore(target.think, target.body);
@@ -205,7 +239,7 @@ function setThinking(target, html) {
 function renderMessage(m) {
   const box = el("div", "msg " + m.role);
   const chips = [];
-  if (m.web) chips.push("🌐 Ricerca web");
+  if (m.web) chips.push(tr("🌐 Ricerca web"));
   for (const a of m.attachments || []) chips.push("📎 " + a);
   if (chips.length) {
     const row = el("div", "chips");
@@ -226,8 +260,8 @@ function addFoot(box, getText, meta) {
   const foot = el("div", "foot");
   const btn = el("button", "copy", "⧉");
   btn.type = "button";
-  btn.title = "Copia il messaggio";
-  btn.setAttribute("aria-label", "Copia il messaggio");
+  btn.title = tr("Copia il messaggio");
+  btn.setAttribute("aria-label", tr("Copia il messaggio"));
   btn.onclick = () => copyMessage(getText() || "", btn);
   foot.append(btn, el("div", "meta", meta));
   box.append(foot);
@@ -274,12 +308,12 @@ function showSelectable(text) {
   const wrap = el("div", "copybox");
   wrap.id = "copybox";
   const card = el("div", "card");
-  card.append(el("p", "", "Copia automatica non disponibile: tieni premuto sul testo selezionato e scegli «Copia»."));
+  card.append(el("p", "", tr("Copia automatica non disponibile: tieni premuto sul testo selezionato e scegli «Copia».")));
   const ta = el("textarea");
   ta.value = text;
   ta.readOnly = true;
   ta.rows = 8;
-  const close = el("button", "", "Chiudi");
+  const close = el("button", "", tr("Chiudi"));
   close.type = "button";
   close.onclick = () => wrap.remove();
   card.append(ta, close);
@@ -296,7 +330,7 @@ function addSources(box, sources) {
   const ok = (sources || []).filter((s) => /^https?:\/\//i.test(s.url));
   if (!ok.length) return;
   const d = el("details", "sources");
-  d.append(el("summary", "", "🌐 Fonti (" + ok.length + ")"));
+  d.append(el("summary", "", trf("🌐 Fonti ({n})", { n: ok.length })));
   const list = el("ol");
   for (const s of ok) {
     const li = el("li");
@@ -341,8 +375,8 @@ function finishPending(d) {
       [fmtTime(d.ts || Date.now() / 1000), d.stats].filter(Boolean).join(" · "));
   }
   if (d.outcome === "failed") {
-    addNote((d.error || "errore") +
-      "\nVerifica sul PC che Ollama sia avviato.", true);
+    addNote((d.error || tr("errore")) +
+      tr("\nVerifica sul PC che Ollama sia avviato."), true);
   }
 }
 
@@ -377,7 +411,7 @@ function openStream(id, after, noticesAfter) {
   on("user", (m) => { $("messages").append(renderMessage(m)); scrollToEnd(); });
   on("search", () => {
     activeHere = true;
-    startPending("🌐 Ricerca web in corso");
+    startPending(tr("🌐 Ricerca web in corso"));
     updateComposer();
   });
   on("search_done", () => {
@@ -385,15 +419,16 @@ function openStream(id, after, noticesAfter) {
   });
   on("start", () => { activeHere = true; startPending(); updateComposer(); });
   on("answer", (d) => {
+    const follow = nearEnd();
     const p = startPending();
     p.body.innerHTML = d.html;
     p.raw = d.text || "";
     p.hasText = !!d.html;
     setThinking(p, d.thinking_html);
     if (!p.hasText && d.thinking_html) {
-      p.body.replaceChildren(el("span", "muted typing", "sta pensando"));
+      p.body.replaceChildren(el("span", "muted typing", tr("sta pensando")));
     }
-    scrollToEnd();
+    if (follow) scrollToEnd();
   });
   on("done", (d) => { finishPending(d); activeHere = false; updateComposer(); });
   on("notice", (d) => addNote(d.text));
@@ -408,7 +443,7 @@ function openStream(id, after, noticesAfter) {
         const d = await api("/api/chats");
         const me = d.chats.find((c) => c.id === currentId);
         if (me) {
-          $("title").textContent = me.title || "Conversazione";   // rinominata
+          $("title").textContent = me.title || tr("Conversazione");   // rinominata
           setArchived(me.archived === true);   // archiviata o ripristinata dal PC
         } else if (d.active !== currentId) chatGone();
       } catch (e) { /* riprova al prossimo evento */ }
@@ -449,9 +484,9 @@ function renderModels(info) {
     if (extra) text.append(el("span", "m", extra));
     const del = el("button", "model-del", "🗑");
     del.type = "button";
-    del.setAttribute("aria-label", "Elimina " + m.name);
+    del.setAttribute("aria-label", trf("Elimina {name}", { name: m.name }));
     del.disabled = taskBusy || info.busy;
-    del.title = info.busy ? "Il PC sta rispondendo" : "Elimina dal disco del PC";
+    del.title = info.busy ? tr("Il PC sta rispondendo") : tr("Elimina dal disco del PC");
     del.addEventListener("click", () => deleteModel(m.name));
     row.append(text, del);
     ul.append(row);
@@ -471,19 +506,23 @@ function renderTask(t) {
   if (!t || (t.state !== "running" && !fresh)) { box.hidden = true; return; }
   box.hidden = false;
   box.classList.toggle("failed", t.state === "failed");
-  const verb = t.op === "pull" ? "Scaricamento" : "Eliminazione";
+  const pull = t.op === "pull";
   const bar = $("task-bar");
   const cancel = $("task-cancel");
   if (t.state === "running") {
-    $("task-text").textContent = verb + " di " + t.name + (t.pct != null ? " — " + t.pct + "%" : "…") +
+    $("task-text").textContent =
+      trf(pull ? "Scaricamento di {name}" : "Eliminazione di {name}", { name: t.name }) +
+      (t.pct != null ? " — " + t.pct + "%" : "…") +
       (t.pct == null && t.status ? " (" + t.status + ")" : "");
     bar.hidden = t.pct == null;
     if (t.pct != null) bar.value = t.pct;
     cancel.hidden = t.op !== "pull";
   } else {
     $("task-text").textContent = t.state === "done"
-      ? "✓ " + verb + " di " + t.name + " completato"
-      : "⚠ " + verb + " di " + t.name + " non riuscito: " + t.error;
+      ? trf(pull ? "✓ Scaricamento di {name} completato" : "✓ Eliminazione di {name} completata",
+            { name: t.name })
+      : trf(pull ? "⚠ Scaricamento di {name} non riuscito: {error}"
+                 : "⚠ Eliminazione di {name} non riuscita: {error}", { name: t.name, error: t.error });
     bar.hidden = true;
     cancel.hidden = true;
   }
@@ -556,7 +595,7 @@ $("pull-form").addEventListener("submit", async (ev) => {
 });
 
 function deleteModel(name) {
-  if (!confirm("Eliminare definitivamente «" + name + "» dal disco del PC?")) return;
+  if (!confirm(trf("Eliminare definitivamente «{name}» dal disco del PC?", { name }))) return;
   modelAction("/api/models/delete", { name });
 }
 
@@ -576,7 +615,7 @@ async function loadModels(preferred) {
   }
   haveModels = info.models.length > 0;
   if (!haveModels) {
-    const opt = el("option", "", info.online ? "— nessun modello —" : "— Ollama non raggiungibile —");
+    const opt = el("option", "", info.online ? tr("— nessun modello —") : tr("— Ollama non raggiungibile —"));
     sel.append(opt);
   }
   const names = info.models.map((m) => m.name);
@@ -591,7 +630,7 @@ async function loadModels(preferred) {
 
 function setThink(on) {
   $("think").setAttribute("aria-pressed", on ? "true" : "false");
-  $("think").title = on ? "Ragionamento attivo" : "Ragionamento spento";
+  $("think").title = on ? tr("Ragionamento attivo") : tr("Ragionamento spento");
 }
 
 $("think").addEventListener("click", () => {
@@ -605,7 +644,7 @@ $("think").addEventListener("click", () => {
 // domanda andrebbe a un servizio esterno
 function setWeb(on) {
   $("web").setAttribute("aria-pressed", on ? "true" : "false");
-  $("web").title = on ? "Ricerca web attiva" : "Ricerca web spenta";
+  $("web").title = on ? tr("Ricerca web attiva") : tr("Ricerca web spenta");
   $("web-note").hidden = !on;
   document.body.classList.toggle("web-on", on);
 }
@@ -620,11 +659,11 @@ function updateComposer() {
   const btn = $("send");
   if (activeHere) {
     btn.textContent = "■";
-    btn.setAttribute("aria-label", "Interrompi");
+    btn.setAttribute("aria-label", tr("Interrompi"));
     btn.disabled = false;
   } else {
     btn.textContent = "➤";
-    btn.setAttribute("aria-label", "Invia");
+    btn.setAttribute("aria-label", tr("Invia"));
     btn.disabled = busy || !haveModels || atts.some((a) => a.state === "uploading");
   }
   $("busy-note").hidden = !(busy && !activeHere);
@@ -638,7 +677,7 @@ async function showChat(id) {
     loadModels(null),
   ]);
   currentId = id;
-  $("title").textContent = chat.title || "Conversazione";
+  $("title").textContent = chat.title || tr("Conversazione");
   setArchived(chat.archived === true);
   $("chat-model").textContent = chat.model || "";
   $("messages").replaceChildren(...chat.messages.map(renderMessage));
@@ -649,7 +688,7 @@ async function showChat(id) {
   $("chat-menu").hidden = false;   // solo per le chat già salvate
   if (chat.state) {
     activeHere = true;
-    startPending(chat.state === "search" ? "🌐 Ricerca web in corso" : "");
+    startPending(chat.state === "search" ? tr("🌐 Ricerca web in corso") : "");
   }
   updateComposer();
   // chat appena creata da qui: gli avvisi dell'invio non sono nella copia
@@ -664,7 +703,7 @@ async function showNewChat() {
   clearAtts();
   await loadModels(null);
   currentId = null;
-  $("title").textContent = "Nuova conversazione";
+  $("title").textContent = tr("Nuova conversazione");
   $("chat-model").textContent = "";
   $("messages").replaceChildren();
   show("chat");
@@ -751,7 +790,7 @@ async function addFile(file) {
   const label = el("span", "", "📎 " + file.name + " …");
   const remove = el("button", "chip-x", "✕");
   remove.type = "button";
-  remove.setAttribute("aria-label", "Togli " + file.name);
+  remove.setAttribute("aria-label", trf("Togli {name}", { name: file.name }));
   remove.addEventListener("click", () => {
     atts = atts.filter((a) => a !== entry);
     renderAtts();
@@ -795,7 +834,7 @@ async function chatGone() {
   // senza hashchange: route() mostra l'elenco, poi resta visibile l'avviso
   history.replaceState(null, "", location.pathname);
   await route();
-  netError("La conversazione è stata eliminata sul PC.");
+  netError(tr("La conversazione è stata eliminata sul PC."));
 }
 
 // i link delle risposte si aprono in una nuova scheda: la pagina resta qui
@@ -860,7 +899,7 @@ document.addEventListener("click", (ev) => {
 
 $("m-rename").addEventListener("click", async () => {
   closeMenu();
-  const title = prompt("Nuovo titolo della conversazione:", $("title").textContent);
+  const title = prompt(tr("Nuovo titolo della conversazione:"), $("title").textContent);
   if (title === null || !title.trim() || !currentId) return;
   try {
     await post("/api/rename", { chat_id: currentId, title: title.trim() });
@@ -874,7 +913,7 @@ let currentArchived = false;
 
 function setArchived(archived) {
   currentArchived = archived;
-  $("m-archive").textContent = archived ? "↩ Ripristina" : "🗄 Archivia";
+  $("m-archive").textContent = archived ? tr("↩ Ripristina") : tr("🗄 Archivia");
 }
 
 $("m-archive").addEventListener("click", async () => {
@@ -891,8 +930,8 @@ $("m-archive").addEventListener("click", async () => {
 $("m-delete").addEventListener("click", async () => {
   closeMenu();
   if (!currentId) return;
-  const what = activeHere ? " La risposta in corso verrà interrotta." : "";
-  if (!confirm("Eliminare questa conversazione anche dal PC?" + what)) return;
+  const what = activeHere ? tr(" La risposta in corso verrà interrotta.") : "";
+  if (!confirm(tr("Eliminare questa conversazione anche dal PC?") + what)) return;
   try {
     await post("/api/delete", { chat_id: currentId });
   } catch (e) {
@@ -907,4 +946,4 @@ $("models-btn").addEventListener("click", () => { location.hash = "#/models"; })
 $("new-chat").addEventListener("click", () => { location.hash = "#/new"; });
 $("refresh").addEventListener("click", route);
 window.addEventListener("hashchange", route);
-route();
+loadStrings().then(route);

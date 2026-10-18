@@ -27,6 +27,7 @@ from pathlib import Path
 from PySide6.QtCore import QThread, Signal
 
 from . import __version__
+from .i18n import _
 from .ollama_client import abort_response
 from .updater import is_newer
 
@@ -76,25 +77,25 @@ def update_hint(method: str, version: str) -> str:
     """Istruzioni (testo semplice) per installare la versione `version`."""
     if method == "deb":
         return (
-            f"Scarica olladesk_{version}_all.deb dalla pagina della release e "
-            f"installalo con: sudo apt install ./olladesk_{version}_all.deb"
+            _('Scarica olladesk_{version}_all.deb dalla pagina della release e '
+              'installalo con: sudo apt install ./olladesk_{version}_all.deb').format(version=version)
         )
     if method == "arch":
         return (
-            "Aggiorna dal pacchetto AUR «olladesk» con il tuo helper "
-            "(es. yay -Syu olladesk) oppure ricostruiscilo con makepkg."
+            _("Aggiorna dal pacchetto AUR «olladesk» con il tuo helper "
+            "(es. yay -Syu olladesk) oppure ricostruiscilo con makepkg.")
         )
     if method == "appimage":
         current = os.environ.get("APPIMAGE")
         where = f" ({current})" if current else ""
         return (
-            f"Scarica OllaDesk-{version}-{platform.machine()}.AppImage dalla pagina "
-            f"della release, rendilo eseguibile (chmod +x) e usalo al posto "
-            f"dell'AppImage attuale{where}."
+            _('Scarica OllaDesk-{version}-{machine}.AppImage dalla pagina della '
+              "release, rendilo eseguibile (chmod +x) e usalo al posto dell'AppImage "
+              'attuale{where}.').format(version=version, machine=platform.machine(), where=where)
         )
     if method == "source":
-        return "Aggiorna il checkout: git pull, poi riavvia OllaDesk."
-    return "Aggiorna il pacchetto Python: pipx upgrade olladesk (oppure pip install -U)."
+        return _("Aggiorna il checkout: git pull, poi riavvia OllaDesk.")
+    return _("Aggiorna il pacchetto Python: pipx upgrade olladesk (oppure pip install -U).")
 
 
 def download_page(method: str) -> str:
@@ -175,14 +176,14 @@ class AppUpdateCheckWorker(QThread):
             if e.code == 404:
                 self.ready.emit(None)   # nessuna release pubblicata
             elif e.code in (403, 429):
-                self.failed.emit("limite di richieste a GitHub raggiunto, riprova più tardi")
+                self.failed.emit(_("limite di richieste a GitHub raggiunto, riprova più tardi"))
             else:
-                self.failed.emit(f"errore HTTP {e.code} da GitHub")
+                self.failed.emit(_('errore HTTP {code} da GitHub').format(code=e.code))
             return
         except Exception as e:
             if not self._stopped:
                 reason = getattr(e, "reason", None) or e.__class__.__name__
-                self.failed.emit(f"GitHub non raggiungibile ({reason})")
+                self.failed.emit(_('GitHub non raggiungibile ({reason})').format(reason=reason))
             return
         finally:
             resp, self._resp = self._resp, None

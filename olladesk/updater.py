@@ -16,6 +16,8 @@ import urllib.request
 
 from PySide6.QtCore import QThread, Signal
 
+from .i18n import _
+
 RELEASES_URL = "https://api.github.com/repos/ollama/ollama/releases/latest"
 INSTALL_SCRIPT_URL = "https://ollama.com/install.sh"
 INSTALL_CMD = "curl -fsSL https://ollama.com/install.sh | sh"
@@ -82,7 +84,7 @@ class UpdateCheckWorker(QThread):
             with urllib.request.urlopen(req, timeout=10) as resp:
                 tag = json.loads(resp.read().decode("utf-8")).get("tag_name", "")
         except Exception as e:
-            self.failed.emit(f"impossibile controllare gli aggiornamenti: {e}")
+            self.failed.emit(_('impossibile controllare gli aggiornamenti: {error}').format(error=e))
             return
         self.ready.emit(tag.lstrip("vV"))
 
@@ -108,6 +110,6 @@ class UpdateDownloadWorker(QThread):
             self.failed.emit(str(e))
             return
         if not data.startswith(b"#!"):
-            self.failed.emit("il contenuto scaricato non sembra uno script di installazione")
+            self.failed.emit(_("il contenuto scaricato non sembra uno script di installazione"))
             return
         self.ready.emit(data)

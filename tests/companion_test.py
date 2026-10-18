@@ -158,6 +158,25 @@ assert request("GET", "/", headers={"Host": f"[::1]:{PORT}"})[0] == 200
 assert request("GET", "/", headers={"Host": f"localhost:{PORT}"})[0] == 200
 print("2. Host ammessi solo IP, localhost e nomi di questa macchina OK")
 
+# testi della pagina nella lingua del PC: senza abbinamento, nessun segreto
+from olladesk import i18n  # noqa: E402
+
+st, _hd, body = request("GET", "/api/i18n")
+assert st == 200 and jbody(body)["lang"] == "it" and jbody(body)["strings"] == {}, body[:200]
+forced = os.environ.pop("OLLADESK_LANG", None)   # in CI impone l'italiano
+i18n.setup("de")
+try:
+    st, _hd, body = request("GET", "/api/i18n")
+    data = jbody(body)
+    assert st == 200 and data["lang"] == "de", data.get("lang")
+    assert data["strings"]["Abbina"] == "Koppeln"
+    assert data["strings"]["Elimina {name}"] == "{name} löschen"
+finally:
+    if forced is not None:
+        os.environ["OLLADESK_LANG"] = forced
+    i18n.setup("it")
+print("2b. Testi della companion nella lingua del PC OK")
+
 # ------------------------------------------------- 3. senza abbinamento
 
 for path in ("/api/session", "/api/chats", "/api/chats/abc123"):

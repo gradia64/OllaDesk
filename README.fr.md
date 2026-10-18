@@ -17,6 +17,7 @@ Licence : **GPL-3.0** · Python 3.10+ · PySide6 6.6+
 ## Fonctionnalités
 
 - **Chat dans le style ChatGPT** : bulles utilisateur/assistant, réponse en *streaming* token par token, bouton pour interrompre la génération, statistiques (tokens, tok/s, durée), rendu Markdown (blocs de code, listes, gras, liens…), bouton de copie pour chaque réponse. La colonne des messages a une largeur maximale fixe et reste centrée même lorsque la barre latérale est masquée (Ctrl+B) : le contenu ne s'étire pas sur toute la fenêtre.
+- **Interface multilingue** : italien, anglais, français, allemand et espagnol, y compris dans le companion web. Elle suit la langue du système (les langues pas encore traduites passent à l'anglais) ou se choisit dans Paramètres → Interface → « Langue » ; le choix s'applique au redémarrage. Les catalogues sont dans `olladesk/locale/*.po` et se mettent à jour avec `python3 scripts/i18n.py update`.
 - **Historique des conversations** dans la barre latérale (avec la version d'OllaDesk dans l'en-tête) : nouvelle discussion, sélection, renommage (clic droit) et suppression ; persistance sur disque.
 - **Archive des conversations** (clic droit → « Archiver ») : la discussion sort de la liste sans être supprimée et se retrouve avec « 🗄 Archive (N) » en bas de la barre latérale, d'où on l'ouvre ou on la restaure. Écrire un nouveau message dans une discussion archivée la fait revenir dans la liste. L'archivage automatique au démarrage des discussions sans messages depuis un certain nombre de jours est facultatif (Paramètres → Interface, désactivé par défaut).
 - **Pièces jointes comme contexte** (📎 dans la saisie) : fichiers texte et code (inlinés dans le message), PDF (nécessite le paquet optionnel `pypdf`) et images (envoyées en base64 aux modèles vision : llava, llama3.2-vision, gemma3…). Les pièces jointes apparaissent comme des puces au-dessus de la saisie et dans la bulle du message.
@@ -280,6 +281,7 @@ olladesk/
   config.py                 persistenza (settings, parametri, chat) + migrazione
   theme.py                  temi scuro/chiaro/sistema (Fusion + QSS)
   md.py                     Markdown → HTML (subset Qt rich text)
+  i18n.py                   traductions de l'interface (catalogues dans locale/*.po)
   context.py                allegati: testo/PDF/immagini come contesto
   web_search.py             ricerca web (DuckDuckGo/Ollama Cloud/SearXNG) + worker
   updater.py                aggiornamenti di Ollama (release GitHub + pkexec)

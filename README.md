@@ -25,6 +25,11 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   grassetti, link…), pulsante di copia per ogni risposta. La colonna dei
   messaggi ha larghezza massima fissa e resta centrata anche quando la
   sidebar è nascosta (Ctrl+B): il contenuto non si stira a tutta finestra.
+- **Interfaccia multilingue**: italiano, inglese, francese, tedesco e
+  spagnolo, anche nella companion web. Segue la lingua del sistema (per le
+  lingue non ancora tradotte usa l'inglese) oppure si sceglie in
+  Impostazioni → Interfaccia → «Lingua»; vale dal riavvio. I cataloghi sono
+  in `olladesk/locale/*.po` e si aggiornano con `python3 scripts/i18n.py update`.
 - **Cronologia conversazioni** nella barra laterale (con la versione di
   OllaDesk nell'intestazione): nuova chat, selezione, rinomina (tasto destro)
   ed eliminazione; persistenza su disco.
@@ -491,6 +496,7 @@ olladesk/
   config.py                 persistenza (settings, parametri, chat) + migrazione
   theme.py                  temi scuro/chiaro/sistema (Fusion + QSS)
   md.py                     Markdown → HTML (subset Qt rich text)
+  i18n.py                   traduzioni dell'interfaccia (cataloghi in locale/*.po)
   context.py                allegati: testo/PDF/immagini come contesto
   web_search.py             ricerca web (DuckDuckGo/Ollama Cloud/SearXNG) + worker
   updater.py                aggiornamenti di Ollama (release GitHub + pkexec)

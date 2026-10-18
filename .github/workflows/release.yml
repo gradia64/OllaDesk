@@ -28,6 +28,8 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-24.04
+    env:
+      OLLADESK_LANG: it   # i test confrontano i testi sorgente (italiano)
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
@@ -47,6 +49,9 @@ jobs:
 
       - name: Dipendenze test (PySide6 per i worker Qt)
         run: python3 -m pip install --quiet "PySide6>=6.6,<7"   # come pyproject.toml, senza salti di versione maggiore
+
+      - name: Traduzioni complete (en, fr, de, es) e allineate ai sorgenti
+        run: python3 scripts/i18n.py check
 
       - name: Test unitari
         run: python3 tests/unit_test.py

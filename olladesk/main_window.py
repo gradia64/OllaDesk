@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 )
 
 from . import __version__, app_update, companion, config, theme, web_search
+from .i18n import _
 from .engine import ChatEngine
 from .ollama_client import shutdown_workers
 from .widgets.chat_area import ChatArea
@@ -123,17 +124,17 @@ class MainWindow(QMainWindow):
 
         self.burger = QToolButton(top)
         self.burger.setText("☰")
-        self.burger.setToolTip("Mostra/nascondi la barra laterale (Ctrl+B)")
+        self.burger.setToolTip(_("Mostra/nascondi la barra laterale (Ctrl+B)"))
         top_lay.addWidget(self.burger)
 
         self.model_combo = QComboBox(top)
         self.model_combo.setMinimumWidth(260)
-        self.model_combo.setToolTip("Modello da usare per la conversazione")
+        self.model_combo.setToolTip(_("Modello da usare per la conversazione"))
         top_lay.addWidget(self.model_combo, 0)
 
         self.reload_models_btn = QToolButton(top)
         self.reload_models_btn.setText("↻")
-        self.reload_models_btn.setToolTip("Ricarica l'elenco dei modelli installati")
+        self.reload_models_btn.setToolTip(_("Ricarica l'elenco dei modelli installati"))
         top_lay.addWidget(self.reload_models_btn)
 
         top_lay.addStretch(1)
@@ -150,7 +151,7 @@ class MainWindow(QMainWindow):
         top_lay.addWidget(self.app_update_btn)
         self.status_dot = QLabel("●", top)
         self.status_dot.setProperty("status", "offline")
-        self.status_label = QLabel("connessione…", top)
+        self.status_label = QLabel(_("connessione…"), top)
         self.status_label.setObjectName("statusLabel")
         top_lay.addWidget(self.status_dot)
         top_lay.addWidget(self.status_label)
@@ -262,7 +263,7 @@ class MainWindow(QMainWindow):
             self.status_label.setText(f"Ollama {html.escape(version)}")
         else:
             self.status_dot.setProperty("status", "offline")
-            self.status_label.setText("offline")
+            self.status_label.setText(_("offline"))
         self._repolish(self.status_dot)
 
     @staticmethod
@@ -285,7 +286,7 @@ class MainWindow(QMainWindow):
         self.model_combo.blockSignals(True)
         self.model_combo.clear()
         if not names:
-            self.model_combo.addItem("— nessun modello —")
+            self.model_combo.addItem(_("— nessun modello —"))
             self.model_combo.setEnabled(False)
         else:
             self.model_combo.setEnabled(True)
@@ -317,7 +318,7 @@ class MainWindow(QMainWindow):
     def _open_models(self) -> None:
         if self._busy():
             self.chat_area.add_system_note(
-                "Attendi la fine della risposta (o premi ■ per interrompere) prima di gestire i modelli."
+                _("Attendi la fine della risposta (o premi ■ per interrompere) prima di gestire i modelli.")
             )
             return
         dlg = ModelManagerDialog(self.engine, self, self.current_model())
@@ -369,7 +370,7 @@ class MainWindow(QMainWindow):
                 self._view_id = None
                 self.chat_area.clear_messages()
             self.sidebar.set_chats(self.engine.chats(), self._view_id)
-            self.chat_area.add_system_note("⚠ Conversazione non leggibile dal disco: rimossa dall'elenco.")
+            self.chat_area.add_system_note(_("⚠ Conversazione non leggibile dal disco: rimossa dall'elenco."))
             return
         self._view_id = chat_id
         self._render_chat(chat)
@@ -430,7 +431,7 @@ class MainWindow(QMainWindow):
     def _show_partial(self) -> None:
         """Bolla della risposta in corso, ricostruita dal testo già ricevuto."""
         if self.engine.phase() == "search":
-            self.chat_area.begin_stream(config.now()).show_status("🌐 Ricerca web in corso…")
+            self.chat_area.begin_stream(config.now()).show_status(_("🌐 Ricerca web in corso…"))
             return
         self.chat_area.begin_stream(config.now())
         text, think = self.engine.partial()
@@ -443,20 +444,20 @@ class MainWindow(QMainWindow):
         if self._busy():
             if not self._viewing_active():
                 self.chat_area.add_system_note(
-                    "Il PC sta già rispondendo in un'altra conversazione (forse dal "
-                    "telefono): attendi la fine oppure aprila e premi ■."
+                    _("Il PC sta già rispondendo in un'altra conversazione (forse dal "
+                    "telefono): attendi la fine oppure aprila e premi ■.")
                 )
             return
         model = self.current_model()
         if not model:
             self.chat_area.add_system_note(
-                "Nessun modello disponibile.\n"
-                "Scaricalo dalla sezione «Modelli» (Ctrl+M) o controlla che Ollama sia avviato."
+                _("Nessun modello disponibile.\n"
+                "Scaricalo dalla sezione «Modelli» (Ctrl+M) o controlla che Ollama sia avviato.")
             )
             return
         refusal = self.engine.send_refusal(model)
         if refusal:
-            self.chat_area.add_system_note(f"Invio non possibile: {refusal}.")
+            self.chat_area.add_system_note(_('Invio non possibile: {refusal}.').format(refusal=refusal))
             return
         atts = self.chat_area.attachments()
         web_on = self.chat_area.web_search_active()
@@ -504,7 +505,7 @@ class MainWindow(QMainWindow):
     def _on_search_started(self, chat_id: str) -> None:
         if self._viewing(chat_id):
             placeholder = self.chat_area.begin_stream(config.now())
-            placeholder.show_status("🌐 Ricerca web in corso…")
+            placeholder.show_status(_("🌐 Ricerca web in corso…"))
 
     def _on_search_finished(self, chat_id: str) -> None:
         if self._viewing(chat_id):
@@ -542,13 +543,13 @@ class MainWindow(QMainWindow):
         # campo non viene inviato, e «thinking» in un altro errore non c'entra
         if self.engine.think_off_sent() and "think" in err.lower():
             extra = (
-                "\n\nSuggerimento: il modello potrebbe non accettare il campo «think»: "
-                "riattiva il pulsante 🧠 nell'input."
+                _("\n\nSuggerimento: il modello potrebbe non accettare il campo «think»: "
+                "riattiva il pulsante 🧠 nell'input.")
             )
         self.chat_area.add_system_note(
             err + extra
-            + "\n\nSuggerimento: avvia Ollama con `ollama serve` e verifica l'URL "
-            "nelle impostazioni (Ctrl+,)."
+            + _("\n\nSuggerimento: avvia Ollama con `ollama serve` e verifica l'URL "
+            "nelle impostazioni (Ctrl+,).")
         )
 
     def _on_notice(self, chat_id: str, text: str) -> None:
@@ -578,11 +579,11 @@ class MainWindow(QMainWindow):
         self.tray = QSystemTrayIcon(QIcon(str(icon_path)), self)
         self.tray.setToolTip("OllaDesk")
         menu = QMenu(self)
-        act_toggle = QAction("Mostra / nascondi", menu)
+        act_toggle = QAction(_("Mostra / nascondi"), menu)
         act_toggle.triggered.connect(self._toggle_from_tray)
         menu.addAction(act_toggle)
         menu.addSeparator()
-        act_quit = QAction("Esci", menu)
+        act_quit = QAction(_("Esci"), menu)
         act_quit.triggered.connect(self._quit_from_tray)
         menu.addAction(act_quit)
         self.tray.setContextMenu(menu)
@@ -617,15 +618,15 @@ class MainWindow(QMainWindow):
         extra = ""
         if f":{port}" in self.settings.get("host", "") and port != 11434:
             extra = (
-                f"\nIl campo «Server Ollama» punta ancora alla porta {port}, quella "
-                "dell'istanza che avviava la condivisione: riportalo al tuo Ollama "
-                "(di solito http://localhost:11434)."
+                _('\nIl campo «Server Ollama» punta ancora alla porta {port}, quella '
+                  "dell'istanza che avviava la condivisione: riportalo al tuo Ollama (di "
+                  'solito http://localhost:11434).').format(port=port)
             )
         self.chat_area.add_system_note(
-            "ℹ La condivisione dell'API Ollama in rete è stata rimossa: per usare "
+            _("ℹ La condivisione dell'API Ollama in rete è stata rimossa: per usare "
             "OllaDesk dal telefono attiva la «Companion web» (voce «📱 Companion» "
             "della barra laterale, Ctrl+D), che chiede un abbinamento. Per i client di terze parti "
-            "vedi il README (OLLAMA_HOST nel servizio di sistema)." + extra
+            "vedi il README (OLLAMA_HOST nel servizio di sistema).") + extra
         )
         config.save_settings(self.settings)   # le chiavi share_* escono dal file
 
@@ -641,17 +642,17 @@ class MainWindow(QMainWindow):
     def _on_companion_state(self, state: str, detail: str) -> None:
         if state == "running":
             urls = self._companion.urls()
-            where = "\n  ".join(urls) if urls else "(nessun indirizzo di rete trovato)"
+            where = "\n  ".join(urls) if urls else _("(nessun indirizzo di rete trovato)")
             self.companion_btn.setToolTip(
-                f"Companion web attiva, sul telefono apri:\n  {where}\n"
-                "Clic per abbinare un dispositivo (Ctrl+D)"
+                _('Companion web attiva, sul telefono apri:\n  {where}\nClic per '
+                  'abbinare un dispositivo (Ctrl+D)').format(where=where)
             )
             self.companion_btn.show()
         elif state == "error":
             self.companion_btn.hide()
             self.chat_area.add_system_note(
-                f"⚠ Companion web non avviata: {detail}.\n"
-                "Scegli un'altra porta nella finestra «Companion» (Ctrl+D)."
+                _("⚠ Companion web non avviata: {detail}.\nScegli un'altra porta nella "
+                  'finestra «Companion» (Ctrl+D).').format(detail=detail)
             )
         else:
             self.companion_btn.hide()
@@ -700,7 +701,7 @@ class MainWindow(QMainWindow):
         if release:
             self.app_update_btn.setText(f"⬆ OllaDesk {release['version']}")
             self.app_update_btn.setToolTip(
-                f"È disponibile OllaDesk {release['version']} (in uso: {__version__})"
+                _('È disponibile OllaDesk {new} (in uso: {current})').format(new=release['version'], current=__version__)
             )
         self.app_update_btn.setVisible(bool(release))
 
@@ -710,15 +711,15 @@ class MainWindow(QMainWindow):
             return
         method = app_update.install_method()
         box = QMessageBox(self)
-        box.setWindowTitle("Aggiornamento di OllaDesk")
+        box.setWindowTitle(_("Aggiornamento di OllaDesk"))
         box.setIcon(QMessageBox.Icon.Information)
         box.setText(
-            f"È disponibile OllaDesk {release['version']} (in uso: {__version__})."
+            _('È disponibile OllaDesk {new} (in uso: {current}).').format(new=release['version'], current=__version__)
         )
         box.setInformativeText(app_update.update_hint(method, release["version"]))
-        open_btn = box.addButton("Apri la pagina di download", QMessageBox.ButtonRole.AcceptRole)
-        skip_btn = box.addButton("Salta questa versione", QMessageBox.ButtonRole.DestructiveRole)
-        box.addButton("Più tardi", QMessageBox.ButtonRole.RejectRole)
+        open_btn = box.addButton(_("Apri la pagina di download"), QMessageBox.ButtonRole.AcceptRole)
+        skip_btn = box.addButton(_("Salta questa versione"), QMessageBox.ButtonRole.DestructiveRole)
+        box.addButton(_("Più tardi"), QMessageBox.ButtonRole.RejectRole)
         box.exec()
         clicked = box.clickedButton()
         box.deleteLater()
@@ -735,7 +736,7 @@ class MainWindow(QMainWindow):
     def open_settings(self) -> None:
         if self._busy():
             self.chat_area.add_system_note(
-                "Attendi la fine della risposta (o premi ■ per interrompere) prima di aprire le impostazioni."
+                _("Attendi la fine della risposta (o premi ■ per interrompere) prima di aprire le impostazioni.")
             )
             return
         dlg = SettingsDialog(
@@ -782,8 +783,8 @@ class MainWindow(QMainWindow):
                 self._tray_hint_shown = True
                 self.tray.showMessage(
                     "OllaDesk",
-                    "Resta attivo nella tray: clic sull'icona per mostrare o "
-                    "nascondere la finestra, «Esci» dal menu per chiudere.",
+                    _("Resta attivo nella tray: clic sull'icona per mostrare o "
+                    "nascondere la finestra, «Esci» dal menu per chiudere."),
                     QSystemTrayIcon.MessageIcon.Information,
                     4000,
                 )

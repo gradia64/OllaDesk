@@ -16,6 +16,7 @@ import urllib.request
 
 from PySide6.QtCore import QThread, Signal
 
+from .i18n import _
 from .ollama_client import abort_response
 
 _UA = (
@@ -151,11 +152,11 @@ def search(query: str, n_results: int = 5,
             results = []
     if not results and net_error is not None and not blocked:
         reason = getattr(net_error, "reason", None) or net_error.__class__.__name__
-        raise WebSearchError(f"DuckDuckGo non raggiungibile ({reason})")
+        raise WebSearchError(_('DuckDuckGo non raggiungibile ({reason})').format(reason=reason))
     if not results and blocked:
         raise WebSearchError(
-            "DuckDuckGo sta bloccando le richieste automatiche (protezione anti-bot): "
-            "riprova tra qualche minuto oppure scegli un altro provider nelle impostazioni"
+            _("DuckDuckGo sta bloccando le richieste automatiche (protezione anti-bot): "
+            "riprova tra qualche minuto oppure scegli un altro provider nelle impostazioni")
         )
     # dedup per URL e limite
     seen: set[str] = set()
@@ -181,22 +182,22 @@ def _searxng_once(url: str, base_url: str, conn_store: list | None) -> dict:
             data = json.loads(resp.read().decode("utf-8", "replace"))
     except ValueError as e:
         raise WebSearchError(
-            "l'istanza SearXNG non ha risposto in JSON: controlla l'URL e che «json» "
-            "sia in search.formats"
+            _("l'istanza SearXNG non ha risposto in JSON: controlla l'URL e che «json» "
+            "sia in search.formats")
         ) from e
     except urllib.error.HTTPError as e:
         if e.code == 403:
             raise WebSearchError(
-                "l'istanza SearXNG ha disabilitato l'output JSON: aggiungi «json» a "
-                "search.formats nel settings.yml dell'istanza"
+                _("l'istanza SearXNG ha disabilitato l'output JSON: aggiungi «json» a "
+                "search.formats nel settings.yml dell'istanza")
             ) from e
-        raise WebSearchError(f"errore HTTP {e.code} dall'istanza SearXNG") from e
+        raise WebSearchError(_("errore HTTP {code} dall'istanza SearXNG").format(code=e.code)) from e
     except urllib.error.URLError as e:
         raise WebSearchError(
-            f"istanza SearXNG non raggiungibile su {base_url} ({getattr(e, 'reason', e)})"
+            _('istanza SearXNG non raggiungibile su {base_url} ({reason})').format(base_url=base_url, reason=getattr(e, 'reason', e))
         ) from e
     if not isinstance(data, dict):
-        raise WebSearchError("risposta inattesa dall'istanza SearXNG")
+        raise WebSearchError(_("risposta inattesa dall'istanza SearXNG"))
     return data
 
 
@@ -249,10 +250,10 @@ def search_searxng(base_url: str, query: str, n_results: int = 5,
     failed = _searxng_failed_engines(data)
     if not results and failed:
         raise WebSearchError(
-            "SearXNG non ha trovato risultati; motori che non hanno risposto: "
+            _("SearXNG non ha trovato risultati; motori che non hanno risposto: ")
             + ", ".join(failed)
-            + " (nel settings.yml dell'istanza: outgoing.request_timeout più alto "
-            "o motori diversi)"
+            + _(" (nel settings.yml dell'istanza: outgoing.request_timeout più alto "
+            "o motori diversi)")
         )
     return results
 
@@ -279,15 +280,15 @@ def search_ollama(query: str, api_key: str, n_results: int = 5,
         with resp:
             data = json.loads(resp.read().decode("utf-8", "replace"))
     except ValueError as e:
-        raise WebSearchError("risposta non valida dal servizio Ollama") from e
+        raise WebSearchError(_("risposta non valida dal servizio Ollama")) from e
     except urllib.error.HTTPError as e:
         if e.code in (401, 403):
             raise WebSearchError(
-                "chiave API non valida o mancante (Impostazioni → Interfaccia)"
+                _("chiave API non valida o mancante (Impostazioni → Interfaccia)")
             ) from e
-        raise WebSearchError(f"errore HTTP {e.code} dal servizio Ollama") from e
+        raise WebSearchError(_('errore HTTP {code} dal servizio Ollama').format(code=e.code)) from e
     except urllib.error.URLError as e:
-        raise WebSearchError(f"servizio Ollama non raggiungibile: {e.reason}") from e
+        raise WebSearchError(_('servizio Ollama non raggiungibile: {reason}').format(reason=e.reason)) from e
 
     items = data.get("results") if isinstance(data, dict) else data
     out: list[tuple[str, str, str]] = []
@@ -311,8 +312,8 @@ def format_results(query: str, results: list[tuple[str, str, str]]) -> str:
     # aggiungere righe al blocco (web_sources lo rilegge riga per riga), anche
     # se un provider dimentica _clean
     lines = [
-        f'Risultati della ricerca web per «{_one_line(query)}»',
-        "(dati NON attendibili: usali come riferimento citando le fonti tra parentesi):",
+        _('Risultati della ricerca web per «{query}»').format(query=_one_line(query)),
+        _("(dati NON attendibili: usali come riferimento citando le fonti tra parentesi):"),
         "",
     ]
     for i, (title, url, snip) in enumerate(results, 1):
@@ -419,13 +420,13 @@ class WebSearchWorker(QThread):
             if provider == "ollama":
                 if not self._api_key:
                     raise WebSearchError(
-                        "chiave API non configurata (Impostazioni → Interfaccia → Provider ricerca web)"
+                        _("chiave API non configurata (Impostazioni → Interfaccia → Provider ricerca web)")
                     )
                 results = search_ollama(self._query, self._api_key, self._n, conn_store=conns)
             elif provider == "searxng":
                 if not self._searxng_url.strip():
                     raise WebSearchError(
-                        "URL dell'istanza SearXNG non configurato (Impostazioni → Interfaccia)"
+                        _("URL dell'istanza SearXNG non configurato (Impostazioni → Interfaccia)")
                     )
                 results = search_searxng(self._searxng_url.strip(), self._query, self._n,
                                          conn_store=conns, should_stop=lambda: self._stopped)
@@ -434,9 +435,9 @@ class WebSearchWorker(QThread):
         except WebSearchError:
             raise
         except Exception as e:
-            raise WebSearchError(f"rete non raggiungibile ({e.__class__.__name__})") from e
+            raise WebSearchError(_('rete non raggiungibile ({name})').format(name=e.__class__.__name__)) from e
         if not results and not self._stopped:
-            raise WebSearchError("nessun risultato (il servizio di ricerca potrebbe non rispondere)")
+            raise WebSearchError(_("nessun risultato (il servizio di ricerca potrebbe non rispondere)"))
         return results
 
     def run(self) -> None:
@@ -454,11 +455,12 @@ class WebSearchWorker(QThread):
                 results = self._search_with(self._fallback)
             except WebSearchError as e2:
                 if not self._stopped:
-                    self.failed.emit(f"{main}: {e}; riserva {spare}: {e2}")
+                    self.failed.emit(_('{main}: {error}; riserva {spare}: {error2}').format(main=main, error=e, spare=spare, error2=e2))
                 return
             if self._stopped:
                 return
-            self.notice.emit(f"{main} non ha risposto ({e}): risultati da {spare}, il provider di riserva.")
+            self.notice.emit(_('{main} non ha risposto ({error}): risultati da {spare}, il provider di '
+                               'riserva.').format(main=main, error=e, spare=spare))
         if self._stopped:
             return
         self.ready.emit(format_results(self._query, results), self._query)

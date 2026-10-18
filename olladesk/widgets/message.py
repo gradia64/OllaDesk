@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 
 from ..md import md_to_html
 from .. import theme
+from ..i18n import _
 
 _ANIM_FRAMES = ["·", "··", "···"]
 
@@ -87,7 +88,7 @@ class MessageWidget(QFrame):
 
         chips = []
         if role == "user" and web:
-            chips.append("🌐 Ricerca web")
+            chips.append(_("🌐 Ricerca web"))
         for name in attachments or []:
             chips.append(f"📎 {name}")
         if chips:
@@ -149,7 +150,7 @@ class MessageWidget(QFrame):
         # pulsante di copia su TUTTI i messaggi, non solo dell'assistente
         self.copy_btn = QToolButton(self)
         self.copy_btn.setText("⧉")
-        self.copy_btn.setToolTip("Copia messaggio")
+        self.copy_btn.setToolTip(_("Copia messaggio"))
         self.copy_btn.clicked.connect(self._copy)
         meta_row.addWidget(self.copy_btn)
         inner.addLayout(meta_row)
@@ -162,9 +163,9 @@ class MessageWidget(QFrame):
     def eventFilter(self, obj, ev) -> bool:
         if obj is self.label and ev.type() == QEvent.Type.ContextMenu:
             menu = QMenu(self)
-            act_copy = menu.addAction("📋  Copia messaggio")
+            act_copy = menu.addAction(_("📋  Copia messaggio"))
             menu.addSeparator()
-            act_sel = menu.addAction("Seleziona tutto")
+            act_sel = menu.addAction(_("Seleziona tutto"))
             chosen = menu.exec(ev.globalPos())
             if chosen is act_copy:
                 self._copy()
@@ -218,7 +219,7 @@ class MessageWidget(QFrame):
 
     def _think_header(self) -> str:
         arrow = "▾" if self._think_expanded else "▸"
-        label = "sta pensando…" if self._think_streaming else "Pensiero"
+        label = _("sta pensando…") if self._think_streaming else _("Pensiero")
         return f"💭 {label} {arrow}"
 
     def _auto_collapse_think(self) -> None:
@@ -238,7 +239,7 @@ class MessageWidget(QFrame):
             self._think_streaming = False
             self._auto_collapse_think()
         if not self.raw:
-            self.label.setText("(nessuna risposta)")
+            self.label.setText(_("(nessuna risposta)"))
         self._stats = stats
         self._update_meta(show_ts, stats)
 
@@ -259,13 +260,13 @@ class MessageWidget(QFrame):
             for s in self._sources
         ]
         self.sources_label.setText("<br>".join(rows))
-        self.sources_label.setToolTip("Si aprono nel browser")
+        self.sources_label.setToolTip(_("Si aprono nel browser"))
         self.sources_btn.show()
         self._sync_sources_widgets()
 
     def _sync_sources_widgets(self) -> None:
         arrow = "▾" if self._sources_expanded else "▸"
-        self.sources_btn.setText(f"{arrow} 🌐 Fonti ({len(self._sources)})")
+        self.sources_btn.setText(_('{arrow} 🌐 Fonti ({n})').format(arrow=arrow, n=len(self._sources)))
         self.sources_label.setVisible(self._sources_expanded)
 
     def _on_sources_toggle(self) -> None:
@@ -362,7 +363,7 @@ class SystemNoteWidget(QFrame):
         lay.addWidget(self.label, 1)
         self.close_btn = QToolButton(self)
         self.close_btn.setText("✕")
-        self.close_btn.setToolTip("Nascondi questa nota")
+        self.close_btn.setToolTip(_("Nascondi questa nota"))
         self.close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.close_btn.setStyleSheet(
             "QToolButton { border: none; background: transparent; padding: 0; }"

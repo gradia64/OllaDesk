@@ -9,6 +9,9 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# i test confrontano i testi in italiano (la lingua sorgente), qualunque
+# sia la lingua del sistema
+os.environ["OLLADESK_LANG"] = "it"
 
 from olladesk.context import build_api_content, classify, extract_text
 from olladesk.md import md_to_html
@@ -1689,6 +1692,143 @@ def test_think_icon_matches_state_at_startup():
     ca.set_thinking(False)
     assert not ca.think_btn.isChecked() and blue_pixels(ca) == 0
     ca.deleteLater()
+
+
+# ------------------------------------------------------------------ i18n.py
+
+def test_i18n_parse_po():
+    from olladesk.i18n import parse_po
+    po = (
+        'msgid ""\nmsgstr ""\n"Language: en\\n"\n\n'
+        '#: a.py:1\nmsgid "Ciao"\nmsgstr "Hello"\n\n'
+        'msgid ""\n"Riga uno\\n"\n"riga «due»"\nmsgstr ""\n"Line one\\n"\n"line \\"two\\""\n\n'
+        '#, fuzzy\nmsgid "Dubbio"\nmsgstr "Doubt"\n\n'
+        'msgid "Vuoto"\nmsgstr ""\n'
+    )
+    cat = parse_po(po)
+    assert cat == {"Ciao": "Hello", "Riga uno\nriga «due»": 'Line one\nline "two"'}, cat
+
+
+def test_i18n_resolve_language():
+    from olladesk import i18n
+    saved = {k: os.environ.get(k) for k in ("OLLADESK_LANG", "LANGUAGE", "LC_ALL", "LC_MESSAGES", "LANG")}
+    try:
+        for k in saved:
+            os.environ.pop(k, None)
+        os.environ["LANG"] = "de_DE.UTF-8"
+        assert i18n.resolve("auto") == "de"
+        assert i18n.resolve("fr") == "fr"                 # la scelta esplicita vince
+        os.environ["LANG"] = "pt_BR.UTF-8"
+        assert i18n.resolve("auto") == "en"               # lingua sconosciuta: inglese
+        os.environ["LANGUAGE"] = "es:en"
+        assert i18n.resolve("auto") == "es"
+        os.environ["LANG"] = "C"
+        os.environ.pop("LANGUAGE")
+        assert i18n.resolve("auto") == "en"
+        os.environ["OLLADESK_LANG"] = "it"
+        assert i18n.resolve("en") == "it"                 # test e screenshot
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+
+def test_i18n_catalogs_complete_and_formattable():
+    import re
+    import importlib.util
+    from olladesk import i18n
+    spec = importlib.util.spec_from_file_location(
+        "i18n_tool", Path(__file__).resolve().parent.parent / "scripts" / "i18n.py")
+    tool = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(tool)
+    msgs = tool.messages()
+    assert len(msgs) > 400
+    placeholder = re.compile(r"(?<!\{)\{(\w+)[^{}]*\}(?!\})")
+    for lang in ("en", "fr", "de", "es"):
+        cat = i18n.parse_po((i18n.LOCALE_DIR / f"{lang}.po").read_text(encoding="utf-8"))
+        missing = [m for m in msgs if not cat.get(m)]
+        assert not missing, (lang, missing[:3])
+        for msg in msgs:
+            names = set(placeholder.findall(msg))
+            if names:   # il testo tradotto deve accettare gli stessi argomenti di .format
+                cat[msg].format(**{n: 1 for n in names})
+        filt = "Documenti e immagini (*.txt *.md *.py *.json *.csv *.log *.yaml *.yml " \
+               "*.pdf *.png *.jpg *.jpeg *.webp *.gif);;Tutti i file (*)"
+        assert cat[filt].count(";;") == 1 and "*.pdf" in cat[filt]
+
+
+def test_i18n_translates_after_setup():
+    from olladesk import i18n
+    try:
+        os.environ.pop("OLLADESK_LANG")
+        i18n.setup("fr")
+        assert i18n.language() == "fr"
+        assert i18n._("Impostazioni") == "Paramètres"
+        assert i18n._("testo che non esiste") == "testo che non esiste"
+        assert i18n.catalog()["Annulla"] == "Annuler"
+    finally:
+        os.environ["OLLADESK_LANG"] = "it"
+        i18n.setup()
+    assert i18n._("Impostazioni") == "Impostazioni"
+
+
+# ------------------------------------------------------- scorrimento chat
+
+def test_chat_scroll_does_not_snap_back_while_streaming():
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+    from olladesk.widgets.chat_area import ChatArea
+    app = QApplication.instance() or QApplication([])
+    ca = ChatArea()
+    ca.resize(700, 400)
+    ca.show()
+    for i in range(12):
+        ca.add_message("user", f"domanda {i}\n" * 4)
+    ca.begin_stream()
+    ca.stream_text("riga di risposta\n" * 40)
+    ca._flush_stream()
+
+    def settle():   # layout e timer a 0 ms girano a eventi successivi
+        for _i in range(5):
+            app.processEvents()
+
+    settle()
+    bar = ca.scroll.verticalScrollBar()
+    assert bar.maximum() > 300 and bar.value() == bar.maximum()
+    # l'utente risale di poco (meno della vecchia soglia di 80 px)
+    bar.triggerAction(bar.SliderAction.SliderSingleStepSub)
+    settle()
+    assert not ca._stick_bottom
+    pos = bar.value()
+    ca.stream_text("altre righe\n" * 40)
+    ca._flush_stream()
+    settle()
+    assert bar.value() == pos, (bar.value(), pos)      # la vista resta dov'era
+    # tornato in fondo, lo stream si segue di nuovo
+    bar.triggerAction(bar.SliderAction.SliderToMaximum)
+    settle()
+    assert ca._stick_bottom
+    ca.stream_text("ultime righe\n" * 20)
+    ca._flush_stream()
+    settle()
+    assert bar.value() == bar.maximum()
+    ca.end_stream()
+    ca.deleteLater()
+
+
+def test_folder_includes_js_modules_and_names_unsupported():
+    from olladesk import context
+    root = Path(tempfile.mkdtemp(prefix="olladesk_mjs_"))
+    (root / "test").mkdir()
+    (root / "test" / "guard.test.mjs").write_text("export const x = 1;\n")
+    (root / "cordis.patch.yml").write_text("a: 1\n")
+    (root / "dati.bin").write_bytes(b"\0\1")
+    files, _skipped = context.folder_files(root)
+    assert [r for r, _p in files] == ["cordis.patch.yml", "test/guard.test.mjs"]
+    _block, warnings = context.folder_block(root)
+    assert any("non supportati: dati.bin" in w for w in warnings), warnings
 
 
 def main() -> int:

@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..companion import MAX_DEVICES
+from ..i18n import _
 from .steppers import IntStepper
 
 
@@ -88,7 +89,7 @@ class CompanionDialog(QDialog):
 
     def __init__(self, server, settings: dict, apply=None, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Companion web")
+        self.setWindowTitle(_("Companion web"))
         self.setMinimumWidth(460)
         self._server = server
         self._apply = apply
@@ -99,21 +100,21 @@ class CompanionDialog(QDialog):
         lay.setSpacing(10)
 
         # ------------------------------------------------------------ servizio
-        svc = QGroupBox("Servizio", self)
+        svc = QGroupBox(_("Servizio"), self)
         svc_lay = QVBoxLayout(svc)
         row = QHBoxLayout()
-        self.enable_chk = QCheckBox("Attiva la companion web nella rete locale", svc)
+        self.enable_chk = QCheckBox(_("Attiva la companion web nella rete locale"), svc)
         self.enable_chk.setChecked(bool(settings.get("companion", False)))
         self.enable_chk.toggled.connect(self._on_toggled)
         row.addWidget(self.enable_chk, 1)
-        row.addWidget(QLabel("Porta:", svc))
+        row.addWidget(QLabel(_("Porta:"), svc))
         self.port_spin = IntStepper(svc)
         self.port_spin.setRange(1024, 65535)
         self.port_spin.setValue(int(settings.get("companion_port", 8765)))
         self.port_spin.valueChanged.connect(self._on_port_edited)
         row.addWidget(self.port_spin)
-        self.port_btn = QPushButton("Applica", svc)
-        self.port_btn.setToolTip("Riavvia la companion sulla nuova porta")
+        self.port_btn = QPushButton(_("Applica"), svc)
+        self.port_btn.setToolTip(_("Riavvia la companion sulla nuova porta"))
         self.port_btn.clicked.connect(self._apply_port)
         self.port_btn.hide()
         row.addWidget(self.port_btn)
@@ -128,14 +129,14 @@ class CompanionDialog(QDialog):
         self.urls_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.urls_label.setWordWrap(True)
         urls_row.addWidget(self.urls_label, 1)
-        self.copy_btn = QPushButton("Copia indirizzo", svc)
+        self.copy_btn = QPushButton(_("Copia indirizzo"), svc)
         self.copy_btn.clicked.connect(self._copy_url)
         urls_row.addWidget(self.copy_btn, 0, Qt.AlignmentFlag.AlignTop)
         svc_lay.addLayout(urls_row)
         lay.addWidget(svc)
 
         # ---------------------------------------------------------- abbinamento
-        self.pair_box = QGroupBox("Abbina un dispositivo", self)
+        self.pair_box = QGroupBox(_("Abbina un dispositivo"), self)
         pair_lay = QVBoxLayout(self.pair_box)
         self.qr = QrWidget(self.pair_box)
         pair_lay.addWidget(self.qr, 0, Qt.AlignmentFlag.AlignHCenter)
@@ -156,18 +157,18 @@ class CompanionDialog(QDialog):
         self.status_label.setWordWrap(True)
         pair_lay.addWidget(self.status_label)
 
-        self.new_code_btn = QPushButton("Nuovo codice", self.pair_box)
+        self.new_code_btn = QPushButton(_("Nuovo codice"), self.pair_box)
         self.new_code_btn.clicked.connect(self._new_code)
         pair_lay.addWidget(self.new_code_btn, 0, Qt.AlignmentFlag.AlignHCenter)
         lay.addWidget(self.pair_box)
 
         # ---------------------------------------------------------- dispositivi
-        dev = QGroupBox("Dispositivi abbinati", self)
+        dev = QGroupBox(_("Dispositivi abbinati"), self)
         dev_lay = QHBoxLayout(dev)
         self.devices_label = QLabel(dev)
         self.devices_label.setWordWrap(True)
         dev_lay.addWidget(self.devices_label, 1)
-        self.revoke_btn = QPushButton("Revoca dispositivi", dev)
+        self.revoke_btn = QPushButton(_("Revoca dispositivi"), dev)
         self.revoke_btn.clicked.connect(self._revoke)
         dev_lay.addWidget(self.revoke_btn)
         lay.addWidget(dev)
@@ -179,7 +180,7 @@ class CompanionDialog(QDialog):
 
         bottom = QHBoxLayout()
         bottom.addStretch(1)
-        close_btn = QPushButton("Chiudi", self)
+        close_btn = QPushButton(_("Chiudi"), self)
         close_btn.clicked.connect(self.accept)
         bottom.addWidget(close_btn)
         lay.addLayout(bottom)
@@ -213,26 +214,26 @@ class CompanionDialog(QDialog):
     def _copy_url(self) -> None:
         if self._url:
             QGuiApplication.clipboard().setText(self._url)
-            self.copy_btn.setText("Copiato ✓")
-            QTimer.singleShot(1500, lambda: self.copy_btn.setText("Copia indirizzo"))
+            self.copy_btn.setText(_("Copiato ✓"))
+            QTimer.singleShot(1500, lambda: self.copy_btn.setText(_("Copia indirizzo")))
 
     def _on_state(self, state: str, detail: str) -> None:
         running = state == "running"
         if running:
-            self.state_label.setText(f"● Attiva sulla porta {self._server.port}")
+            self.state_label.setText(_('● Attiva sulla porta {port}').format(port=self._server.port))
             urls = self._server.urls()
             self._url = urls[0] if urls else ""
             if urls:
                 self.urls_label.setText(
-                    "Sul telefono o sul tablet, collegato alla stessa rete, apri:\n  "
+                    _("Sul telefono o sul tablet, collegato alla stessa rete, apri:\n  ")
                     + "\n  ".join(urls))
             else:
                 self.urls_label.setText(
-                    "⚠ Nessun indirizzo di rete trovato: il PC è collegato alla rete "
-                    "locale (Wi-Fi o cavo)?")
+                    _("⚠ Nessun indirizzo di rete trovato: il PC è collegato alla rete "
+                    "locale (Wi-Fi o cavo)?"))
         elif state == "error":
             self.state_label.setText(
-                f"⚠ Non avviata: {detail}. Scegli un'altra porta e riattiva.")
+                _("⚠ Non avviata: {detail}. Scegli un'altra porta e riattiva.").format(detail=detail))
             # la casella segue lo stato reale (la finestra principale salva spenta)
             self.enable_chk.blockSignals(True)
             self.enable_chk.setChecked(False)
@@ -241,25 +242,25 @@ class CompanionDialog(QDialog):
             self._url = ""
             self.urls_label.setText("")
         else:
-            self.state_label.setText("○ Spenta: il telefono non può collegarsi.")
+            self.state_label.setText(_("○ Spenta: il telefono non può collegarsi."))
             self._url = ""
             self.urls_label.setText("")
         self.urls_label.setVisible(bool(self.urls_label.text()))
         self.copy_btn.setVisible(bool(self._url))
         port = self._server.port if running else self.port_spin.value()
         self.note.setText(
-            "Il codice vale 2 minuti, una sola volta e solo finché questa finestra "
-            "è aperta. Il collegamento è HTTP in chiaro: usalo solo sulla rete di "
-            "casa (Wi-Fi protetta), non aprire la porta sul router. Se il telefono "
-            f"non raggiunge la pagina, apri la porta {port}/tcp nel firewall del PC "
-            "per la sola rete locale."
+            _('Il codice vale 2 minuti, una sola volta e solo finché questa finestra '
+              'è aperta. Il collegamento è HTTP in chiaro: usalo solo sulla rete di '
+              'casa (Wi-Fi protetta), non aprire la porta sul router. Se il telefono '
+              'non raggiunge la pagina, apri la porta {port}/tcp nel firewall del PC '
+              'per la sola rete locale.').format(port=port)
         )
         self.pair_box.setEnabled(running)
         if running:
             if not self._timer.isActive():
                 self._new_code()
         else:
-            self._expire("Attiva la companion per abbinare un telefono.")
+            self._expire(_("Attiva la companion per abbinare un telefono."))
             self.code_label.setText("— — —")
         self._fit()
 
@@ -285,12 +286,13 @@ class CompanionDialog(QDialog):
     def _tick(self) -> None:
         left = int(self._server.auth.code_remaining())
         if left <= 0:
-            self._expire("Codice scaduto o già usato: generane uno nuovo.")
+            self._expire(_("Codice scaduto o già usato: generane uno nuovo."))
             return
-        hint = "Scrivi il codice nella pagina"
+        hint = _("Scrivi il codice nella pagina")
         if self.qr.has_matrix():
-            hint = "Inquadra il QR code o scrivi il codice nella pagina"
-        self.status_label.setText(f"{hint} · valido ancora {left // 60}:{left % 60:02d}")
+            hint = _("Inquadra il QR code o scrivi il codice nella pagina")
+        self.status_label.setText(_("{hint} · valido ancora {time}").format(
+            hint=hint, time=f"{left // 60}:{left % 60:02d}"))
 
     def _expire(self, text: str) -> None:
         self._timer.stop()
@@ -301,7 +303,7 @@ class CompanionDialog(QDialog):
         self.new_code_btn.setVisible(self._server.state() == "running")
 
     def _on_paired(self) -> None:
-        self._expire("✓ Dispositivo abbinato.")
+        self._expire(_("✓ Dispositivo abbinato."))
         self.code_label.setText("✓")
         self._update_devices()
         self._fit()
@@ -311,21 +313,21 @@ class CompanionDialog(QDialog):
     def _update_devices(self) -> None:
         n = self._server.auth.device_count()
         self.devices_label.setText(
-            f"Dispositivi abbinati: {n}. Se ne ricordano al massimo {MAX_DEVICES}: "
-            "oltre, i più vecchi vengono scollegati.")
+            _('Dispositivi abbinati: {n}. Se ne ricordano al massimo {max}: '
+              'oltre, i più vecchi vengono scollegati.').format(n=n, max=MAX_DEVICES))
         self.revoke_btn.setEnabled(n > 0)
 
     def _revoke(self) -> None:
         answer = QMessageBox.question(
-            self, "Revoca dispositivi",
-            "Scollegare tutti i dispositivi abbinati? Per riusare la companion "
-            "dovranno abbinarsi di nuovo con un codice.",
+            self, _("Revoca dispositivi"),
+            _("Scollegare tutti i dispositivi abbinati? Per riusare la companion "
+            "dovranno abbinarsi di nuovo con un codice."),
         )
         if answer != QMessageBox.StandardButton.Yes:
             return
         self._server.auth.revoke_all()
         self._update_devices()
-        self._expire("Dispositivi scollegati.")
+        self._expire(_("Dispositivi scollegati."))
 
     def done(self, r: int) -> None:
         # il codice vale solo finché il dialogo è aperto

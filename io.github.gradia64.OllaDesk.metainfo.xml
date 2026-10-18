@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Metadati AppStream di OllaDesk: centri software (Discover, GNOME Software),
-     AppImage e, dalla 0.4.0, Flathub. Testi in inglese con la traduzione
-     italiana (xml:lang="it"), come chiede Flathub. L'elenco delle release
+     AppImage e, dalla 0.4.0, Flathub. Testi in inglese con le traduzioni
+     (xml:lang="it", "fr", "de", "es"), come chiede Flathub. L'elenco delle release
      si rigenera con scripts/metainfo-releases.py; la CI lo controlla insieme
      ad appstreamcli validate. -->
 <component type="desktop-application">
@@ -12,6 +12,9 @@
   <name>OllaDesk</name>
   <summary>Chat with your local AI models through Ollama</summary>
   <summary xml:lang="it">Chatta in locale con i tuoi modelli LLM tramite Ollama</summary>
+  <summary xml:lang="fr">Discutez en local avec vos modèles LLM via Ollama</summary>
+  <summary xml:lang="de">Chatten Sie lokal mit Ihren LLM-Modellen über Ollama</summary>
+  <summary xml:lang="es">Chatea en local con tus modelos LLM a través de Ollama</summary>
 
   <developer id="io.github.gradia64">
     <name>gradia</name>
@@ -29,24 +32,66 @@
       gestisci i tuoi modelli, senza che le conversazioni lascino la tua
       macchina.
     </p>
+    <p xml:lang="fr">
+      OllaDesk est un client de bureau natif pour Ollama. Discutez avec les
+      modèles de langage qui tournent sur votre ordinateur, joignez des
+      documents et des images et gérez vos modèles, sans que vos conversations
+      quittent votre machine.
+    </p>
+    <p xml:lang="de">
+      OllaDesk ist ein nativer Desktop-Client für Ollama. Chatten Sie mit den
+      Sprachmodellen, die auf Ihrem Computer laufen, hängen Sie Dokumente und
+      Bilder an und verwalten Sie Ihre Modelle, ohne dass Ihre Unterhaltungen
+      Ihren Rechner verlassen.
+    </p>
+    <p xml:lang="es">
+      OllaDesk es un cliente de escritorio nativo para Ollama. Chatea con los
+      modelos de lenguaje que se ejecutan en tu ordenador, adjunta documentos e
+      imágenes y gestiona tus modelos, sin que tus conversaciones salgan de tu
+      máquina.
+    </p>
     <p>Features:</p>
     <p xml:lang="it">Funzionalità:</p>
+    <p xml:lang="fr">Fonctionnalités :</p>
+    <p xml:lang="de">Funktionen:</p>
+    <p xml:lang="es">Funciones:</p>
     <ul>
       <li>Streaming answers with Markdown and code blocks, and the model's reasoning for thinking models</li>
       <li xml:lang="it">Risposte in streaming con Markdown e blocchi di codice, e il ragionamento dei modelli che pensano</li>
+      <li xml:lang="fr">Réponses en streaming avec Markdown et blocs de code, et la réflexion des modèles qui raisonnent</li>
+      <li xml:lang="de">Gestreamte Antworten mit Markdown und Codeblöcken sowie die Gedankengänge denkender Modelle</li>
+      <li xml:lang="es">Respuestas en streaming con Markdown y bloques de código, y el razonamiento de los modelos que piensan</li>
       <li>Text files, PDFs and images as context, with vision models</li>
       <li xml:lang="it">File di testo, PDF e immagini come contesto, anche per i modelli visione</li>
+      <li xml:lang="fr">Fichiers texte, PDF et images comme contexte, y compris pour les modèles de vision</li>
+      <li xml:lang="de">Textdateien, PDFs und Bilder als Kontext, auch für Vision-Modelle</li>
+      <li xml:lang="es">Archivos de texto, PDF e imágenes como contexto, también para los modelos de visión</li>
       <li>Optional web search (DuckDuckGo, SearXNG or Ollama Cloud) with the sources listed under the answer</li>
       <li xml:lang="it">Ricerca web facoltativa (DuckDuckGo, SearXNG o Ollama Cloud) con le fonti elencate sotto la risposta</li>
+      <li xml:lang="fr">Recherche web facultative (DuckDuckGo, SearXNG ou Ollama Cloud) avec les sources listées sous la réponse</li>
+      <li xml:lang="de">Optionale Websuche (DuckDuckGo, SearXNG oder Ollama Cloud) mit den Quellen unter der Antwort</li>
+      <li xml:lang="es">Búsqueda web opcional (DuckDuckGo, SearXNG u Ollama Cloud) con las fuentes listadas bajo la respuesta</li>
       <li>Model manager to download and delete models</li>
       <li xml:lang="it">Gestore dei modelli per scaricarli ed eliminarli</li>
+      <li xml:lang="fr">Gestionnaire de modèles pour les télécharger et les supprimer</li>
+      <li xml:lang="de">Modellverwaltung zum Herunterladen und Löschen</li>
+      <li xml:lang="es">Gestor de modelos para descargarlos y eliminarlos</li>
       <li>Phone companion on your local network, paired with a one-time code, with the same conversations as the desktop</li>
       <li xml:lang="it">Companion per il telefono nella rete locale, abbinata con un codice monouso, con le stesse conversazioni del PC</li>
+      <li xml:lang="fr">Companion pour le téléphone sur le réseau local, associé avec un code à usage unique, avec les mêmes conversations que sur le PC</li>
+      <li xml:lang="de">Companion für das Telefon im lokalen Netzwerk, mit einem Einmalcode gekoppelt, mit denselben Unterhaltungen wie am PC</li>
+      <li xml:lang="es">Companion para el teléfono en la red local, emparejado con un código de un solo uso, con las mismas conversaciones que el PC</li>
       <li>Conversation history saved locally, light and dark themes, system tray icon</li>
       <li xml:lang="it">Cronologia delle conversazioni salvata in locale, temi chiaro e scuro, icona nella tray</li>
+      <li xml:lang="fr">Historique des conversations enregistré en local, thèmes clair et sombre, icône dans la zone de notification</li>
+      <li xml:lang="de">Lokal gespeicherter Unterhaltungsverlauf, helles und dunkles Design, Symbol im Systemabschnitt</li>
+      <li xml:lang="es">Historial de conversaciones guardado en local, temas claro y oscuro, icono en la bandeja del sistema</li>
     </ul>
-    <p>The user interface is in Italian. OllaDesk needs an Ollama server, on this computer or on the network.</p>
-    <p xml:lang="it">L'interfaccia è in italiano. OllaDesk richiede un server Ollama, su questo computer o in rete.</p>
+    <p>The interface is available in English, Italian, French, German and Spanish. OllaDesk needs an Ollama server, on this computer or on the network.</p>
+    <p xml:lang="it">L'interfaccia è disponibile in italiano, inglese, francese, tedesco e spagnolo. OllaDesk richiede un server Ollama, su questo computer o in rete.</p>
+    <p xml:lang="fr">L'interface est disponible en français, anglais, italien, allemand et espagnol. OllaDesk nécessite un serveur Ollama, sur cet ordinateur ou sur le réseau.</p>
+    <p xml:lang="de">Die Oberfläche ist auf Deutsch, Englisch, Italienisch, Französisch und Spanisch verfügbar. OllaDesk benötigt einen Ollama-Server, auf diesem Computer oder im Netzwerk.</p>
+    <p xml:lang="es">La interfaz está disponible en español, inglés, italiano, francés y alemán. OllaDesk necesita un servidor Ollama, en este ordenador o en la red.</p>
   </description>
 
   <launchable type="desktop-id">io.github.gradia64.OllaDesk.desktop</launchable>
@@ -68,6 +113,9 @@
     <keyword>ai</keyword>
     <keyword>chat</keyword>
     <keyword xml:lang="it">intelligenza artificiale</keyword>
+    <keyword xml:lang="fr">intelligence artificielle</keyword>
+    <keyword xml:lang="de">künstliche Intelligenz</keyword>
+    <keyword xml:lang="es">inteligencia artificial</keyword>
   </keywords>
 
   <supports>
@@ -87,26 +135,47 @@
     <screenshot type="default">
       <caption>Chat with code blocks and Markdown</caption>
       <caption xml:lang="it">Chat con blocchi di codice e Markdown</caption>
+      <caption xml:lang="fr">Chat avec blocs de code et Markdown</caption>
+      <caption xml:lang="de">Chat mit Codeblöcken und Markdown</caption>
+      <caption xml:lang="es">Chat con bloques de código y Markdown</caption>
       <image>https://raw.githubusercontent.com/gradia64/OllaDesk/main/docs/screenshots/chat.png</image>
     </screenshot>
     <screenshot>
       <caption>Web search with the sources under the answer, light theme</caption>
       <caption xml:lang="it">Ricerca web con le fonti sotto la risposta, tema chiaro</caption>
+      <caption xml:lang="fr">Recherche web avec les sources sous la réponse, thème clair</caption>
+      <caption xml:lang="de">Websuche mit den Quellen unter der Antwort, helles Design</caption>
+      <caption xml:lang="es">Búsqueda web con las fuentes bajo la respuesta, tema claro</caption>
       <image>https://raw.githubusercontent.com/gradia64/OllaDesk/main/docs/screenshots/web-search.png</image>
     </screenshot>
     <screenshot>
       <caption>Model manager</caption>
       <caption xml:lang="it">Gestore dei modelli</caption>
+      <caption xml:lang="fr">Gestionnaire de modèles</caption>
+      <caption xml:lang="de">Modellverwaltung</caption>
+      <caption xml:lang="es">Gestor de modelos</caption>
       <image>https://raw.githubusercontent.com/gradia64/OllaDesk/main/docs/screenshots/models.png</image>
     </screenshot>
     <screenshot>
       <caption>The same conversation on a phone, through the companion</caption>
       <caption xml:lang="it">La stessa conversazione sul telefono, tramite la companion</caption>
+      <caption xml:lang="fr">La même conversation sur le téléphone, via le companion</caption>
+      <caption xml:lang="de">Dieselbe Unterhaltung auf dem Telefon, über den Companion</caption>
+      <caption xml:lang="es">La misma conversación en el teléfono, a través del companion</caption>
       <image>https://raw.githubusercontent.com/gradia64/OllaDesk/main/docs/screenshots/phone.png</image>
     </screenshot>
   </screenshots>
 
   <content_rating type="oars-1.1"/>
+
+  <!-- traduzioni dell'interfaccia: olladesk/locale/*.po (scripts/i18n.py) -->
+  <languages>
+    <lang>it</lang>
+    <lang percentage="100">en</lang>
+    <lang percentage="100">fr</lang>
+    <lang percentage="100">de</lang>
+    <lang percentage="100">es</lang>
+  </languages>
 
   <releases>
     <release version="0.3.4" date="2026-10-12">

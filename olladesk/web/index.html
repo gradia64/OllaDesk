@@ -19,32 +19,32 @@
 </head>
 <body>
 <header class="bar">
-  <button id="back" class="icon" type="button" aria-label="Indietro" hidden>‹</button>
+  <button id="back" class="icon" type="button" aria-label="Indietro" hidden data-i18n-attr="aria-label">‹</button>
   <h1 id="title">OllaDesk</h1>
-  <button id="models-btn" class="icon" type="button" aria-label="Modelli" title="Modelli" hidden>🧩</button>
-  <button id="new-chat" class="icon" type="button" aria-label="Nuova conversazione" hidden>＋</button>
-  <button id="refresh" class="icon" type="button" aria-label="Aggiorna" hidden>↻</button>
+  <button id="models-btn" class="icon" type="button" aria-label="Modelli" title="Modelli" hidden data-i18n-attr="aria-label title">🧩</button>
+  <button id="new-chat" class="icon" type="button" aria-label="Nuova conversazione" hidden data-i18n-attr="aria-label">＋</button>
+  <button id="refresh" class="icon" type="button" aria-label="Aggiorna" hidden data-i18n-attr="aria-label">↻</button>
   <button id="chat-menu" class="icon" type="button" aria-label="Altre azioni"
-          aria-haspopup="true" aria-expanded="false" hidden>⋯</button>
+          aria-haspopup="true" aria-expanded="false" hidden data-i18n-attr="aria-label">⋯</button>
   <div id="menu" class="menu" role="menu" hidden>
-    <button id="m-rename" type="button" role="menuitem">✏️ Rinomina</button>
-    <button id="m-archive" type="button" role="menuitem">🗄 Archivia</button>
-    <button id="m-delete" type="button" role="menuitem" class="danger">🗑 Elimina</button>
+    <button id="m-rename" type="button" role="menuitem" data-i18n>✏️ Rinomina</button>
+    <button id="m-archive" type="button" role="menuitem" data-i18n>🗄 Archivia</button>
+    <button id="m-delete" type="button" role="menuitem" class="danger" data-i18n>🗑 Elimina</button>
   </div>
 </header>
 
 <main>
   <section id="view-loading" class="view">
-    <p class="muted center">Connessione…</p>
+    <p class="muted center" data-i18n>Connessione…</p>
   </section>
 
   <section id="view-pair" class="view" hidden>
     <form id="pair-form" class="card" autocomplete="off">
-      <h2>Abbina questo dispositivo</h2>
-      <p class="muted">Sul PC apri OllaDesk, scegli «📱 Companion» nella barra laterale (Ctrl+D) e scrivi qui il codice di 6 cifre.</p>
+      <h2 data-i18n>Abbina questo dispositivo</h2>
+      <p class="muted" data-i18n>Sul PC apri OllaDesk, scegli «📱 Companion» nella barra laterale (Ctrl+D) e scrivi qui il codice di 6 cifre.</p>
       <input id="pair-code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6"
-             placeholder="000000" aria-label="Codice di abbinamento" required>
-      <button type="submit" class="primary">Abbina</button>
+             placeholder="000000" aria-label="Codice di abbinamento" required data-i18n-attr="aria-label">
+      <button type="submit" class="primary" data-i18n>Abbina</button>
       <p id="pair-error" class="error" role="alert" hidden></p>
     </form>
   </section>
@@ -55,23 +55,23 @@
       <summary id="archive-sum"></summary>
       <ul id="archive-list" class="list"></ul>
     </details>
-    <p id="list-empty" class="muted center" hidden>Nessuna conversazione salvata.</p>
+    <p id="list-empty" class="muted center" hidden data-i18n>Nessuna conversazione salvata.</p>
   </section>
 
   <section id="view-models" class="view" hidden>
     <form id="pull-form" class="pull-form" autocomplete="off">
       <input id="pull-name" placeholder="es. llama3.2:3b" aria-label="Modello da scaricare"
-             autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="200">
-      <button id="pull-btn" type="submit" class="primary">Scarica</button>
+             autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="200" data-i18n-attr="aria-label placeholder">
+      <button id="pull-btn" type="submit" class="primary" data-i18n>Scarica</button>
     </form>
-    <p class="muted small">Lo scaricamento avviene sul PC e può occupare molti GB: usalo con il Wi-Fi del PC in buona forma.</p>
+    <p class="muted small" data-i18n>Lo scaricamento avviene sul PC e può occupare molti GB: usalo con il Wi-Fi del PC in buona forma.</p>
     <div id="task" class="task" hidden>
       <p id="task-text"></p>
       <progress id="task-bar" max="100" hidden></progress>
-      <button id="task-cancel" type="button" hidden>Annulla</button>
+      <button id="task-cancel" type="button" hidden data-i18n>Annulla</button>
     </div>
     <ul id="model-list" class="list models"></ul>
-    <p id="models-empty" class="muted center" hidden>Nessun modello installato.</p>
+    <p id="models-empty" class="muted center" hidden data-i18n>Nessun modello installato.</p>
   </section>
 
   <section id="view-chat" class="view" hidden>
@@ -83,22 +83,22 @@
 </main>
 
 <form id="composer" class="composer" autocomplete="off" hidden>
-  <p id="busy-note" class="muted small" hidden>Il PC sta rispondendo a un'altra richiesta: attendi la fine.</p>
+  <p id="busy-note" class="muted small" hidden data-i18n>Il PC sta rispondendo a un'altra richiesta: attendi la fine.</p>
   <div class="composer-tools">
-    <select id="model" aria-label="Modello"></select>
+    <select id="model" aria-label="Modello" data-i18n-attr="aria-label"></select>
     <button id="think" class="toggle" type="button" aria-pressed="true"
-            title="Ragionamento (thinking)">🧠</button>
+            title="Ragionamento (thinking)" data-i18n-attr="title">🧠</button>
     <button id="web" class="toggle web" type="button" aria-pressed="false"
-            aria-label="Ricerca web" title="Ricerca web spenta">🌐</button>
+            aria-label="Ricerca web" title="Ricerca web spenta" data-i18n-attr="aria-label title">🌐</button>
   </div>
-  <p id="web-note" class="web-note small" hidden>🌐 Ricerca web attiva</p>
+  <p id="web-note" class="web-note small" hidden data-i18n>🌐 Ricerca web attiva</p>
   <div id="atts" class="chips atts" hidden></div>
   <div class="composer-row">
-    <button id="attach" class="attach" type="button" aria-label="Allega foto o file">📎</button>
+    <button id="attach" class="attach" type="button" aria-label="Allega foto o file" data-i18n-attr="aria-label">📎</button>
     <input id="file" type="file" multiple hidden
            accept="image/*,application/pdf,text/*,.md,.py,.json,.csv,.log,.yaml,.yml,.toml">
-    <textarea id="input" rows="1" placeholder="Scrivi un messaggio…" aria-label="Messaggio"></textarea>
-    <button id="send" class="send" type="submit" aria-label="Invia">➤</button>
+    <textarea id="input" rows="1" placeholder="Scrivi un messaggio…" aria-label="Messaggio" data-i18n-attr="aria-label placeholder"></textarea>
+    <button id="send" class="send" type="submit" aria-label="Invia" data-i18n-attr="aria-label">➤</button>
   </div>
 </form>
 </body>

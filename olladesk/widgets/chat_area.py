@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
 
 from .. import config, context, theme
 from .. import __version__
+from ..i18n import N_, _
 from .message import MessageWidget, SystemNoteWidget
 
 ASSISTANT_MAX_W = 860
@@ -36,7 +37,7 @@ USER_MAX_W = 620
 # più larga, così nascondere la sidebar non stira il contenuto
 COLUMN_MAX_W = 900
 
-FILE_FILTER = (
+FILE_FILTER = N_(
     "Documenti e immagini (*.txt *.md *.py *.json *.csv *.log *.yaml *.yml "
     "*.pdf *.png *.jpg *.jpeg *.webp *.gif);;Tutti i file (*)"
 )
@@ -49,7 +50,7 @@ class ChatInput(QPlainTextEdit):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("inputEdit")
-        self.setPlaceholderText("Scrivi un messaggio…")
+        self.setPlaceholderText(_("Scrivi un messaggio…"))
         self.setTabChangesFocus(True)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.send_on_enter = True
@@ -161,7 +162,10 @@ class ChatArea(QWidget):
 
         bar = self.scroll.verticalScrollBar()
         bar.rangeChanged.connect(self._on_range_changed)
-        bar.valueChanged.connect(self._on_value_changed)
+        # lo «stare in fondo» lo decide solo chi scorre (rotella, barra,
+        # tastiera): durante lo stream il layout cambia di continuo e un
+        # criterio sulla sola posizione riportava giù chi risaliva
+        bar.actionTriggered.connect(lambda _a: QTimer.singleShot(0, self, self._update_stick))
         self._stick_bottom = True
         # il margine della colonna centrata segue la larghezza REALE del
         # viewport (il resize di ChatArea arriva prima della disposizione
@@ -191,7 +195,7 @@ class ChatArea(QWidget):
         self.clip_btn = QToolButton(self.input_frame)
         self.clip_btn.setText("📎")
         self.clip_btn.setToolTip(
-            "Allega come contesto file (testo, codice, PDF, immagini) o una cartella"
+            _("Allega come contesto file (testo, codice, PDF, immagini) o una cartella")
         )
         self.clip_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.clip_btn.clicked.connect(self._attach_menu)
@@ -201,7 +205,7 @@ class ChatArea(QWidget):
         self.web_btn.setCheckable(True)
         self.web_btn.setIconSize(QSize(18, 18))
         self.web_btn.setToolTip(
-            "Ricerca web: allega i risultati di una ricerca online al prossimo messaggio"
+            _("Ricerca web: allega i risultati di una ricerca online al prossimo messaggio")
         )
         self.web_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.web_btn.toggled.connect(self._on_web_toggled)
@@ -214,12 +218,12 @@ class ChatArea(QWidget):
         self.think_btn.setCheckable(True)
         self.think_btn.setIconSize(QSize(18, 18))
         self.think_btn.setToolTip(
-            "Ragionamento (thinking): attivo (icona colorata), i modelli che sanno "
+            _("Ragionamento (thinking): attivo (icona colorata), i modelli che sanno "
             "farlo ragionano prima di rispondere e il pensiero è visibile in chat;\n"
             "spento (icona grigia), il ragionamento viene disattivato inviando "
             "\"think\": false alla richiesta.\n"
             "Nota: gpt-oss non accetta la disattivazione (Ollama accetta per "
-            "esso solo i livelli low/medium/high)."
+            "esso solo i livelli low/medium/high).")
         )
         self.think_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.think_btn.toggled.connect(self._on_think_toggled)
@@ -234,7 +238,7 @@ class ChatArea(QWidget):
         self.send_btn = QPushButton("➤", self.input_frame)
         self.send_btn.setObjectName("sendBtn")
         self.send_btn.setFixedSize(28, 28)
-        self.send_btn.setToolTip("Invia messaggio")
+        self.send_btn.setToolTip(_("Invia messaggio"))
         self.send_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.send_btn.clicked.connect(self._on_button)
         fl.addWidget(self.send_btn, 0, Qt.AlignmentFlag.AlignBottom)
@@ -282,8 +286,15 @@ class ChatArea(QWidget):
         self._input_row.setContentsMargins(side, 4, side, 10)
 
     def eventFilter(self, obj, ev) -> bool:
-        if obj is self.scroll.viewport() and ev.type() == QEvent.Type.Resize:
-            self._update_column()
+        if obj is self.scroll.viewport():
+            if ev.type() == QEvent.Type.Resize:
+                self._update_column()
+            elif ev.type() == QEvent.Type.Wheel:
+                # rotella verso l'alto: smette subito di seguire lo stream,
+                # prima che il prossimo flush riporti la vista in fondo
+                if ev.angleDelta().y() > 0 or ev.pixelDelta().y() > 0:
+                    self._stick_bottom = False
+                QTimer.singleShot(0, self, self._update_stick)
         return super().eventFilter(obj, ev)
 
     def dragEnterEvent(self, ev) -> None:  # noqa: N802 (API Qt)
@@ -300,7 +311,7 @@ class ChatArea(QWidget):
         rejected = self.add_attachment_paths(paths)
         if rejected:
             self.add_system_note(
-                "⚠ File ignorati (tipo non supportato o non trovati): " + ", ".join(rejected)
+                _("⚠ File ignorati (tipo non supportato o non trovati): ") + ", ".join(rejected)
             )
 
     # ------------------------------------------------------------ benvenuto
@@ -312,7 +323,7 @@ class ChatArea(QWidget):
         title = QLabel("OllaDesk", w)
         title.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         title.setStyleSheet("font-size: 26px; font-weight: 700;")
-        sub = QLabel(f"Chatta in locale con i tuoi modelli Ollama · v{__version__}", w)
+        sub = QLabel(_('Chatta in locale con i tuoi modelli Ollama · v{version}').format(version=__version__), w)
         sub.setObjectName("metaLabel")
         sub.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         lay.addWidget(title)
@@ -321,9 +332,9 @@ class ChatArea(QWidget):
         lay.addSpacing(22)
 
         for prompt in (
-            "Spiegami in modo semplice come funziona un LLM",
-            "Scrivi uno script Python che ordina un elenco di file",
-            "Riassumi le caratteristiche principali di Debian",
+            _("Spiegami in modo semplice come funziona un LLM"),
+            _("Scrivi uno script Python che ordina un elenco di file"),
+            _("Riassumi le caratteristiche principali di Debian"),
         ):
             btn = QPushButton("✦  " + prompt, w)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -386,7 +397,7 @@ class ChatArea(QWidget):
         self._apply_widths(w)
         self.msgs.addWidget(self._wrap_row(w, role), 0, Qt.AlignmentFlag.AlignTop)
         self.stack.setCurrentWidget(self.scroll)
-        QTimer.singleShot(0, self._scroll_to_bottom)
+        QTimer.singleShot(0, self, self._scroll_to_bottom)
         return w
 
     def add_system_note(self, text: str) -> None:
@@ -394,7 +405,7 @@ class ChatArea(QWidget):
         w.setMaximumWidth(ASSISTANT_MAX_W)
         self.msgs.addWidget(self._wrap_row(w, "assistant"), 0, Qt.AlignmentFlag.AlignTop)
         self.stack.setCurrentWidget(self.scroll)
-        QTimer.singleShot(0, self._scroll_to_bottom)
+        QTimer.singleShot(0, self, self._scroll_to_bottom)
 
     def begin_stream(self, ts: float | None = None) -> MessageWidget:
         self._stream_buffer = ""  # evita di trascinare testo della risposta precedente
@@ -425,12 +436,12 @@ class ChatArea(QWidget):
     def _flush_stream(self) -> None:
         if self._stream_widget is not None and self._stream_buffer:
             self._stream_widget.append_stream(self._stream_buffer)
-            QTimer.singleShot(0, self._scroll_to_bottom)
+            QTimer.singleShot(0, self, self._follow_stream)
 
     def _flush_thinking(self) -> None:
         if self._stream_widget is not None and self._think_buffer:
             self._stream_widget.set_thinking_stream(self._think_buffer)
-            QTimer.singleShot(0, self._scroll_to_bottom)
+            QTimer.singleShot(0, self, self._follow_stream)
 
     def end_stream(self, stats: str | None = None, discard_empty: bool = False,
                    sources: list[dict] | None = None) -> None:
@@ -507,11 +518,19 @@ class ChatArea(QWidget):
         if self._stick_bottom:
             self.scroll.verticalScrollBar().setValue(mx)
 
-    def _on_value_changed(self, value: int) -> None:
+    def _update_stick(self) -> None:
+        """Segue di nuovo lo stream solo se l'utente è tornato in fondo."""
         bar = self.scroll.verticalScrollBar()
-        self._stick_bottom = value >= bar.maximum() - 80
+        self._stick_bottom = bar.value() >= bar.maximum() - 4
+
+    def _follow_stream(self) -> None:
+        """Durante lo stream scende solo se l'utente non è risalito."""
+        if self._stick_bottom:
+            self._scroll_to_bottom()
 
     def _scroll_to_bottom(self) -> None:
+        # nuovo messaggio (inviato o caricato): si torna a seguire il fondo
+        self._stick_bottom = True
         bar = self.scroll.verticalScrollBar()
         bar.setValue(bar.maximum())
 
@@ -519,23 +538,23 @@ class ChatArea(QWidget):
 
     def _attach_menu(self) -> None:
         menu = QMenu(self)
-        menu.addAction("📄  File…", self._pick_files)
-        menu.addAction("📁  Cartella…", self._pick_folder)
+        menu.addAction(_("📄  File…"), self._pick_files)
+        menu.addAction(_("📁  Cartella…"), self._pick_folder)
         menu.exec(self.clip_btn.mapToGlobal(self.clip_btn.rect().topLeft()
                                             - QPoint(0, menu.sizeHint().height())))
 
     def _pick_folder(self) -> None:
-        path = QFileDialog.getExistingDirectory(self, "Allega cartella")
+        path = QFileDialog.getExistingDirectory(self, _("Allega cartella"))
         if path:
             self.add_attachment_paths([path])
 
     def _pick_files(self) -> None:
-        paths, _f = QFileDialog.getOpenFileNames(self, "Allega file", "", FILE_FILTER)
+        paths, _f = QFileDialog.getOpenFileNames(self, _("Allega file"), "", _(FILE_FILTER))
         if paths:
             rejected = self.add_attachment_paths(paths)
             if rejected:
                 self.add_system_note(
-                    "⚠ Tipi di file non supportati: " + ", ".join(rejected)
+                    _("⚠ Tipi di file non supportati: ") + ", ".join(rejected)
                 )
 
     def add_attachment_paths(self, paths: list[str]) -> list[str]:
@@ -573,7 +592,7 @@ class ChatArea(QWidget):
             lay.addWidget(lab)
             rm = QToolButton(chip)
             rm.setText("✕")
-            rm.setToolTip("Rimuovi allegato")
+            rm.setToolTip(_("Rimuovi allegato"))
             rm.clicked.connect(lambda _=False, i=idx: self.remove_attachment(i))
             lay.addWidget(rm)
             self.attach_lay.addWidget(chip)
@@ -639,10 +658,10 @@ class ChatArea(QWidget):
     def set_streaming(self, busy: bool) -> None:
         if busy:
             self.send_btn.setText("■")
-            self.send_btn.setToolTip("Interrompi")
+            self.send_btn.setToolTip(_("Interrompi"))
         else:
             self.send_btn.setText("➤")
-            self.send_btn.setToolTip("Invia messaggio")
+            self.send_btn.setToolTip(_("Invia messaggio"))
 
     def set_send_on_enter(self, enabled: bool) -> None:
         self.input.set_send_on_enter(enabled)
@@ -650,9 +669,9 @@ class ChatArea(QWidget):
 
     def _update_hint(self) -> None:
         if self.input.send_on_enter:
-            self.hint.setText("Invio: invia · Shift+Invio: a capo")
+            self.hint.setText(_("Invio: invia · Shift+Invio: a capo"))
         else:
-            self.hint.setText("Ctrl+Invio: invia · Invio: a capo")
+            self.hint.setText(_("Ctrl+Invio: invia · Invio: a capo"))
 
     def input_text(self) -> str:
         return self.input.toPlainText().strip()

@@ -35,6 +35,8 @@ from pathlib import Path
 from PySide6.QtCore import QObject, Qt, Signal
 
 from . import __version__, config, context, netinfo, web_search
+from . import i18n
+from .i18n import _
 from .md import md_to_html
 
 CODE_TTL = 120            # secondi di validità del codice di abbinamento
@@ -222,29 +224,29 @@ class UploadStore:
         # cancella, e il limite dei caricamenti in attesa non si supera
         with self._lock:
             if len(self._items) >= MAX_PENDING:
-                raise UploadRefused(429, "troppi allegati in attesa: invia o riprova più tardi")
+                raise UploadRefused(429, _("troppi allegati in attesa: invia o riprova più tardi"))
             self._items[upload_id] = {"path": str(path), "name": name, "kind": kind,
                                       "t": self._clock(), "partial": True}
         try:
             try:
                 fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
             except OSError as e:
-                raise UploadRefused(500, f"impossibile salvare l'allegato sul PC ({e.strerror or e})") from e
+                raise UploadRefused(500, _("impossibile salvare l'allegato sul PC ({error})").format(error=e.strerror or e)) from e
             with os.fdopen(fd, "wb") as fh:
                 left = length
                 while left > 0:
                     chunk = rfile.read(min(65536, left))
                     if not chunk:
-                        raise OSError("caricamento interrotto")
+                        raise OSError(_("caricamento interrotto"))
                     try:
                         fh.write(chunk)
                     except OSError as e:   # disco pieno, permessi
-                        raise UploadRefused(500, f"impossibile salvare l'allegato sul PC ({e.strerror or e})") from e
+                        raise UploadRefused(500, _("impossibile salvare l'allegato sul PC ({error})").format(error=e.strerror or e)) from e
                     left -= len(chunk)
             with self._lock:
                 item = self._items.get(upload_id)
                 if item is None:   # companion spenta durante il caricamento
-                    raise OSError("companion spenta durante il caricamento")
+                    raise OSError(_("companion spenta durante il caricamento"))
                 item.pop("partial", None)
         except BaseException:
             with self._lock:
@@ -385,18 +387,18 @@ def web_send(engine, hub, chat_id: str | None, text: str, model: str, think: boo
     Restituisce (200, chat_id, seq) oppure (stato HTTP, messaggio, None).
     `seq` precede gli eventi di questo invio: lo stream SSE li riceve tutti.
     """
-    busy = (409, "occupato: il PC sta già rispondendo, riprova alla fine", None)
+    busy = (409, _("occupato: il PC sta già rispondendo, riprova alla fine"), None)
     if engine.busy():
         return busy
     if model not in engine.model_names():
-        return 400, f"modello non disponibile: {model}", None
+        return 400, _('modello non disponibile: {model}').format(model=model), None
     refusal = engine.send_refusal(model)
     if refusal:
         return 409, refusal, None
     # una conversazione eliminata sul PC non va ricreata in silenzio con il
     # vecchio id (le chat nuove arrivano con chat_id nullo)
     if chat_id is not None and chat_id not in {c["id"] for c in engine.chats()}:
-        return 404, "conversazione inesistente: è stata eliminata sul PC?", None
+        return 404, _("conversazione inesistente: è stata eliminata sul PC?"), None
     seq = hub.seq()
     cid = engine.send(chat_id or engine.new_chat_id(), text, model, think=think,
                       attachments=list(attachments), web=web)
@@ -416,11 +418,11 @@ def web_model_op(engine, op: str, name: str = "") -> tuple[int, str | None]:
     Restituisce (stato HTTP, messaggio d'errore o None).
     """
     if op == "cancel":
-        return (200, None) if engine.cancel_model_task() else (409, "nessuno scaricamento in corso")
+        return (200, None) if engine.cancel_model_task() else (409, _("nessuno scaricamento in corso"))
     err = engine.pull_model(name) if op == "pull" else engine.delete_model(name)
     if err is None:
         return 200, None
-    return (404 if err == "modello non installato" else 409), err
+    return (404 if err == _("modello non installato") else 409), err
 
 
 def web_rename(engine, chat_id: str, title: str) -> bool:
@@ -672,7 +674,7 @@ class _Handler(BaseHTTPRequestHandler):
     def _authed(self) -> bool:
         if self.ctx.auth.check(self._token()):
             return True
-        self._error(401, "dispositivo non abbinato")
+        self._error(401, _("dispositivo non abbinato"))
         return False
 
     def _main(self, fn, *args):
@@ -680,9 +682,9 @@ class _Handler(BaseHTTPRequestHandler):
         try:
             return True, self.ctx.bridge.call(fn, *args)
         except queue.Empty:
-            self._error(503, "OllaDesk non risponde")
+            self._error(503, _("OllaDesk non risponde"))
         except Exception:
-            self._error(500, "errore interno di OllaDesk")
+            self._error(500, _("errore interno di OllaDesk"))
         return False, None
 
     # -------------------------------------------------------------- metodi
@@ -690,7 +692,7 @@ class _Handler(BaseHTTPRequestHandler):
     def _precheck(self) -> bool:
         if not host_allowed(self.headers.get("Host")):
             self.close_connection = True   # eventuale corpo non letto
-            self._error(421, "host non ammesso")
+            self._error(421, _("host non ammesso"))
             return False
         return True
 
@@ -706,9 +708,14 @@ class _Handler(BaseHTTPRequestHandler):
             try:
                 body = (WEB_DIR / name).read_bytes()
             except OSError:
-                self._error(500, "file della pagina mancante")
+                self._error(500, _("file della pagina mancante"))
                 return
             self._send(200, body, ctype)
+            return
+        if path == "/api/i18n":
+            # testi della pagina nella lingua del PC: servono anche prima
+            # dell'abbinamento (schermata del codice) e non sono riservati
+            self._json(200, {"lang": i18n.language(), "strings": i18n.catalog()})
             return
         if path == "/api/session":
             if self._authed():
@@ -745,11 +752,11 @@ class _Handler(BaseHTTPRequestHandler):
             if not ok:
                 return
             if chat is None:
-                self._error(404, "conversazione inesistente")
+                self._error(404, _("conversazione inesistente"))
                 return
             self._json(200, render_chat(chat))
             return
-        self._error(404, "risorsa inesistente")
+        self._error(404, _("risorsa inesistente"))
 
     def do_POST(self) -> None:  # noqa: N802
         if not self._precheck():
@@ -764,12 +771,12 @@ class _Handler(BaseHTTPRequestHandler):
         if ctype != "application/json":
             # il corpo resta non letto: la connessione non va riusata
             self.close_connection = True
-            self._error(415, "serve Content-Type: application/json")
+            self._error(415, _("serve Content-Type: application/json"))
             return
         # corpo chunked o senza lunghezza: resterebbe non letto
         if self.headers.get("Transfer-Encoding") or self.headers.get("Content-Length") is None:
             self.close_connection = True
-            self._error(411, "serve Content-Length")
+            self._error(411, _("serve Content-Length"))
             return
         try:
             length = int(self.headers["Content-Length"])
@@ -777,21 +784,21 @@ class _Handler(BaseHTTPRequestHandler):
             length = -1
         if not 0 <= length <= MAX_BODY:
             self.close_connection = True
-            self._error(413, "richiesta troppo grande")
+            self._error(413, _("richiesta troppo grande"))
             return
         try:
             data = json.loads(self.rfile.read(length) or b"{}")
         except ValueError:
-            self._error(400, "JSON non valido")
+            self._error(400, _("JSON non valido"))
             return
         if not isinstance(data, dict):
-            self._error(400, "JSON non valido")
+            self._error(400, _("JSON non valido"))
             return
 
         if path == "/api/pair":
             token = self.ctx.auth.pair(str(data.get("code", "")).strip())
             if token is None:
-                self._error(403, "codice errato o scaduto: generane uno nuovo sul PC")
+                self._error(403, _("codice errato o scaduto: generane uno nuovo sul PC"))
                 return
             self.ctx.paired.emit()
             cookie = (f"{COOKIE}={token}; HttpOnly; SameSite=Strict; Path=/; "
@@ -807,31 +814,31 @@ class _Handler(BaseHTTPRequestHandler):
             # la domanda andrebbe a un servizio esterno che l'utente non ha chiesto
             think, web = data.get("think", True), data.get("web", False)
             if not (isinstance(think, bool) and isinstance(web, bool)):
-                self._error(400, "«think» e «web» devono essere true o false")
+                self._error(400, _("«think» e «web» devono essere true o false"))
                 return
             ids = data.get("attachments") or []
             if not (isinstance(ids, list) and len(ids) <= MAX_ATTACHMENTS
                     and all(isinstance(i, str) for i in ids)):
-                self._error(400, f"al massimo {MAX_ATTACHMENTS} allegati per messaggio")
+                self._error(400, _('al massimo {max} allegati per messaggio').format(max=MAX_ATTACHMENTS))
                 return
             if len(set(ids)) != len(ids):
-                self._error(400, "lo stesso allegato compare più volte")
+                self._error(400, _("lo stesso allegato compare più volte"))
                 return
             # come sul PC: si può inviare anche un messaggio fatto di soli allegati
             if not isinstance(text, str) or len(text) > MAX_TEXT or not (text.strip() or ids):
-                self._error(400, f"messaggio vuoto o più lungo di {MAX_TEXT} caratteri")
+                self._error(400, _('messaggio vuoto o più lungo di {max} caratteri').format(max=MAX_TEXT))
                 return
             if not isinstance(model, str) or not model:
-                self._error(400, "modello mancante")
+                self._error(400, _("modello mancante"))
                 return
             if chat_id is not None and not (
                 isinstance(chat_id, str) and re.fullmatch(_CHAT_ID, chat_id)
             ):
-                self._error(400, "conversazione non valida")
+                self._error(400, _("conversazione non valida"))
                 return
             atts = self.ctx.uploads.take(ids)
             if atts is None:
-                self._error(400, "allegato sconosciuto o scaduto: caricalo di nuovo")
+                self._error(400, _("allegato sconosciuto o scaduto: caricalo di nuovo"))
                 return
             ok, res = self._main(web_send, self.ctx.engine, self.ctx.hub, chat_id,
                                  text.strip(), model, think, atts, web)
@@ -850,7 +857,7 @@ class _Handler(BaseHTTPRequestHandler):
                 return
             chat_id = data.get("chat_id")
             if not (isinstance(chat_id, str) and re.fullmatch(_CHAT_ID, chat_id)):
-                self._error(400, "conversazione non valida")
+                self._error(400, _("conversazione non valida"))
                 return
             ok, stopped = self._main(web_stop, self.ctx.engine, chat_id)
             if ok:
@@ -861,18 +868,18 @@ class _Handler(BaseHTTPRequestHandler):
                 return
             chat_id = data.get("chat_id")
             if not (isinstance(chat_id, str) and re.fullmatch(_CHAT_ID, chat_id)):
-                self._error(400, "conversazione non valida")
+                self._error(400, _("conversazione non valida"))
                 return
             if path == "/api/rename":
                 title = data.get("title")
                 if not isinstance(title, str) or not title.strip() or len(title) > MAX_TITLE:
-                    self._error(400, f"titolo vuoto o più lungo di {MAX_TITLE} caratteri")
+                    self._error(400, _('titolo vuoto o più lungo di {max} caratteri').format(max=MAX_TITLE))
                     return
                 ok, found = self._main(web_rename, self.ctx.engine, chat_id, title.strip())
             elif path == "/api/archive":
                 archived = data.get("archived")
                 if not isinstance(archived, bool):
-                    self._error(400, "«archived» deve essere true o false")
+                    self._error(400, _("«archived» deve essere true o false"))
                     return
                 ok, found = self._main(web_archive, self.ctx.engine, chat_id, archived)
             else:
@@ -880,7 +887,7 @@ class _Handler(BaseHTTPRequestHandler):
             if not ok:
                 return
             if not found:
-                self._error(404, "conversazione inesistente")
+                self._error(404, _("conversazione inesistente"))
                 return
             self._json(200, {"ok": True})
             return
@@ -890,7 +897,7 @@ class _Handler(BaseHTTPRequestHandler):
             op = path.rsplit("/", 1)[1]
             name = data.get("name", "")
             if op != "cancel" and not (isinstance(name, str) and _MODEL_NAME_RE.fullmatch(name)):
-                self._error(400, "nome del modello non valido")
+                self._error(400, _("nome del modello non valido"))
                 return
             ok, res = self._main(web_model_op, self.ctx.engine, op, name)
             if not ok:
@@ -901,7 +908,7 @@ class _Handler(BaseHTTPRequestHandler):
             else:
                 self._json(200, {"ok": True})
             return
-        self._error(404, "risorsa inesistente")
+        self._error(404, _("risorsa inesistente"))
 
     # ---------------------------------------------------------- caricamenti
 
@@ -917,23 +924,23 @@ class _Handler(BaseHTTPRequestHandler):
             return
         ctype = (self.headers.get("Content-Type") or "").split(";")[0].strip().lower()
         if ctype != "application/octet-stream":
-            self._error(415, "serve Content-Type: application/octet-stream")
+            self._error(415, _("serve Content-Type: application/octet-stream"))
             return
         if self.headers.get("Transfer-Encoding") or self.headers.get("Content-Length") is None:
-            self._error(411, "serve Content-Length")
+            self._error(411, _("serve Content-Length"))
             return
         try:
             length = int(self.headers["Content-Length"])
         except ValueError:
             length = -1
         if length <= 0 or length > MAX_UPLOAD:
-            self._error(413, f"file vuoto o più grande di {MAX_UPLOAD // (1024 * 1024)} MB")
+            self._error(413, _('file vuoto o più grande di {size} MB').format(size=MAX_UPLOAD // (1024 * 1024)))
             return
         query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
         name = safe_filename(query.get("name", ["file"])[0])
         kind = context.classify(Path(name))
         if kind == "unknown":
-            self._error(415, f"tipo di file non supportato: {name} (immagini, testo, PDF)")
+            self._error(415, _('tipo di file non supportato: {name} (immagini, testo, PDF)').format(name=name))
             return
         try:
             meta = self.ctx.uploads.add(name, kind, self.rfile, length)
@@ -1011,7 +1018,7 @@ class _Handler(BaseHTTPRequestHandler):
         """
         if self.command == "HEAD":
             # HEAD passa da do_GET: qui aprirebbe uno stream senza fine
-            self._error(405, "lo stream eventi richiede GET")
+            self._error(405, _("lo stream eventi richiede GET"))
             return
         query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
         after = 0
@@ -1105,7 +1112,7 @@ class CompanionServer(QObject):
         try:
             httpd = ThreadingHTTPServer((bind, port), handler)
         except OSError as e:
-            self._set_state("error", f"porta {port} non disponibile ({e.strerror or e})")
+            self._set_state("error", _('porta {port} non disponibile ({error})').format(port=port, error=e.strerror or e))
             return
         httpd.daemon_threads = True
         self._httpd = httpd
@@ -1115,7 +1122,7 @@ class CompanionServer(QObject):
             name="olladesk-companion", daemon=True,
         )
         self._thread.start()
-        self._set_state("running", f"in ascolto sulla porta {self.port}")
+        self._set_state("running", _('in ascolto sulla porta {port}').format(port=self.port))
 
     def stop(self) -> None:
         httpd, self._httpd = self._httpd, None

@@ -25,6 +25,11 @@ License: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   reply. The message column has a fixed maximum width and stays centered even
   when the sidebar is hidden (Ctrl+B): the content does not stretch to the
   full window.
+- **Multilingual interface**: Italian, English, French, German and Spanish,
+  in the web companion too. It follows the system language (languages not
+  yet translated fall back to English) or can be chosen in Settings →
+  Interface → «Language»; it applies after a restart. The catalogs are in
+  `olladesk/locale/*.po` and are updated with `python3 scripts/i18n.py update`.
 - **Conversation history** in the sidebar (with the OllaDesk version in the
   header): new chat, selection, rename (right-click) and deletion; persisted
   to disk.
@@ -479,6 +484,7 @@ olladesk/
   config.py                 persistence (settings, parameters, chats) + migration
   theme.py                  dark/light/system themes (Fusion + QSS)
   md.py                     Markdown → HTML (Qt rich text subset)
+  i18n.py                   interface translations (catalogs in locale/*.po)
   context.py                attachments: text/PDF/images as context
   web_search.py             web search (DuckDuckGo/Ollama Cloud/SearXNG) + worker
   updater.py                Ollama updates (GitHub release + pkexec)

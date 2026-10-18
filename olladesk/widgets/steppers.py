@@ -19,10 +19,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..i18n import _
+
 BTN_SIZE = 26   # lato dei pulsanti tondi (il raggio nel QSS è metà)
 
-DEC_TIP = "Diminuisci il valore (tieni premuto per scorrere)"
-INC_TIP = "Aumenta il valore (tieni premuto per scorrere)"
+DEC_TIP = _("Diminuisci il valore (tieni premuto per scorrere)")
+INC_TIP = _("Aumenta il valore (tieni premuto per scorrere)")
 
 
 class _WheelOnFocusMixin:

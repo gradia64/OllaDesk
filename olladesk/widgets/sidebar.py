@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 )
 
 from .. import __version__
+from ..i18n import _
 
 
 class ChatSidebar(QWidget):
@@ -42,17 +43,17 @@ class ChatSidebar(QWidget):
         header.addStretch(1)
         version = QLabel(f"v{__version__}", self)
         version.setObjectName("metaLabel")
-        version.setToolTip(f"Versione di OllaDesk: {__version__}")
+        version.setToolTip(_('Versione di OllaDesk: {version}').format(version=__version__))
         header.addWidget(version)
         lay.addLayout(header)
 
-        self.new_btn = QPushButton("＋  Nuova chat", self)
+        self.new_btn = QPushButton(_("＋  Nuova chat"), self)
         self.new_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.new_btn.clicked.connect(self.newChatRequested.emit)
         lay.addWidget(self.new_btn)
 
         # intestazione della vista «Archivio»: senza, l'elenco sembra quello solito
-        self.archive_label = QLabel("🗄  Archivio: conversazioni archiviate", self)
+        self.archive_label = QLabel(_("🗄  Archivio: conversazioni archiviate"), self)
         self.archive_label.setObjectName("metaLabel")
         self.archive_label.setWordWrap(True)
         self.archive_label.hide()
@@ -75,19 +76,19 @@ class ChatSidebar(QWidget):
         self.archive_btn.clicked.connect(self._toggle_archive)
         lay.addWidget(self.archive_btn)
 
-        self.models_btn = QPushButton("🧩  Modelli", self)
+        self.models_btn = QPushButton(_("🧩  Modelli"), self)
         self.models_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.models_btn.setToolTip("Scarica o rimuovi modelli Ollama")
+        self.models_btn.setToolTip(_("Scarica o rimuovi modelli Ollama"))
         self.models_btn.clicked.connect(self.modelsRequested.emit)
         lay.addWidget(self.models_btn)
 
-        self.companion_btn = QPushButton("📱  Companion", self)
+        self.companion_btn = QPushButton(_("📱  Companion"), self)
         self.companion_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.companion_btn.setToolTip("OllaDesk dal telefono: attivazione, abbinamento, dispositivi (Ctrl+D)")
+        self.companion_btn.setToolTip(_("OllaDesk dal telefono: attivazione, abbinamento, dispositivi (Ctrl+D)"))
         self.companion_btn.clicked.connect(self.companionRequested.emit)
         lay.addWidget(self.companion_btn)
 
-        self.settings_btn = QPushButton("⚙  Impostazioni", self)
+        self.settings_btn = QPushButton(_("⚙  Impostazioni"), self)
         self.settings_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.settings_btn.clicked.connect(self.settingsRequested.emit)
         lay.addWidget(self.settings_btn)
@@ -111,7 +112,7 @@ class ChatSidebar(QWidget):
         self.list.blockSignals(True)
         self.list.clear()
         for c in shown:
-            title = c.get("title") or "Conversazione"
+            title = c.get("title") or _("Conversazione")
             item = QListWidgetItem(self._elide(title))
             item.setData(Qt.ItemDataRole.UserRole, c["id"])
             item.setToolTip(title)
@@ -127,11 +128,11 @@ class ChatSidebar(QWidget):
 
     def _sync_archive_btn(self, n_archived: int) -> None:
         if self._show_archived:
-            self.archive_btn.setText("←  Conversazioni")
-            self.archive_btn.setToolTip("Torna all'elenco delle conversazioni")
+            self.archive_btn.setText(_("←  Conversazioni"))
+            self.archive_btn.setToolTip(_("Torna all'elenco delle conversazioni"))
         else:
-            self.archive_btn.setText(f"🗄  Archivio ({n_archived})")
-            self.archive_btn.setToolTip("Conversazioni archiviate: fuori dall'elenco, non eliminate")
+            self.archive_btn.setText(_('🗄  Archivio ({n_archived})').format(n_archived=n_archived))
+            self.archive_btn.setToolTip(_("Conversazioni archiviate: fuori dall'elenco, non eliminate"))
         self.archive_btn.setVisible(self._show_archived or n_archived > 0)
         self.archive_label.setVisible(self._show_archived)
 
@@ -152,12 +153,12 @@ class ChatSidebar(QWidget):
             return
         chat_id = item.data(Qt.ItemDataRole.UserRole)
         menu = QMenu(self)
-        act_rename = menu.addAction("✏  Rinomina")
+        act_rename = menu.addAction(_("✏  Rinomina"))
         if self._show_archived:
-            act_archive = menu.addAction("↩  Ripristina")
+            act_archive = menu.addAction(_("↩  Ripristina"))
         else:
-            act_archive = menu.addAction("🗄  Archivia")
-        act_del = menu.addAction("🗑  Elimina")
+            act_archive = menu.addAction(_("🗄  Archivia"))
+        act_del = menu.addAction(_("🗑  Elimina"))
         chosen = menu.exec(self.list.mapToGlobal(pos))
         if chosen is act_archive:
             self.chatArchived.emit(chat_id, not self._show_archived)
@@ -165,7 +166,7 @@ class ChatSidebar(QWidget):
             from PySide6.QtWidgets import QInputDialog
 
             current = item.toolTip()   # titolo completo (il testo è abbreviato)
-            name, ok = QInputDialog.getText(self, "Rinomina conversazione", "Titolo:", text=current)
+            name, ok = QInputDialog.getText(self, _("Rinomina conversazione"), _("Titolo:"), text=current)
             if ok and name.strip():
                 self.chatRenamed.emit(chat_id, name.strip())
         elif chosen is act_del:
@@ -173,8 +174,8 @@ class ChatSidebar(QWidget):
 
             ret = QMessageBox.question(
                 self,
-                "Elimina conversazione",
-                f"Eliminare definitivamente «{item.toolTip()}»?",
+                _("Elimina conversazione"),
+                _('Eliminare definitivamente «{title}»?').format(title=item.toolTip()),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No,
             )

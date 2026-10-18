@@ -8,7 +8,7 @@ from PySide6.QtCore import QTimer
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
-from olladesk import app_update, theme
+from olladesk import app_update, i18n, theme
 from olladesk.config import load_settings
 from olladesk.main_window import MainWindow
 
@@ -58,6 +58,8 @@ def main() -> int:
         app.setWindowIcon(QIcon(str(ICON)))
 
     settings = load_settings()
+    i18n.setup(settings.get("language", "auto"))
+    i18n.install_qt_translator(app)
     theme.apply_theme(app, settings["theme"], settings["font_size"])
 
     win = MainWindow()

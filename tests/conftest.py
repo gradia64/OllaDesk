@@ -10,6 +10,11 @@ Gli altri script hanno il loro runner e si eseguono con python3, come in CI:
   eventi Qt) e importati da pytest partirebbero alla raccolta.
 I gui_*.py e gli altri script non seguono i nomi test_*/_test.
 """
+import os
+
+# i test confrontano i testi in italiano, la lingua sorgente dell'interfaccia
+os.environ["OLLADESK_LANG"] = "it"
+
 collect_ignore = [
     "release_tools_test.py",
     "engine_test.py",

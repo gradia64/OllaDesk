@@ -17,6 +17,7 @@ Lizenz: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
 ## Funktionen
 
 - **Chat im ChatGPT-Stil**: Nutzer-/Assistenten-Bubbles, *Streaming*-Antwort Token für Token, Schaltfläche zum Abbrechen der Generierung, Statistiken (Token, Tok/s, Dauer), Markdown-Rendering (Codeblöcke, Listen, Fett, Links…), Kopier-Schaltfläche für jede Antwort. Die Nachrichtenspalte hat eine feste maximale Breite und bleibt auch bei ausgeblendeter Seitenleiste (Strg+B) zentriert: der Inhalt streckt sich nicht über das ganze Fenster.
+- **Mehrsprachige Oberfläche**: Italienisch, Englisch, Französisch, Deutsch und Spanisch, auch im Web-Companion. Sie folgt der Systemsprache (noch nicht übersetzte Sprachen verwenden Englisch) oder wird unter Einstellungen → Oberfläche → „Sprache“ gewählt; die Wahl gilt nach einem Neustart. Die Kataloge liegen in `olladesk/locale/*.po` und werden mit `python3 scripts/i18n.py update` aktualisiert.
 - **Gesprächsverlauf** in der Seitenleiste (mit der OllaDesk-Version in der Kopfzeile): neue Chat, Auswahl, Umbenennen (Rechtsklick) und Löschen; Persistenz auf der Festplatte.
 - **Archiv der Gespräche** (Rechtsklick → «Archivieren»): der Chat verschwindet aus der Liste, ohne gelöscht zu werden, und findet sich über «🗄 Archiv (N)» am Ende der Seitenleiste wieder, von wo aus er geöffnet oder wiederhergestellt wird. Schreibt man eine neue Nachricht in einen archivierten Chat, erscheint er wieder in der Liste. Optionale automatische Archivierung beim Start von Chats ohne Nachrichten seit einer bestimmten Anzahl von Tagen (Einstellungen → Oberfläche, standardmäßig aus).
 - **Anhänge als Kontext** (📎 im Eingabefeld): Text- und Codedateien (im Nachrichtentext eingebettet), PDF (benötigt das optionale Paket `pypdf`) und Bilder (als Base64 an Vision-Modelle gesendet: llava, llama3.2-vision, gemma3…). Die Anhänge erscheinen als Chips über dem Eingabefeld und in der Nachrichtenblase.
@@ -279,6 +280,7 @@ olladesk/
   config.py                 Persistenz (Einstellungen, Parameter, Chat) + Migration
   theme.py                  dunkle/helle/System-Themen (Fusion + QSS)
   md.py                     Markdown → HTML (Subset von Qt Rich Text)
+  i18n.py                   Übersetzungen der Oberfläche (Kataloge in locale/*.po)
   context.py                Anhänge: Text/PDF/Bilder als Kontext
   web_search.py             Websuche (DuckDuckGo/Ollama Cloud/SearXNG) + Worker
   updater.py                Ollama-Aktualisierungen (GitHub-Release + pkexec)

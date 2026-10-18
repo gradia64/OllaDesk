@@ -14,6 +14,8 @@ import urllib.request
 
 from PySide6.QtCore import QThread, Signal
 
+from .i18n import _
+
 # worker ancora bloccati su un socket quando il loro dialogo si chiude:
 # tenuti in vita qui (senza genitore) finché escono al timeout di rete
 _parked: set = set()
@@ -98,15 +100,16 @@ def friendly_error(e: Exception, host: str = "") -> str:
         except Exception:
             body = ""
         if "model" in body.lower() and "not found" in body.lower():
-            return "Modello non trovato sul server: scaricalo con `ollama pull <modello>`."
-        return f"Errore HTTP {e.code} dal server Ollama: {body or e.reason}"
+            return _("Modello non trovato sul server: scaricalo con `ollama pull <modello>`.")
+        return _('Errore HTTP {code} dal server Ollama: {detail}').format(code=e.code, detail=body or e.reason)
     if isinstance(e, urllib.error.URLError):
         reason = getattr(e, "reason", e)
         if isinstance(reason, ConnectionRefusedError):
-            return f"Connessione rifiutata: Ollama non è in esecuzione su {host or 'localhost'}? Avvialo con `ollama serve`."
+            return _('Connessione rifiutata: Ollama non è in esecuzione su {host}? Avvialo '
+                     'con `ollama serve`.').format(host=host or 'localhost')
         if isinstance(reason, TimeoutError):
-            return "Timeout di connessione con il server Ollama."
-        return f"Impossibile raggiungere il server Ollama ({host}): {reason}"
+            return _("Timeout di connessione con il server Ollama.")
+        return _('Impossibile raggiungere il server Ollama ({host}): {reason}').format(host=host, reason=reason)
     return str(e)
 
 
@@ -363,7 +366,7 @@ class PullWorker(QThread):
                 self.progress.emit(data)
             # stream chiuso senza "success": scaricamento non concluso
             if not self._stopped:
-                self.failed.emit("scaricamento interrotto: il server ha chiuso la connessione")
+                self.failed.emit(_("scaricamento interrotto: il server ha chiuso la connessione"))
         except Exception as e:
             if not self._stopped:
                 self.failed.emit(friendly_error(e, self._host))

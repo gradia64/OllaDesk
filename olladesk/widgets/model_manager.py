@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from ..i18n import _
 from ..ollama_client import ApiWorker, shutdown_workers, visible_models
 
 SUGGESTED_MODELS = [
@@ -49,7 +50,7 @@ class ModelManagerDialog(QDialog):
 
     def __init__(self, engine, parent=None, current_model: str | None = None):
         super().__init__(parent)
-        self.setWindowTitle("Gestione modelli — OllaDesk")
+        self.setWindowTitle(_("Gestione modelli — OllaDesk"))
         self.setMinimumSize(680, 540)
         self.engine = engine
         self.host = engine.settings["host"]
@@ -68,19 +69,19 @@ class ModelManagerDialog(QDialog):
         # --- scaricamento ----------------------------------------------
         head = QHBoxLayout()
         self.name_edit = QLineEdit(self)
-        self.name_edit.setPlaceholderText("Nome modello da scaricare, es. llama3.2:3b")
+        self.name_edit.setPlaceholderText(_("Nome modello da scaricare, es. llama3.2:3b"))
         self.name_edit.setCompleter(QCompleter(SUGGESTED_MODELS, self))
         self.name_edit.returnPressed.connect(self._start_pull)
         head.addWidget(self.name_edit, 1)
-        self.pull_btn = QPushButton("⬇  Scarica", self)
+        self.pull_btn = QPushButton(_("⬇  Scarica"), self)
         self.pull_btn.setObjectName("primaryBtn")
         self.pull_btn.clicked.connect(self._start_pull)
         head.addWidget(self.pull_btn)
         lay.addLayout(head)
 
         hint = QLabel(
-            'Biblioteca dei modelli: <a href="https://ollama.com/library">ollama.com/library</a> '
-            "(l'esatto nome del modello va incollato qui sopra)",
+            _('Biblioteca dei modelli: <a href="https://ollama.com/library">ollama.com/library</a> '
+            "(l'esatto nome del modello va incollato qui sopra)"),
             self,
         )
         hint.setObjectName("metaLabel")
@@ -95,14 +96,14 @@ class ModelManagerDialog(QDialog):
         self.progress_label.hide()
         self.progress_label.setWordWrap(True)
         lay.addWidget(self.progress_label)
-        self.cancel_btn = QPushButton("✕  Annulla scaricamento", self)
+        self.cancel_btn = QPushButton(_("✕  Annulla scaricamento"), self)
         self.cancel_btn.hide()
         self.cancel_btn.clicked.connect(self.engine.cancel_model_task)
         lay.addWidget(self.cancel_btn)
 
         # --- elenco modelli --------------------------------------------
         self.tree = QTreeWidget(self)
-        self.tree.setHeaderLabels(["Modello", "Dimensione", "Parametri", "Quantizzazione"])
+        self.tree.setHeaderLabels([_("Modello"), _("Dimensione"), _("Parametri"), _("Quantizzazione")])
         self.tree.setRootIsDecorated(False)
         self.tree.setAlternatingRowColors(False)
         self.tree.header().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
@@ -110,15 +111,15 @@ class ModelManagerDialog(QDialog):
         lay.addWidget(self.tree, 1)
 
         btns = QHBoxLayout()
-        self.refresh_btn = QPushButton("↻  Aggiorna", self)
+        self.refresh_btn = QPushButton(_("↻  Aggiorna"), self)
         self.refresh_btn.clicked.connect(self.refresh_models)
         btns.addWidget(self.refresh_btn)
-        self.delete_btn = QPushButton("🗑  Elimina", self)
+        self.delete_btn = QPushButton(_("🗑  Elimina"), self)
         self.delete_btn.setEnabled(False)
         self.delete_btn.clicked.connect(self._delete_selected)
         btns.addWidget(self.delete_btn)
         btns.addStretch(1)
-        self.close_btn = QPushButton("Chiudi", self)
+        self.close_btn = QPushButton(_("Chiudi"), self)
         self.close_btn.clicked.connect(self.reject)
         btns.addWidget(self.close_btn)
         lay.addLayout(btns)
@@ -178,7 +179,7 @@ class ModelManagerDialog(QDialog):
             if self.current_model and name == self.current_model:
                 item.setText(0, f"● {name}")
                 item.setFont(0, bold)
-                item.setToolTip(0, "Modello in uso nella conversazione corrente")
+                item.setToolTip(0, _("Modello in uso nella conversazione corrente"))
             self.tree.addTopLevelItem(item)
         self._update_buttons()
 
@@ -213,11 +214,11 @@ class ModelManagerDialog(QDialog):
     def _start_pull(self) -> None:
         name = self.name_edit.text().strip()
         if not name:
-            QMessageBox.information(self, "Scarica modello", "Inserisci il nome del modello (es. llama3.2:3b).")
+            QMessageBox.information(self, _("Scarica modello"), _("Inserisci il nome del modello (es. llama3.2:3b)."))
             return
         err = self.engine.pull_model(name)
         if err:
-            QMessageBox.information(self, "Scarica modello", f"Scaricamento non avviato: {err}.")
+            QMessageBox.information(self, _("Scarica modello"), _('Scaricamento non avviato: {err}.').format(err=err))
 
     def _delete_selected(self) -> None:
         model = self._selected_model()
@@ -225,15 +226,15 @@ class ModelManagerDialog(QDialog):
             return
         ret = QMessageBox.question(
             self,
-            "Elimina modello",
-            f"Eliminare definitivamente «{model}» dal disco?",
+            _("Elimina modello"),
+            _('Eliminare definitivamente «{model}» dal disco?').format(model=model),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if ret != QMessageBox.StandardButton.Yes:
             return
         err = self.engine.delete_model(model)
         if err:
-            QMessageBox.warning(self, "Elimina modello", f"Eliminazione non avviata: {err}.")
+            QMessageBox.warning(self, _("Elimina modello"), _('Eliminazione non avviata: {err}.').format(err=err))
 
     def _on_task(self) -> None:
         """Stato dell'operazione del motore, avviata da qui o dal telefono."""
@@ -249,20 +250,21 @@ class ModelManagerDialog(QDialog):
             self.progress_label.show()
             if t["op"] == "delete":
                 self.progress.setRange(0, 0)
-                self.progress_label.setText(f"Eliminazione di {t['name']}…")
+                self.progress_label.setText(_('Eliminazione di {name}…').format(name=t['name']))
             elif t["pct"] is None:
                 self.progress.setRange(0, 0)
-                self.progress_label.setText(f"{t['name']}: {t['status'] or 'avvio scaricamento'}…")
+                self.progress_label.setText(
+                    _("{name}: {status}…").format(name=t["name"], status=t["status"] or _("avvio scaricamento")))
             else:
                 self.progress.setRange(0, 100)
                 self.progress.setValue(t["pct"])
-                status = t["status"].split(" ")[0] if t["status"] else "scaricamento"
+                status = t["status"].split(" ")[0] if t["status"] else _("scaricamento")
                 self.progress_label.setText(f"{t['name']}: {status}… {t['pct']}%")
         elif key != self._task_seen:
             self.progress_label.show()
             if t["state"] == "done":
                 self.changed = True
-                done = "Scaricamento completato" if t["op"] == "pull" else f"«{t['name']}» eliminato"
+                done = _("Scaricamento completato") if t["op"] == "pull" else _('«{name}» eliminato').format(name=t['name'])
                 self.progress_label.setText(f"✓ {done}")
                 self.refresh_models()
             else:

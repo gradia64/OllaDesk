@@ -14,6 +14,7 @@ from pathlib import Path
 from PySide6.QtCore import QObject, Signal
 
 from . import config, context, secrets_store, web_search
+from .i18n import _
 from .ollama_client import ApiWorker, ChatWorker, PostWorker, PullWorker, format_stats, visible_models
 from .workers import WorkerRegistry
 
@@ -221,11 +222,11 @@ class ChatEngine(QObject):
     def pull_model(self, name: str) -> str | None:
         """Avvia lo scaricamento di `name`. None se parte, altrimenti il motivo."""
         if self._closed:
-            return "OllaDesk si sta chiudendo"
+            return _("OllaDesk si sta chiudendo")
         if not name:
-            return "nome del modello mancante"
+            return _("nome del modello mancante")
         if self._task_running():
-            return "un'altra operazione sui modelli è già in corso"
+            return _("un'altra operazione sui modelli è già in corso")
         w = PullWorker(self.settings["host"], name, self)
         w.progress.connect(lambda d, w=w: self._on_pull_progress(w, d))
         w.done.connect(lambda w=w: self._on_task_done(w))
@@ -241,13 +242,13 @@ class ChatEngine(QObject):
     def delete_model(self, name: str) -> str | None:
         """Elimina `name` dal disco. None se parte, altrimenti il motivo."""
         if self._closed:
-            return "OllaDesk si sta chiudendo"
+            return _("OllaDesk si sta chiudendo")
         if self._task_running():
-            return "un'altra operazione sui modelli è già in corso"
+            return _("un'altra operazione sui modelli è già in corso")
         if name not in self.model_names():
-            return "modello non installato"
+            return _("modello non installato")
         if self.busy():
-            return "il PC sta rispondendo: riprova alla fine"
+            return _("il PC sta rispondendo: riprova alla fine")
         w = PostWorker(self.settings["host"], "/api/delete", {"model": name}, self, "DELETE")
         w.ready.connect(lambda _d, w=w: self._on_task_done(w))
         w.failed.connect(lambda err, w=w: self._task_update(w, state="failed", error=err))
@@ -264,7 +265,7 @@ class ChatEngine(QObject):
         if not self._task_running() or self._task["op"] != "pull" or w is None:
             return False
         w.stop()
-        self._task.update(state="failed", error="scaricamento annullato", ended=config.now())
+        self._task.update(state="failed", error=_("scaricamento annullato"), ended=config.now())
         self._task_worker = None   # i segnali tardivi del worker fermo si scartano
         self._workers.retire(w)
         self.model_task_changed.emit()
@@ -277,11 +278,11 @@ class ChatEngine(QObject):
         if not config.save_chat(chat):
             self.notice.emit(
                 chat["id"],
-                "⚠ Impossibile salvare la conversazione su disco "
-                f"({config.chats_dir()}): spazio esaurito o permessi mancanti?",
+                _('⚠ Impossibile salvare la conversazione su disco ({path}): spazio '
+                  'esaurito o permessi mancanti?').format(path=config.chats_dir()),
             )
         # tiene allineato l'elenco in memoria (ordine e titolo nella sidebar)
-        entry = {"id": chat["id"], "title": chat.get("title", "Conversazione"),
+        entry = {"id": chat["id"], "title": chat.get("title", _("Conversazione")),
                  "model": chat.get("model", ""), "updated": chat.get("updated", 0),
                  "archived": chat.get("archived") is True}
         self._chats = [e for e in self._chats if e["id"] != chat["id"]] + [entry]
@@ -347,7 +348,7 @@ class ChatEngine(QObject):
         """
         t = self._task
         if t and t["state"] == "running" and t["op"] == "delete" and t["name"] == model:
-            return f"il modello «{model}» è in eliminazione"
+            return _('il modello «{model}» è in eliminazione').format(model=model)
         return None
 
     def send(self, chat_id: str | None, text: str, model: str, *,
@@ -370,11 +371,11 @@ class ChatEngine(QObject):
         for a in attachments:
             p = Path(a["path"])
             if not p.exists():
-                warnings.append(f"file non leggibile: {a['name']}")
+                warnings.append(_('file non leggibile: {name}').format(name=a['name']))
                 continue
             meta.append({"path": str(p), "name": a["name"], "kind": a["kind"]})
         if web and not web_search.make_query(text):
-            warnings.append("Ricerca web saltata: scrivi una domanda insieme agli allegati.")
+            warnings.append(_("Ricerca web saltata: scrivi una domanda insieme agli allegati."))
             web = False
 
         self._pending_user = {
@@ -457,7 +458,7 @@ class ChatEngine(QObject):
         self.search_finished.emit(self._active_id)
         self.notice.emit(
             self._active_id,
-            f"⚠ Ricerca web non riuscita ({err}).\nProcedo senza i risultati web.",
+            _('⚠ Ricerca web non riuscita ({err}).\nProcedo senza i risultati web.').format(err=err),
         )
         pending, self._search_msg = self._search_msg, None
         if pending is not None:
@@ -483,7 +484,7 @@ class ChatEngine(QObject):
             title = p["display"][:48] + ("…" if len(p["display"]) > 48 else "")
             chat = {
                 "id": chat_id,
-                "title": title or "Allegati",
+                "title": title or _("Allegati"),
                 "model": model,
                 "updated": config.now(),
                 "messages": [],

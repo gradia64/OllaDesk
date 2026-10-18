@@ -25,62 +25,63 @@ from PySide6.QtWidgets import (
 )
 
 from .. import config
+from ..i18n import N_, _
 from .steppers import FloatStepper, IntStepper
 
 # ------------------------------------------------------------ definizioni
 
 # type: "int" | "float" | "strlist" | "combo"
 PARAM_DEFS: list[dict[str, Any]] = [
-    dict(key="temperature", label="Temperatura", type="float",
+    dict(key="temperature", label=N_("Temperatura"), type="float",
          lo=0.0, hi=2.0, step=0.05, default=0.8,
-         desc="Controlla la creatività: valori bassi → risposte più deterministiche, alti → più creative."),
+         desc=N_("Controlla la creatività: valori bassi → risposte più deterministiche, alti → più creative.")),
     dict(key="top_k", label="Top K", type="int",
          lo=1, hi=200, step=1, default=40,
-         desc="Campiona solo tra i K token più probabili."),
+         desc=N_("Campiona solo tra i K token più probabili.")),
     dict(key="top_p", label="Top P", type="float",
          lo=0.0, hi=1.0, step=0.01, default=0.9,
-         desc="Campionamento nucleo: considera i token finché la probabilità cumulata raggiunge P."),
+         desc=N_("Campionamento nucleo: considera i token finché la probabilità cumulata raggiunge P.")),
     dict(key="min_p", label="Min P", type="float",
          lo=0.0, hi=1.0, step=0.01, default=0.0,
-         desc="Scarta i token con probabilità inferiore a min_p × probabilità del token migliore."),
-    dict(key="num_ctx", label="Finestra di contesto (num_ctx)", type="int",
+         desc=N_("Scarta i token con probabilità inferiore a min_p × probabilità del token migliore.")),
+    dict(key="num_ctx", label=N_("Finestra di contesto (num_ctx)"), type="int",
          lo=128, hi=262144, step=128, default=2048,
-         desc="Numero massimo di token di contesto (prompt + risposta) tenuti in memoria."),
-    dict(key="num_predict", label="Token massimi (num_predict)", type="int",
-         lo=-2, hi=32768, step=1, default=-1, default_display="-1 (illimitato)",
-         desc="Numero massimo di token generati. -1 = illimitato, -2 = riempi il contesto."),
-    dict(key="repeat_penalty", label="Penalità di ripetizione", type="float",
+         desc=N_("Numero massimo di token di contesto (prompt + risposta) tenuti in memoria.")),
+    dict(key="num_predict", label=N_("Token massimi (num_predict)"), type="int",
+         lo=-2, hi=32768, step=1, default=-1, default_display=N_("-1 (illimitato)"),
+         desc=N_("Numero massimo di token generati. -1 = illimitato, -2 = riempi il contesto.")),
+    dict(key="repeat_penalty", label=N_("Penalità di ripetizione"), type="float",
          lo=0.0, hi=2.0, step=0.05, default=1.1,
-         desc=">1 scoraggia le ripetizioni, <1 le incoraggia."),
-    dict(key="repeat_last_n", label="Finestra penalità (repeat_last_n)", type="int",
+         desc=N_(">1 scoraggia le ripetizioni, <1 le incoraggia.")),
+    dict(key="repeat_last_n", label=N_("Finestra penalità (repeat_last_n)"), type="int",
          lo=-1, hi=4096, step=1, default=64,
-         desc="Token recenti considerati per la penalità (0 = disattivata, -1 = tutto il contesto)."),
+         desc=N_("Token recenti considerati per la penalità (0 = disattivata, -1 = tutto il contesto).")),
     dict(key="seed", label="Seed", type="int",
          lo=0, hi=2147483647, step=1, default=0,
-         desc="0 = casuale a ogni richiesta; un valore fisso rende l'output riproducibile."),
-    dict(key="stop", label="Sequenze di stop", type="strlist", default=[],
-         desc="Una sequenza per riga: la generazione si interrompe quando ne compare una."),
+         desc=N_("0 = casuale a ogni richiesta; un valore fisso rende l'output riproducibile.")),
+    dict(key="stop", label=N_("Sequenze di stop"), type="strlist", default=[],
+         desc=N_("Una sequenza per riga: la generazione si interrompe quando ne compare una.")),
     dict(key="mirostat", label="Mirostat", type="combo",
-         choices=[(0, "Disattivato"), (1, "Mirostat"), (2, "Mirostat 2.0")], default=0,
-         desc="Campionamento adattivo che mantiene stabile la sorpresa (perplessità)."),
+         choices=[(0, N_("Disattivato")), (1, N_("Mirostat")), (2, N_("Mirostat 2.0"))], default=0,
+         desc=N_("Campionamento adattivo che mantiene stabile la sorpresa (perplessità).")),
     dict(key="mirostat_tau", label="Mirostat Tau", type="float",
          lo=0.0, hi=10.0, step=0.1, default=5.0,
-         desc="Livello di coerenza target: più alto = più coerente e meno vario."),
+         desc=N_("Livello di coerenza target: più alto = più coerente e meno vario.")),
     dict(key="mirostat_eta", label="Mirostat Eta", type="float",
          lo=0.0, hi=1.0, step=0.01, default=0.1,
-         desc="Velocità con cui l'algoritmo si adatta alle statistiche del testo generato."),
-    dict(key="num_gpu", label="Layer su GPU (num_gpu)", type="int",
-         lo=0, hi=999, step=1, default=0, default_display="auto",
-         desc="Layer del modello scaricati sulla GPU (0 = nessuno; non attivato = automatico)."),
-    dict(key="num_thread", label="Thread CPU (num_thread)", type="int",
-         lo=1, hi=256, step=1, default=4, default_display="auto",
-         desc="Numero di thread di calcolo (non attivato = automatico)."),
-    dict(key="presence_penalty", label="Penalità di presenza", type="float",
+         desc=N_("Velocità con cui l'algoritmo si adatta alle statistiche del testo generato.")),
+    dict(key="num_gpu", label=N_("Layer su GPU (num_gpu)"), type="int",
+         lo=0, hi=999, step=1, default=0, default_display=N_("auto"),
+         desc=N_("Layer del modello scaricati sulla GPU (0 = nessuno; non attivato = automatico).")),
+    dict(key="num_thread", label=N_("Thread CPU (num_thread)"), type="int",
+         lo=1, hi=256, step=1, default=4, default_display=N_("auto"),
+         desc=N_("Numero di thread di calcolo (non attivato = automatico).")),
+    dict(key="presence_penalty", label=N_("Penalità di presenza"), type="float",
          lo=-2.0, hi=2.0, step=0.05, default=0.0,
-         desc="Penalizza i token già comparsi, spingendo verso nuovi argomenti."),
-    dict(key="frequency_penalty", label="Penalità di frequenza", type="float",
+         desc=N_("Penalizza i token già comparsi, spingendo verso nuovi argomenti.")),
+    dict(key="frequency_penalty", label=N_("Penalità di frequenza"), type="float",
          lo=-2.0, hi=2.0, step=0.05, default=0.0,
-         desc="Penalizza i token in base a quante volte sono già comparsi."),
+         desc=N_("Penalizza i token in base a quante volte sono già comparsi.")),
 ]
 
 
@@ -100,6 +101,12 @@ def options_for_model(model: str) -> dict:
     return opts
 
 
+def _default_text(definition: dict) -> str:
+    """Valore predefinito da mostrare, tradotto se è un testo («auto»…)."""
+    shown = definition.get("default_display", definition["default"])
+    return _(shown) if isinstance(shown, str) else str(shown)
+
+
 # ------------------------------------------------------------------ riga
 
 class ParamRow(QFrame):
@@ -115,19 +122,20 @@ class ParamRow(QFrame):
         lay.setSpacing(10)
 
         self.enable = QCheckBox(self)
-        self.enable.setToolTip("Attiva per inviare questo parametro a Ollama al posto del predefinito")
+        self.enable.setToolTip(_("Attiva per inviare questo parametro a Ollama al posto del predefinito"))
         self.enable.toggled.connect(self._on_toggle)
         lay.addWidget(self.enable)
 
-        label = QLabel(definition["label"], self)
-        label.setToolTip(f"{definition['desc']}\n\nPredefinito: {definition.get('default_display', definition['default'])}")
+        label = QLabel(_(definition["label"]), self)
+        label.setToolTip(_("{desc}\n\nPredefinito: {default}").format(
+            desc=_(definition["desc"]), default=_default_text(definition)))
         lay.addWidget(label, 1)
 
         self.value_widget = self._build_value()
         lay.addWidget(self.value_widget, 0)
 
-        default = definition.get("default_display", definition["default"])
-        self.default_label = QLabel(f"predefinito: {default}", self)
+        default = _default_text(definition)
+        self.default_label = QLabel(_('predefinito: {default}').format(default=default), self)
         self.default_label.setObjectName("metaLabel")
         # anche da attivo (nota nascosta) lo spazio resta riservato: la
         # colonna del campo non trasla quando si spunta la casella
@@ -157,12 +165,12 @@ class ParamRow(QFrame):
         elif d["type"] == "combo":
             w = QComboBox(self)
             for value, text in d["choices"]:
-                w.addItem(text, value)
+                w.addItem(_(text), value)
             w.setCurrentIndex(0)
             w.currentIndexChanged.connect(lambda _i: self.changed.emit())
         else:  # strlist
             w = QPlainTextEdit(self)
-            w.setPlaceholderText("una sequenza per riga…")
+            w.setPlaceholderText(_("una sequenza per riga…"))
             w.setFixedHeight(56)
             w.textChanged.connect(self.changed.emit)
         w.setEnabled(False)
@@ -239,8 +247,8 @@ class ModelParamsTab(QWidget):
         lay.setSpacing(8)
 
         info = QLabel(
-            "Solo i parametri spuntati vengono inviati al modello; gli altri restano "
-            "ai valori predefiniti di Ollama. Ogni modello ha un profilo separato.",
+            _("Solo i parametri spuntati vengono inviati al modello; gli altri restano "
+            "ai valori predefiniti di Ollama. Ogni modello ha un profilo separato."),
             self,
         )
         info.setObjectName("metaLabel")
@@ -248,13 +256,13 @@ class ModelParamsTab(QWidget):
         lay.addWidget(info)
 
         head = QHBoxLayout()
-        head.addWidget(QLabel("Modello:", self))
+        head.addWidget(QLabel(_("Modello:"), self))
         self.model_combo = QComboBox(self)
         self.model_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.model_combo.currentIndexChanged.connect(self._on_model_changed)
         head.addWidget(self.model_combo, 1)
-        self.reload_btn = QPushButton("↻ Aggiorna", self)
-        self.reload_btn.setToolTip("Rilegge l'elenco dei modelli installati")
+        self.reload_btn = QPushButton(_("↻ Aggiorna"), self)
+        self.reload_btn.setToolTip(_("Rilegge l'elenco dei modelli installati"))
         self.reload_btn.clicked.connect(self.reload_models)
         head.addWidget(self.reload_btn)
         lay.addLayout(head)
@@ -279,15 +287,15 @@ class ModelParamsTab(QWidget):
         lay.addWidget(scroll, 1)
 
         btns = QHBoxLayout()
-        self.reset_btn = QPushButton("↺  Ripristina predefiniti", self)
-        self.reset_btn.setToolTip("Annulla tutte le personalizzazioni del modello corrente")
+        self.reset_btn = QPushButton(_("↺  Ripristina predefiniti"), self)
+        self.reset_btn.setToolTip(_("Annulla tutte le personalizzazioni del modello corrente"))
         self.reset_btn.clicked.connect(self.reset_defaults)
         btns.addWidget(self.reset_btn)
         btns.addStretch(1)
         self.status_label = QLabel("", self)
         self.status_label.setObjectName("metaLabel")
         btns.addWidget(self.status_label)
-        self.save_btn = QPushButton("💾  Salva parametri", self)
+        self.save_btn = QPushButton(_("💾  Salva parametri"), self)
         self.save_btn.setObjectName("primaryBtn")
         self.save_btn.clicked.connect(self.save_profile)
         btns.addWidget(self.save_btn)
@@ -323,7 +331,7 @@ class ModelParamsTab(QWidget):
         self.model_combo.blockSignals(True)
         self.model_combo.clear()
         if not names:
-            self.model_combo.addItem("— nessun modello disponibile —")
+            self.model_combo.addItem(_("— nessun modello disponibile —"))
             self.model_combo.model().item(0).setEnabled(False)
         for n in names:
             self.model_combo.addItem(n, n)
@@ -352,14 +360,14 @@ class ModelParamsTab(QWidget):
         params[model] = {d["key"]: row.state() for d, row in zip(PARAM_DEFS, self.rows)}
         config.save_model_params(params)
         self._dirty = False
-        self.status_label.setText(f"✓ Parametri salvati per {model}")
+        self.status_label.setText(_('✓ Parametri salvati per {model}').format(model=model))
         self.paramsSaved.emit(model)
 
     def reset_defaults(self) -> None:
         for row in self.rows:
             row.reset()
         self._dirty = True
-        self.status_label.setText("Predefiniti ripristinati — premi «Salva parametri» per confermare")
+        self.status_label.setText(_("Predefiniti ripristinati — premi «Salva parametri» per confermare"))
 
     def maybe_discard(self) -> bool:
         """Se ci sono modifiche non salvate chiede cosa fare. True = si può chiudere."""
@@ -367,9 +375,9 @@ class ModelParamsTab(QWidget):
             return True
         ret = QMessageBox.question(
             self,
-            "Modifiche non salvate",
-            "I parametri del modello corrente sono stati modificati ma non salvati.\n"
-            "Salvare le modifiche?",
+            _("Modifiche non salvate"),
+            _("I parametri del modello corrente sono stati modificati ma non salvati.\n"
+            "Salvare le modifiche?"),
             QMessageBox.StandardButton.Save
             | QMessageBox.StandardButton.Discard
             | QMessageBox.StandardButton.Cancel,
@@ -392,15 +400,15 @@ class ModelParamsTab(QWidget):
                 row.reset()
         self._dirty = False
         self.status_label.setText(
-            f"Profilo salvato caricato per {model}" if profile and model else ""
+            _('Profilo salvato caricato per {model}').format(model=model) if profile and model else ""
         )
 
     def _on_model_changed(self, _idx: int) -> None:
         if self._dirty:
             ret = QMessageBox.question(
                 self,
-                "Modifiche non salvate",
-                f"Salvare le modifiche di «{self._last_model}» prima di cambiare modello?",
+                _("Modifiche non salvate"),
+                _('Salvare le modifiche di «{last_model}» prima di cambiare modello?').format(last_model=self._last_model),
                 QMessageBox.StandardButton.Save
                 | QMessageBox.StandardButton.Discard
                 | QMessageBox.StandardButton.Cancel,
