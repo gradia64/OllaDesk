@@ -1,0 +1,10 @@
+name: Caller Local
+
+on:
+  workflow_dispatch:
+
+jobs:
+  call:
+    uses: ./.github/workflows/reusable-local.yml
+    with:
+      msg: "hello from caller"
