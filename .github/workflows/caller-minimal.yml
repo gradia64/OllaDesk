@@ -1,0 +1,10 @@
+name: Caller Minimal Cross
+
+on:
+  workflow_dispatch:
+
+jobs:
+  call:
+    uses: gradia64/translator-bot/.github/workflows/minimal-reusable.yml@main
+    with:
+      msg: "hello cross"
