@@ -1,0 +1,14 @@
+name: Traduci Test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  translate:
+    uses: gradia64/translator-bot/.github/workflows/translate.yml@main
+    with:
+      source: "docs/updater.md"
+      mode: "markdown"
+      langs: "en"
+    secrets:
+      TRANSLATOR_API_KEY: ${{ secrets.TRANSLATOR_API_KEY }}
