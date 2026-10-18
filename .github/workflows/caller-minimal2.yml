@@ -1,0 +1,12 @@
+name: Caller Minimal Cross 2
+
+on:
+  workflow_dispatch:
+
+jobs:
+  call:
+    uses: gradia64/translator-bot/.github/workflows/minimal-reusable2.yml@main
+    with:
+      msg: "hello cross"
+    secrets:
+      MY_SECRET: ${{ secrets.TRANSLATOR_API_KEY }}
