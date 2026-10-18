@@ -5,8 +5,9 @@ on:
 
 jobs:
   call:
-    uses: gradia64/translator-bot/.github/workflows/minimal-reusable2.yml@main
+    uses: gradia64/translator-bot/.github/workflows/reusable.yml@main
     with:
-      msg: "hello cross"
-    secrets:
-      MY_SECRET: ${{ secrets.TRANSLATOR_API_KEY }}
+      source: "docs/updater.md"
+      mode: "markdown"
+      langs: "en"
+    secrets: inherit
