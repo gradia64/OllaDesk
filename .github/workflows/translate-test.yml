@@ -5,7 +5,7 @@ on:
 
 jobs:
   translate:
-    uses: gradia64/translator-bot/.github/workflows/translate.yml@main
+    uses: gradia64/translator-bot/.github/workflows/reusable.yml@main
     with:
       source: "docs/updater.md"
       mode: "markdown"
