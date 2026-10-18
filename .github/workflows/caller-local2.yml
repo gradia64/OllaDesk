@@ -1,0 +1,13 @@
+name: Caller Local 2
+
+on:
+  workflow_dispatch:
+
+jobs:
+  call:
+    uses: ./.github/workflows/reusable-local2.yml
+    with:
+      source: "docs/updater.md"
+      mode: "markdown"
+      langs: "en"
+    secrets: inherit

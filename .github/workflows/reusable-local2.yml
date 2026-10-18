@@ -1,0 +1,83 @@
+name: Translator (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      source:
+        description: "Percorso del file sorgente (italiano)"
+        required: true
+        type: string
+      mode:
+        description: "markdown | qt-ts | auto"
+        required: false
+        type: string
+        default: "auto"
+      langs:
+        description: "Lingue target separate da virgola"
+        required: false
+        type: string
+        default: "en,fr,de,es"
+      output-pattern:
+        description: "Pattern di output per markdown"
+        required: false
+        type: string
+        default: ""
+      output-dir:
+        description: "Directory di output"
+        required: false
+        type: string
+        default: ""
+    secrets:
+      TRANSLATOR_API_KEY:
+        required: true
+      TRANSLATOR_BASE_URL:
+        required: false
+      TRANSLATOR_MODEL:
+        required: false
+
+jobs:
+  translate:
+    name: Traduci
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Scarica lo script del translator
+        run: |
+          mkdir -p /tmp/translator
+          curl -sSL https://raw.githubusercontent.com/gradia64/translator-bot/main/scripts/translate.py \
+            -o /tmp/translator/translate.py
+
+      - name: Esegui traduzione
+        env:
+          TRANSLATOR_API_KEY: ${{ secrets.TRANSLATOR_API_KEY }}
+          TRANSLATOR_BASE_URL: ${{ secrets.TRANSLATOR_BASE_URL }}
+          TRANSLATOR_MODEL: ${{ secrets.TRANSLATOR_MODEL }}
+          TRANSLATOR_LANGS: ${{ inputs.langs }}
+        run: |
+          ARGS=(--source "${{ inputs.source }}" --mode "${{ inputs.mode }}" --langs "${{ inputs.langs }}")
+          if [ -n "${{ inputs.output-pattern }}" ]; then
+            ARGS+=(--output-pattern "${{ inputs.output-pattern }}")
+          fi
+          if [ -n "${{ inputs.output-dir }}" ]; then
+            ARGS+=(--output-dir "${{ inputs.output-dir }}")
+          fi
+          python3 /tmp/translator/translate.py "${ARGS[@]}"
+
+      - name: Crea PR con le traduzioni
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: "docs: traduzioni automatiche (${{ inputs.langs }})"
+          title: "Traduzioni automatiche"
+          body: |
+            Traduzioni generate dal Translator bot.
+            Sorgente: `${{ inputs.source }}`
+            Lingue: `${{ inputs.langs }}`
+          branch: translator-bot/auto
+          delete-branch: true
