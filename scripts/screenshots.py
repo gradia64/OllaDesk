@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """Screenshot per i metadati AppStream e il README: docs/screenshots/*.png.
 
-Uso:  python3 scripts/screenshots.py
+Uso:  python3 scripts/screenshots.py            # inglese → docs/screenshots/
+      python3 scripts/screenshots.py --lang it  # → docs/screenshots/it/
+
+Flathub vuole gli screenshot in inglese: è la lingua predefinita. Con
+--lang l'interfaccia (OLLADESK_LANG) e le chat di esempio cambiano lingua.
 
 Tutto è isolato: configurazione in una cartella temporanea con chat di
 esempio, un finto Ollama locale con nomi di modelli realistici, finestre
@@ -22,11 +26,17 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+LANG = sys.argv[sys.argv.index("--lang") + 1] if "--lang" in sys.argv else "en"
+if LANG not in ("en", "it"):
+    sys.exit(f"lingua non supportata: {LANG} (en, it)")
+
 os.environ["QT_QPA_PLATFORM"] = "offscreen"
 os.environ["XDG_CONFIG_HOME"] = tempfile.mkdtemp(prefix="olladesk_shots_")
+os.environ["OLLADESK_LANG"] = LANG   # prima di importare olladesk
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-OUT = os.path.join(ROOT, "docs", "screenshots")
+OUT_REL = os.path.join("docs", "screenshots", *([] if LANG == "en" else [LANG]))
+OUT = os.path.join(ROOT, OUT_REL)
 sys.path.insert(0, ROOT)
 
 from PySide6.QtCore import QEventLoop, QTimer  # noqa: E402
@@ -77,7 +87,9 @@ def free_port() -> int:
 
 # --------------------------------------------------------- chat di esempio
 
-CODE_ANSWER = """Ecco uno script che legge la data di scatto dai metadati EXIF e \
+TEXTS = {"it": {}, "en": {}}
+
+TEXTS["it"]["code_answer"] = """Ecco uno script che legge la data di scatto dai metadati EXIF e \
 rinomina le foto nel formato `AAAA-MM-GG_HHMMSS.jpg`:
 
 ```python
@@ -108,7 +120,7 @@ for foto in sorted(Path("Foto").glob("*.jpg")):
 
 Serve Pillow: `pip install pillow`."""
 
-WEB_ANSWER = """Le novità principali di **Python 3.14** sono:
+TEXTS["it"]["web_answer"] = """Le novità principali di **Python 3.14** sono:
 
 - **Template string (PEP 750)**: il prefisso `t"..."` crea un oggetto \
 `Template`, utile per l'escape sicuro di HTML e SQL [1].
@@ -118,6 +130,73 @@ funzionano senza virgolette [1].
 ufficialmente [2].
 - **Modulo `concurrent.interpreters`** (PEP 734): più interpreti nella \
 libreria standard [3]."""
+
+TEXTS["it"].update(
+    chats=["Traduci l'email al fornitore", "Spiegami i decoratori in Python",
+           "Riassunto del contratto d'affitto", "Ricetta della pizza in teglia"],
+    web_title="Novità di Python 3.14",
+    web_question="Quali sono le novità di Python 3.14?",
+    web_thinking="L'utente chiede le novità di Python 3.14…",
+    code_title="Rinominare le foto per data",
+    code_question="Scrivi uno script Python che rinomina le foto di una cartella "
+                  "con la data di scatto",
+    code_thinking="Serve leggere il tag EXIF DateTimeOriginal…",
+)
+
+TEXTS["en"]["code_answer"] = """Here is a script that reads the capture date from the EXIF \
+metadata and renames the photos as `YYYY-MM-DD_HHMMSS.jpg`:
+
+```python
+from datetime import datetime
+from pathlib import Path
+
+from PIL import Image
+
+EXIF_DATE_TAKEN = 36867
+
+
+def date_taken(photo: Path) -> datetime | None:
+    with Image.open(photo) as img:
+        value = img.getexif().get_ifd(0x8769).get(EXIF_DATE_TAKEN)
+    return datetime.strptime(value, "%Y:%m:%d %H:%M:%S") if value else None
+
+
+for photo in sorted(Path("Photos").glob("*.jpg")):
+    taken = date_taken(photo)
+    if taken:
+        photo.rename(photo.with_name(taken.strftime("%Y-%m-%d_%H%M%S") + ".jpg"))
+```
+
+**How it works**
+
+1. `getexif()` reads the metadata, and tag `36867` is the original capture date.
+2. Photos without EXIF (screenshots, downloaded images) keep their name.
+
+It needs Pillow: `pip install pillow`."""
+
+TEXTS["en"]["web_answer"] = """The main new features of **Python 3.14** are:
+
+- **Template strings (PEP 750)**: the `t"..."` prefix creates a `Template` \
+object, useful for safely escaping HTML and SQL [1].
+- **Deferred evaluation of annotations (PEP 649)**: forward references \
+work without quotes [1].
+- **Interpreter without the GIL**: the *free-threaded* build is officially \
+supported [2].
+- **The `concurrent.interpreters` module** (PEP 734): multiple interpreters \
+in the standard library [3]."""
+
+TEXTS["en"].update(
+    chats=["Translate the email to the supplier", "Explain Python decorators",
+           "Summary of the rental agreement", "Sheet pan pizza recipe"],
+    web_title="What's new in Python 3.14",
+    web_question="What's new in Python 3.14?",
+    web_thinking="The user is asking about the new features of Python 3.14…",
+    code_title="Rename photos by date",
+    code_question="Write a Python script that renames the photos in a folder "
+                  "by the date they were taken",
+    code_thinking="I need to read the EXIF DateTimeOriginal tag…",
+)
+TX = TEXTS[LANG]
 
 WEB_RESULTS = [
     ("What's new in Python 3.14 — Python documentation",
@@ -134,33 +213,29 @@ WEB_RESULTS = [
 
 def write_chats() -> tuple[str, str]:
     t = time.time()
-    chats = [
-        ("Traduci l'email al fornitore", "gemma3:12b", 9 * 86400),
-        ("Spiegami i decoratori in Python", "qwen3:8b", 6 * 86400),
-        ("Riassunto del contratto d'affitto", "gemma3:12b", 3 * 86400),
-        ("Ricetta della pizza in teglia", "llama3.2:3b", 2 * 86400),
-    ]
+    chats = zip(TX["chats"], ["gemma3:12b", "qwen3:8b", "gemma3:12b", "llama3.2:3b"],
+                [9 * 86400, 6 * 86400, 3 * 86400, 2 * 86400])
     for title, model, age in chats:
         config.save_chat({"id": config.new_chat_id(), "title": title, "model": model,
                           "updated": t - age, "messages": [
                               {"role": "user", "display": title, "ts": t - age},
                               {"role": "assistant", "content": "…", "ts": t - age + 20}]})
     web_id = config.new_chat_id()
-    q = "Quali sono le novità di Python 3.14?"
-    config.save_chat({"id": web_id, "title": "Novità di Python 3.14", "model": "qwen3:8b",
+    q = TX["web_question"]
+    config.save_chat({"id": web_id, "title": TX["web_title"], "model": "qwen3:8b",
                       "updated": t - 3600, "messages": [
                           {"role": "user", "display": q, "ts": t - 3700, "web": True,
                            "web_block": web_search.format_results(q, WEB_RESULTS)},
-                          {"role": "assistant", "content": WEB_ANSWER, "ts": t - 3600,
-                           "thinking": "L'utente chiede le novità di Python 3.14…",
+                          {"role": "assistant", "content": TX["web_answer"], "ts": t - 3600,
+                           "thinking": TX["web_thinking"],
                            "stats": "312 token · 41.7 tok/s · 7.5 s"}]})
     code_id = config.new_chat_id()
-    q = "Scrivi uno script Python che rinomina le foto di una cartella con la data di scatto"
-    config.save_chat({"id": code_id, "title": "Rinominare le foto per data", "model": "qwen3:8b",
+    q = TX["code_question"]
+    config.save_chat({"id": code_id, "title": TX["code_title"], "model": "qwen3:8b",
                       "updated": t - 60, "messages": [
                           {"role": "user", "display": q, "ts": t - 120},
-                          {"role": "assistant", "content": CODE_ANSWER, "ts": t - 60,
-                           "thinking": "Serve leggere il tag EXIF DateTimeOriginal…",
+                          {"role": "assistant", "content": TX["code_answer"], "ts": t - 60,
+                           "thinking": TX["code_thinking"],
                            "stats": "486 token · 43.2 tok/s · 11.2 s"}]})
     return code_id, web_id
 
@@ -296,7 +371,7 @@ def main() -> int:
 
     def save(widget, name):
         widget.grab().save(os.path.join(OUT, name))
-        print("scritto", os.path.join("docs", "screenshots", name))
+        print("scritto", os.path.join(OUT_REL, name))
 
     win = MainWindow()
     win.resize(1280, 800)
@@ -314,7 +389,7 @@ def main() -> int:
     win._open_chat(web_id)
     wait(300)
     for b in win.findChildren(QToolButton):
-        if "Fonti" in b.text() and b.text().startswith("▸"):
+        if "🌐" in b.text() and b.text().startswith("▸"):   # «Fonti», in ogni lingua
             b.click()   # apre l'elenco delle fonti
     wait(500)
     save(win, "web-search.png")
@@ -353,7 +428,7 @@ def main() -> int:
     if "err" in result:
         print("telefono:", result["err"], file=sys.stderr)
         return 1
-    print("scritto docs/screenshots/phone.png")
+    print("scritto", os.path.join(OUT_REL, "phone.png"))
     win._really_quit = True
     win.close()
     srv.shutdown()
