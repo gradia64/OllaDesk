@@ -10,5 +10,4 @@ jobs:
       source: "docs/updater.md"
       mode: "markdown"
       langs: "en"
-    secrets:
-      TRANSLATOR_API_KEY: ${{ secrets.TRANSLATOR_API_KEY }}
+    secrets: inherit
