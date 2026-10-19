@@ -9,6 +9,7 @@ import os
 import re
 import shutil
 import time
+import urllib.parse
 import uuid
 from pathlib import Path
 from typing import Any, Iterable
@@ -131,6 +132,28 @@ def legacy_share_port() -> int | None:
 def save_settings(settings: dict) -> bool:
     merged = {**DEFAULT_SETTINGS, **settings}
     return _write_json(config_dir() / "settings.json", merged)
+
+
+def reset_share_host(settings: dict, share_port: int) -> bool:
+    """Riporta «Server Ollama» al predefinito se puntava alla condivisione.
+
+    Con la condivisione dell'API attiva (fino alla 0.2.x) OllaDesk avviava
+    un suo `ollama serve` su un'altra porta (spesso 11435) e il campo poteva
+    puntare lì: dalla 0.3 quell'istanza non esiste più e OllaDesk restava
+    offline finché l'utente non correggeva l'indirizzo a mano. Vale solo per
+    un indirizzo locale su quella porta; restituisce True se l'ha cambiato.
+    """
+    default = DEFAULT_SETTINGS["host"]
+    try:
+        parts = urllib.parse.urlsplit(str(settings.get("host", "")))
+        port = parts.port
+    except ValueError:
+        return False
+    local = (parts.hostname or "") in ("localhost", "127.0.0.1", "::1", "0.0.0.0")
+    if share_port == 11434 or port != share_port or not local:
+        return False
+    settings["host"] = default
+    return True
 
 
 # ---------------------------------------------------- parametri per modello

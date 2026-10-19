@@ -627,6 +627,21 @@ def test_share_settings_removed():
         assert config.legacy_share_port() is None
 
 
+def test_reset_share_host():
+    # dalla 0.2.x: «Server Ollama» sulla porta dell'istanza della condivisione
+    from olladesk.config import reset_share_host
+    s = {"host": "http://localhost:11435"}
+    assert reset_share_host(s, 11435) and s["host"] == "http://localhost:11434"
+    s = {"host": "http://127.0.0.1:11435/"}
+    assert reset_share_host(s, 11435) and s["host"] == "http://localhost:11434"
+    # un altro server, un'altra porta o la porta standard: non si tocca
+    for host, port in (("http://192.168.1.20:11435", 11435), ("http://localhost:11434", 11435),
+                       ("http://localhost:11434", 11434), ("http://localhost:9999", 11435),
+                       ("non un url:xx", 11435)):
+        s = {"host": host}
+        assert not reset_share_host(s, port) and s["host"] == host, host
+
+
 def test_chat_column_side_margin():
     # colonna messaggi centrata: sotto soglia margine minimo, sopra si centra
     from olladesk.widgets.chat_area import COLUMN_MAX_W, ChatArea
@@ -1514,7 +1529,11 @@ def test_share_removed_note_once():
             texts = [w.text() for w in win.chat_area.findChildren(type(win.status_label))]
             note = next(t for t in texts if "condivisione" in t)
             assert "Companion web" in note and "11435" in note
+            assert "http://localhost:11434" in note       # l'indirizzo è stato corretto
             assert config.legacy_share_port() is None   # alla prossima apertura niente nota
+            # l'indirizzo corretto è nel file e nel motore, non solo nella nota
+            assert json.loads(path.read_text())["host"] == "http://localhost:11434"
+            assert win.engine.settings["host"] == "http://localhost:11434"
         finally:
             win._really_quit = True
             win.close()

@@ -46,6 +46,14 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(860, 560)
 
         self.settings = config.load_settings()
+        # condivisione dell'API della 0.2.x: prima che il motore si colleghi,
+        # l'indirizzo che puntava all'istanza della condivisione torna al
+        # predefinito (lo salva _explain_share_removed, insieme alla nota)
+        self._legacy_share_port = config.legacy_share_port()
+        self._share_host_reset = (
+            self._legacy_share_port is not None
+            and config.reset_share_host(self.settings, self._legacy_share_port)
+        )
         self.engine = ChatEngine(self.settings, self)
         # conversazione visualizzata: None = pagina di benvenuto; un id non
         # ancora salvato è una conversazione nuova (nasce al primo messaggio)
@@ -93,7 +101,7 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(3000, self._maybe_check_app_update)
         # tray e companion web: attivate dopo il primo disegno
         self._sync_tray()
-        legacy_port = config.legacy_share_port()
+        legacy_port = self._legacy_share_port
         if legacy_port is not None:
             QTimer.singleShot(800, lambda: self._explain_share_removed(legacy_port))
         QTimer.singleShot(800, self._sync_companion)
@@ -616,12 +624,12 @@ class MainWindow(QMainWindow):
     def _explain_share_removed(self, port: int) -> None:
         """Una volta sola: la condivisione dell'API non c'è più."""
         extra = ""
-        if f":{port}" in self.settings.get("host", "") and port != 11434:
-            extra = (
-                _('\nIl campo «Server Ollama» punta ancora alla porta {port}, quella '
-                  "dell'istanza che avviava la condivisione: riportalo al tuo Ollama (di "
-                  'solito http://localhost:11434).').format(port=port)
-            )
+        if self._share_host_reset:
+            extra = _(
+                "\nIl campo «Server Ollama» puntava alla porta {port}, quella "
+                "dell'istanza che avviava la condivisione: è stato riportato a {host}. "
+                "Se il tuo Ollama usa un altro indirizzo, cambialo nelle impostazioni (Ctrl+,)."
+            ).format(port=port, host=self.settings["host"])
         self.chat_area.add_system_note(
             _("ℹ La condivisione dell'API Ollama in rete è stata rimossa: per usare "
             "OllaDesk dal telefono attiva la «Companion web» (voce «📱 Companion» "
