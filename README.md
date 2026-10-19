@@ -125,8 +125,11 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
 - **Client Ollama di terze parti** (app per smartphone che parlano con
   l'API di Ollama): la condivisione dell'API delle versioni 0.2.x è stata
   rimossa nella 0.3, perché l'API di Ollama non ha autenticazione e la
-  companion web sì. Chi vuole comunque esporre Ollama in rete lo configura
-  nel servizio di sistema, **sotto la propria responsabilità**:
+  companion web sì. Aggiornando da una 0.2.x con la condivisione attiva,
+  dalla 0.3.6 il campo «Server Ollama» che puntava alla sua porta torna da
+  solo a `http://localhost:11434`. Chi vuole comunque esporre Ollama in
+  rete lo configura nel servizio di sistema, **sotto la propria
+  responsabilità**:
   `sudo systemctl edit ollama`, poi nella sezione `[Service]` la riga
   `Environment="OLLAMA_HOST=0.0.0.0"` e `sudo systemctl restart ollama`
   (con la stessa regola del firewall per la porta 11434). Chi raggiunge la

@@ -117,9 +117,11 @@ License: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
     even without internet.
 - **Third-party Ollama clients** (smartphone apps that talk to the Ollama
   API): sharing the API of versions 0.2.x was removed in 0.3, because the
-  Ollama API has no authentication and the web companion does. Anyone who
-  still wants to expose Ollama on the network configures it in the system
-  service, **at their own risk**:
+  Ollama API has no authentication and the web companion does. When
+  upgrading from 0.2.x with sharing on, since 0.3.6 the «Ollama server»
+  field that pointed to its port goes back to `http://localhost:11434` by
+  itself. Anyone who still wants to expose Ollama on the network configures
+  it in the system service, **at their own risk**:
   `sudo systemctl edit ollama`, then in the `[Service]` section the line
   `Environment="OLLAMA_HOST=0.0.0.0"` and `sudo systemctl restart ollama`
   (with the same firewall rule for port 11434). Whoever reaches the port can
