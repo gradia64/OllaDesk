@@ -1831,6 +1831,27 @@ def test_folder_includes_js_modules_and_names_unsupported():
     assert any("non supportati: dati.bin" in w for w in warnings), warnings
 
 
+def test_sidebar_titles_fit_without_horizontal_scroll():
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+    from olladesk.widgets.sidebar import ChatSidebar
+    app = QApplication.instance() or QApplication([])
+    sb = ChatSidebar()
+    sb.resize(240, 500)
+    sb.show()
+    long_title = "Summary of the rental agreement for the new MMMM WWWW office"
+    sb.set_chats([{"id": "a", "title": long_title, "updated": 2},
+                  {"id": "b", "title": "Breve", "updated": 1}], "a")
+    for _i in range(5):
+        app.processEvents()
+    item = sb.list.item(0)
+    assert item.text().endswith("…") and item.toolTip() == long_title, item.text()
+    assert sb.list.fontMetrics().horizontalAdvance(item.text()) <= sb.list.viewport().width()
+    assert sb.list.horizontalScrollBar().maximum() == 0
+    assert sb.list.item(1).text() == "Breve"
+    sb.deleteLater()
+
+
 def main() -> int:
     failed = 0
     for name, fn in sorted(globals().items()):

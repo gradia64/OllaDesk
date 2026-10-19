@@ -1,7 +1,7 @@
 """Barra laterale in stile ChatGPT: elenco conversazioni + azioni."""
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QEvent, Qt, Signal
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -15,6 +15,11 @@ from PySide6.QtWidgets import (
 
 from .. import __version__
 from ..i18n import _
+
+
+# spazio orizzontale di una voce oltre al testo: margini (6 + 6) e padding
+# (8 + 8) di QListWidget::item nel QSS di theme.py, più un po' di respiro
+ITEM_CHROME_W = 34
 
 
 class ChatSidebar(QWidget):
@@ -62,6 +67,10 @@ class ChatSidebar(QWidget):
         self.list = QListWidget(self)
         self.list.setFrameShape(QListWidget.Shape.NoFrame)
         self.list.setVerticalScrollMode(QListWidget.ScrollMode.ScrollPerPixel)
+        # i titoli si accorciano alla larghezza della colonna (_elide): mai
+        # una barra orizzontale, nemmeno per un attimo durante un resize
+        self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.list.viewport().installEventFilter(self)
         self.list.itemClicked.connect(self._on_clicked)
         self.list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.list.customContextMenuRequested.connect(self._on_menu)
@@ -140,9 +149,25 @@ class ChatSidebar(QWidget):
         self._show_archived = not self._show_archived
         self.set_chats(self._chats, self._current_id)
 
-    @staticmethod
-    def _elide(text: str, n: int = 30) -> str:
-        return text if len(text) <= n else text[: n - 1] + "…"
+    def _elide(self, text: str) -> str:
+        """Titolo accorciato con «…» alla larghezza in pixel della colonna.
+
+        Un limite in caratteri non bastava: con lettere larghe (o in un'altra
+        lingua) la voce superava la colonna e compariva la barra orizzontale.
+        """
+        avail = self.list.viewport().width() - ITEM_CHROME_W
+        return self.list.fontMetrics().elidedText(
+            text, Qt.TextElideMode.ElideRight, max(40, avail))
+
+    def _reelide(self) -> None:
+        for i in range(self.list.count()):
+            item = self.list.item(i)
+            item.setText(self._elide(item.toolTip()))   # il tooltip ha il titolo intero
+
+    def eventFilter(self, obj, ev) -> bool:
+        if obj is self.list.viewport() and ev.type() == QEvent.Type.Resize:
+            self._reelide()
+        return super().eventFilter(obj, ev)
 
     def _on_clicked(self, item: QListWidgetItem) -> None:
         self.chatSelected.emit(item.data(Qt.ItemDataRole.UserRole))
