@@ -25,6 +25,9 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   grassetti, link…), pulsante di copia per ogni risposta. La colonna dei
   messaggi ha larghezza massima fissa e resta centrata anche quando la
   sidebar è nascosta (Ctrl+B): il contenuto non si stira a tutta finestra.
+  Durante la risposta del modello la vista resta dove la lasci (si può
+  risalire con la rotella) e torna a seguire la risposta quando si scende di
+  nuovo in fondo; lo stesso vale nella companion web.
 - **Interfaccia multilingue**: italiano, inglese, francese, tedesco e
   spagnolo, anche nella companion web. Segue la lingua del sistema (per le
   lingue non ancora tradotte usa l'inglese) oppure si sceglie in
@@ -32,7 +35,8 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   in `olladesk/locale/*.po` e si aggiornano con `python3 scripts/i18n.py update`.
 - **Cronologia conversazioni** nella barra laterale (con la versione di
   OllaDesk nell'intestazione): nuova chat, selezione, rinomina (tasto destro)
-  ed eliminazione; persistenza su disco.
+  ed eliminazione; persistenza su disco. I titoli lunghi nella barra laterale
+  si accorciano con «…» alla larghezza reale della colonna.
 - **Archivio delle conversazioni** (tasto destro → «Archivia»): la chat esce
   dall'elenco senza essere eliminata e si ritrova con «🗄 Archivio (N)» in
   fondo alla barra laterale, da cui si apre o si ripristina. Scrivere un
@@ -45,7 +49,11 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   Gli allegati compaiono come chip sopra l'input e nella bolla del messaggio.
 - **Cartella come contesto** (📎 → «Cartella…», oppure trascinandola
   nell'input): un solo allegato «📁 nome/» con i file di testo, codice e PDF
-  che contiene, ciascuno con il percorso relativo. Restano fuori i file e le
+  che contiene, ciascuno con il percorso relativo. Sono ora inclusi anche i
+  moduli JavaScript (`.mjs`, `.cjs`) e altri tipi comuni (`.vue`, `.svelte`,
+  `.swift`, `.dart`, `.cs`, `.proto`, `.tf`, `.nix`, `.lock`…) e file come
+  `COPYING`, `CHANGELOG` e `PKGBUILD`; i file rimasti fuori perché di tipo non
+  supportato sono elencati nell'avviso. Restano fuori i file e le
   cartelle nascosti, dipendenze e cache (`node_modules`, `__pycache__`,
   `venv`, `build`, `dist`…), ciò che esclude il `.gitignore` in cima alla
   cartella (con `*`, `**` e le barre come git, ma senza negazioni né
@@ -535,7 +543,8 @@ io.github.gradia64.OllaDesk.desktop  voce per il menu applicazioni (ID dell'app)
 io.github.gradia64.OllaDesk.metainfo.xml  metadati AppStream (centri software)
 packaging/                  file comuni .deb/Arch, modello PKGBUILD, AppImage, chiave di release
 scripts/                    build (.deb, AppImage, sorgenti, Arch), firma, pubblicazione AUR,
-                            icone web, screenshot (docs/screenshots/, per AppStream)
+                            icone web, screenshot (docs/screenshots/, per AppStream),
+                            i18n (aggiornamento/controllo cataloghi gettext)
 ```
 
 ## Licenza

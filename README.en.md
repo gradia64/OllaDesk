@@ -24,7 +24,9 @@ License: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   Markdown rendering (code blocks, lists, bold, links…), copy button for each
   reply. The message column has a fixed maximum width and stays centered even
   when the sidebar is hidden (Ctrl+B): the content does not stretch to the
-  full window.
+  full window. While the model is replying, the view stays where you leave it
+  (you can scroll up with the wheel) and resumes following the reply when you
+  scroll back to the bottom; the same applies in the web companion.
 - **Multilingual interface**: Italian, English, French, German and Spanish,
   in the web companion too. It follows the system language (languages not
   yet translated fall back to English) or can be chosen in Settings →
@@ -32,7 +34,8 @@ License: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   `olladesk/locale/*.po` and are updated with `python3 scripts/i18n.py update`.
 - **Conversation history** in the sidebar (with the OllaDesk version in the
   header): new chat, selection, rename (right-click) and deletion; persisted
-  to disk.
+  to disk. Long titles in the sidebar are shortened with «…» to the actual
+  column width.
 - **Conversation archive** (right-click → "Archive"): the chat leaves the
   list without being deleted and is found again via "🗄 Archive (N)" at the
   bottom of the sidebar, from which it can be opened or restored. Writing a
@@ -45,7 +48,11 @@ License: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   Attachments appear as chips above the input and in the message bubble.
 - **Folder as context** (📎 → "Folder…", or by dragging it into the input): a
   single "📁 name/" attachment with the text, code and PDF files it contains,
-  each with its relative path. Hidden files and folders, dependencies and
+  each with its relative path. JavaScript modules (`.mjs`, `.cjs`) and other
+  common types (`.vue`, `.svelte`, `.swift`, `.dart`, `.cs`, `.proto`, `.tf`,
+  `.nix`, `.lock`…) plus files such as `COPYING`, `CHANGELOG` and `PKGBUILD`
+  are now included too; files left out because their type is not supported
+  are listed in the notice. Hidden files and folders, dependencies and
   caches (`node_modules`, `__pycache__`, `venv`, `build`, `dist`…), what the
   `.gitignore` at the top of the folder excludes (with `*`, `**` and slashes
   like git, but without negations or nested `.gitignore`), likely credential
@@ -523,7 +530,8 @@ io.github.gradia64.OllaDesk.desktop  entry for the applications menu (app ID)
 io.github.gradia64.OllaDesk.metainfo.xml  AppStream metadata (software centers)
 packaging/                  common .deb/Arch files, PKGBUILD template, AppImage, release key
 scripts/                    build (.deb, AppImage, sources, Arch), signing, AUR publishing,
-                            web icons, screenshots (docs/screenshots/, for AppStream)
+                            web icons, screenshots (docs/screenshots/, for AppStream),
+                            i18n (update/check of gettext catalogs)
 ```
 
 ## License
