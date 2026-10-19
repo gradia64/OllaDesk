@@ -11,6 +11,10 @@ import sys
 import tempfile
 import time
 
+# i test confrontano i testi in italiano (la lingua sorgente), qualunque
+# sia la lingua del sistema: anche nella prova dell'AppImage e in inglese
+os.environ["OLLADESK_LANG"] = "it"
+
 os.environ["QT_QPA_PLATFORM"] = "offscreen"
 os.environ["XDG_CONFIG_HOME"] = tempfile.mkdtemp(prefix="olladesk_engine_config_")
 

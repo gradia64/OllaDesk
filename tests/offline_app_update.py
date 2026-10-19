@@ -13,6 +13,10 @@ import tempfile
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+# i test confrontano i testi in italiano (la lingua sorgente), qualunque
+# sia la lingua del sistema: anche nella prova dell'AppImage e in inglese
+os.environ["OLLADESK_LANG"] = "it"
+
 
 def main() -> int:
     os.environ["QT_QPA_PLATFORM"] = "offscreen"
