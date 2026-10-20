@@ -17,6 +17,15 @@ KDE Plasma.
 
 License: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
 
+<p align="center">
+  <img src="docs/screenshots/chat.png" alt="OllaDesk — chat" width="45%" />
+  <img src="docs/screenshots/web-search.png" alt="Web search" width="45%" />
+</p>
+<p align="center">
+  <img src="docs/screenshots/phone.png" alt="Web companion on phone" width="45%" />
+  <img src="docs/screenshots/models.png" alt="Model management" width="45%" />
+</p>
+
 ## Features
 
 - **ChatGPT-style chat**: user/assistant bubbles, token-by-token *streaming*

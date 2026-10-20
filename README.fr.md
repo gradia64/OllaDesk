@@ -14,6 +14,15 @@
 
 Licence : **GPL-3.0** · Python 3.10+ · PySide6 6.6+
 
+<p align="center">
+  <img src="docs/screenshots/chat.png" alt="OllaDesk — chat" width="45%" />
+  <img src="docs/screenshots/web-search.png" alt="Recherche web" width="45%" />
+</p>
+<p align="center">
+  <img src="docs/screenshots/phone.png" alt="Companion web sur téléphone" width="45%" />
+  <img src="docs/screenshots/models.png" alt="Gestion des modèles" width="45%" />
+</p>
+
 ## Fonctionnalités
 
 - **Chat dans le style ChatGPT** : bulles utilisateur/assistant, réponse en *streaming* token par token, bouton pour interrompre la génération, statistiques (tokens, tok/s, durée), rendu Markdown (blocs de code, listes, gras, liens…), bouton de copie pour chaque réponse. La colonne des messages a une largeur maximale fixe et reste centrée même lorsque la barre latérale est masquée (Ctrl+B) : le contenu ne s'étire pas sur toute la fenêtre. Pendant la réponse du modèle, la vue reste où on la laisse (on peut remonter avec la molette) et reprend le suivi de la réponse quand on redescend en bas ; il en va de même dans le companion web.
