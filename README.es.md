@@ -19,11 +19,11 @@ Licencia: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   <img src="docs/screenshots/web-search.png" alt="Búsqueda web" width="45%" />
 </p>
 <p align="center">
-  <img src="docs/screenshots/phone.png" alt="Companion web en el teléfono" width="30%" />
   <img src="docs/screenshots/models.png" alt="Gestión de modelos" width="45%" />
+  <img src="docs/screenshots/settings.png" alt="Ajustes" width="45%" />
 </p>
 <p align="center">
-  <img src="docs/screenshots/settings.png" alt="Ajustes" width="45%" />
+  <img src="docs/screenshots/phone.png" alt="Companion web en el teléfono" width="30%" />
 </p>
 
 ## Funcionalidades

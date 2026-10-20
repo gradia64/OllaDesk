@@ -15,15 +15,15 @@
 Lizenz: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
 
 <p align="center">
-  <img src="docs/screenshots/chat.png" alt="OllaDesk — Chat" width="45%" />
+  <img src="docs/screenshots/chat.png" alt="OllaDesk — chat" width="45%" />
   <img src="docs/screenshots/web-search.png" alt="Websuche" width="45%" />
 </p>
 <p align="center">
-  <img src="docs/screenshots/phone.png" alt="Web-Companion auf dem Telefon" width="30%" />
   <img src="docs/screenshots/models.png" alt="Modellverwaltung" width="45%" />
+  <img src="docs/screenshots/settings.png" alt="Einstellungen" width="45%" />
 </p>
 <p align="center">
-  <img src="docs/screenshots/settings.png" alt="Einstellungen" width="45%" />
+  <img src="docs/screenshots/phone.png" alt="Web-Companion auf dem Telefon" width="30%" />
 </p>
 
 ## Funktionen
