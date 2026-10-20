@@ -19,8 +19,8 @@ Licence : **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   <img src="docs/screenshots/web-search.png" alt="Recherche web" width="45%" />
 </p>
 <p align="center">
-  <img src="docs/screenshots/models.png" alt="Gestion des modèles" width="45%" />
-  <img src="docs/screenshots/settings.png" alt="Paramètres" width="45%" />
+  <img src="docs/screenshots/models.png" alt="Gestion des modèles" width="46%" />
+  <img src="docs/screenshots/settings.png" alt="Paramètres" width="44%" />
 </p>
 <p align="center">
   <img src="docs/screenshots/phone.png" alt="Companion web sur téléphone" width="30%" />
