@@ -295,6 +295,7 @@ olladesk/
   i18n.py                   Übersetzungen der Oberfläche (Kataloge in locale/*.po)
   context.py                Anhänge: Text/PDF/Bilder als Kontext
   office.py                 Text aus .docx/.doc/.xlsx/.xls/.odt/.ods
+  portal.py                 FileTransfer-Portal für Drag & Drop in Flatpak
   web_search.py             Websuche (DuckDuckGo/Ollama Cloud/SearXNG) + Worker
   updater.py                Ollama-Aktualisierungen (GitHub-Release + pkexec)
   app_update.py             OllaDesk-Aktualisierungen (nur Prüfung und Hinweis)
