@@ -6,7 +6,8 @@ Prepara gli allegati (file di testo/codice, PDF e immagini) e la cronologia da i
 - **Immagini:** vengono codificate in base64 e inviate nel campo `"images"` del messaggio. Servono i modelli visione di Ollama (llava, llama3.2-vision, gemma3…).
 - **Testo/codice:** il contenuto viene inserito nel testo del messaggio come blocco allegato.
 - **PDF:** il testo viene estratto solo se è installato il pacchetto opzionale `pypdf`.
-- **Documenti Office e OpenDocument** (`.docx`, `.doc`, `.xlsx`, `.xls`, `.odt`, `.ods`): il testo viene estratto da `olladesk/office.py`, con la sola libreria standard. I fogli di calcolo diventano righe con le celle separate da tabulazioni, sotto un'intestazione `## Foglio: <nome>`; le date vengono scritte in formato ISO e delle formule si usa il risultato salvato. Il formato si riconosce dal contenuto, non dall'estensione.
+- **Documenti Office e OpenDocument** (`.docx`, `.docm`, `.doc`, `.xlsx`, `.xlsm`, `.xls`, `.odt`, `.ods`): il testo viene estratto da `olladesk/office.py`, con la sola libreria standard. I fogli di calcolo diventano righe con le celle separate da tabulazioni, sotto un'intestazione `## Foglio: <nome>` (tradotta nella lingua dell'interfaccia); le date vengono scritte in formato ISO e delle formule si usa il risultato salvato. Il formato si riconosce dal contenuto (parti dello zip, flussi del file OLE), non dall'estensione.
+- **Limiti di `office.py`** per i file non attendibili: 64 MB per parte dello zip decompressa (`MAX_PART_BYTES`) e per file OLE (`MAX_OLE_BYTES`), 256 colonne (`MAX_COLS`), 500 000 stringhe condivise per `.xlsx` (`MAX_SHARED_STRINGS`), righe ODS ripetute scritte al massimo 100 volte (`MAX_REPEAT_ROWS`). Un documento allegato da solo si legge per al massimo 5 secondi (`MAX_SECONDS`); dentro una cartella vale la scadenza della cartella. Una lettura interrotta per tempo o dimensione restituisce il testo letto fin lì con una nota; qualunque errore di lettura diventa una nota, mai un'eccezione.
 
 Il modulo stima anche l'occupazione della finestra di contesto e sceglie quali messaggi della cronologia inviare.
 
@@ -57,17 +58,18 @@ Somma le stime di `content` di tutti i messaggi e la confronta con la finestra d
 
 Il controllo serve perché Ollama tronca silenziosamente dall'inizio: si perdono il prompt di sistema e i primi messaggi senza alcun errore.
 
-### `_pdf_text(path: Path) -> tuple[str, str | None]`
-Estrae il testo delle prime **50 pagine** con `pypdf.PdfReader`. Le pagine senza testo contano come stringa vuota. In caso di problemi restituisce `("", nota)`:
+### `_pdf_text(path: Path, limit: int, deadline: float | None = None) -> tuple[str, str | None]`
+Estrae il testo, pagina per pagina, fino a `limit` caratteri o alla scadenza `deadline`, delle prime **50 pagine** con `pypdf.PdfReader`. Le pagine senza testo contano come stringa vuota. In caso di problemi restituisce `("", nota)`:
 - se `pypdf` non è installato, la nota suggerisce `pip install pypdf`;
 - per qualsiasi eccezione di lettura, la nota riporta l'eccezione.
 
-### `extract_text(path: Path) -> tuple[str, str | None]`
+### `extract_text(path: Path, limit: int = MAX_TEXT_CHARS, deadline: float | None = None) -> tuple[str, str | None]`
+- I file speciali (FIFO, socket, dispositivi) non vengono aperti: restituisce una nota.
 - I PDF, riconosciuti con `classify`, passano a `_pdf_text`.
-- I documenti (`"document"`) passano a `office.office_text`, che restituisce anche lui `(testo, nota)`.
+- I documenti (`"document"`) passano a `office.office_text(path, limit, deadline)`, che restituisce anche lui `(testo, nota)`.
 - Tutti gli altri file vengono letti come testo UTF-8 con `errors="replace"`, compresi quelli `"unknown"`.
-- Vengono letti al massimo `MAX_TEXT_CHARS + 1` caratteri, così un file enorme non finisce in memoria.
-- Oltre `MAX_TEXT_CHARS` il testo viene tagliato e chiuso dal marcatore `…[troncato a 120000 caratteri]`. Il troncamento non produce una nota.
+- Vengono letti al massimo `limit + 1` caratteri, così un file enorme non finisce in memoria.
+- Oltre `limit` (di default `MAX_TEXT_CHARS`) il testo viene tagliato e chiuso dal marcatore `…[troncato a <limit> caratteri]`. Il troncamento non produce una nota.
 - Se la lettura fallisce (`OSError`), restituisce `("", nota)`.
 
 ### `history_window(messages: list[dict], limit: int) -> list[dict]`

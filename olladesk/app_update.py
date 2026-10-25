@@ -39,7 +39,7 @@ AUR_PAGE = "https://aur.archlinux.org/packages/olladesk"
 CHECK_INTERVAL = 24 * 3600   # secondi tra due controlli automatici
 
 _PACKAGE_DIR = Path(__file__).resolve().parent
-MARKER_NAME = "_packaging"   # contenuto: "deb" | "arch" | "appimage"
+MARKER_NAME = "_packaging"   # contenuto: "deb" | "arch" | "appimage" | "flatpak"
 
 
 def _inside_appimage(package_dir: Path, env) -> bool:
@@ -59,14 +59,15 @@ def _inside_appimage(package_dir: Path, env) -> bool:
 
 
 def install_method(package_dir: Path = _PACKAGE_DIR, env=None) -> str:
-    """Come è stata installata l'app: "deb" | "arch" | "appimage" | "source" | "pip"."""
+    """Come è stata installata l'app: "deb" | "arch" | "appimage" | "flatpak" |
+    "source" | "pip"."""
     if _inside_appimage(package_dir, os.environ if env is None else env):
         return "appimage"
     try:
         marker = (package_dir / MARKER_NAME).read_text(encoding="utf-8").strip()
     except OSError:
         marker = ""
-    if marker in ("deb", "arch", "appimage"):
+    if marker in ("deb", "arch", "appimage", "flatpak"):
         return marker
     if (package_dir.parent / ".git").exists():
         return "source"
@@ -92,6 +93,12 @@ def update_hint(method: str, version: str) -> str:
             _('Scarica OllaDesk-{version}-{machine}.AppImage dalla pagina della '
               "release, rendilo eseguibile (chmod +x) e usalo al posto dell'AppImage "
               'attuale{where}.').format(version=version, machine=platform.machine(), where=where)
+        )
+    if method == "flatpak":
+        return (
+            _('Installa il bundle Flatpak della versione {version} con: '
+              'flatpak install --user OllaDesk-{version}.flatpak '
+              '(oppure flatpak update, se l\'hai installato da un repository).').format(version=version)
         )
     if method == "source":
         return _("Aggiorna il checkout: git pull, poi riavvia OllaDesk.")

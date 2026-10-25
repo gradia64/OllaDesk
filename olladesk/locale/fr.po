@@ -8,41 +8,46 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "X-Source-Language: it\n"
 
-#: olladesk/app_update.py:179
+#: olladesk/app_update.py:104
+msgid "Aggiorna il checkout: git pull, poi riavvia OllaDesk."
+msgstr "Mettez à jour le dépôt : git pull, puis redémarrez OllaDesk."
+
+#: olladesk/app_update.py:105
+msgid "Aggiorna il pacchetto Python: pipx upgrade olladesk (oppure pip install -U)."
+msgstr "Mettez à jour le paquet Python : pipx upgrade olladesk (ou pip install -U)."
+
+#: olladesk/app_update.py:186
 msgid "limite di richieste a GitHub raggiunto, riprova più tardi"
 msgstr "limite de requêtes GitHub atteinte, réessayez plus tard"
 
-#: olladesk/app_update.py:181
+#: olladesk/app_update.py:188
 #, python-brace-format
 msgid "errore HTTP {code} da GitHub"
 msgstr "erreur HTTP {code} de GitHub"
 
-#: olladesk/app_update.py:186
+#: olladesk/app_update.py:193
 #, python-brace-format
 msgid "GitHub non raggiungibile ({reason})"
 msgstr "GitHub injoignable ({reason})"
 
-#: olladesk/app_update.py:80
+#: olladesk/app_update.py:81
 #, python-brace-format
 msgid "Scarica olladesk_{version}_all.deb dalla pagina della release e installalo con: sudo apt install ./olladesk_{version}_all.deb"
 msgstr "Téléchargez olladesk_{version}_all.deb depuis la page de la version et installez-le avec : sudo apt install ./olladesk_{version}_all.deb"
 
-#: olladesk/app_update.py:85
+#: olladesk/app_update.py:86
 msgid "Aggiorna dal pacchetto AUR «olladesk» con il tuo helper (es. yay -Syu olladesk) oppure ricostruiscilo con makepkg."
 msgstr "Mettez à jour depuis le paquet AUR « olladesk » avec votre assistant (p. ex. yay -Syu olladesk) ou recompilez-le avec makepkg."
 
-#: olladesk/app_update.py:92
+#: olladesk/app_update.py:93
 #, python-brace-format
 msgid "Scarica OllaDesk-{version}-{machine}.AppImage dalla pagina della release, rendilo eseguibile (chmod +x) e usalo al posto dell'AppImage attuale{where}."
 msgstr "Téléchargez OllaDesk-{version}-{machine}.AppImage depuis la page de la version, rendez-le exécutable (chmod +x) et utilisez-le à la place de l'AppImage actuelle{where}."
 
-#: olladesk/app_update.py:97
-msgid "Aggiorna il checkout: git pull, poi riavvia OllaDesk."
-msgstr "Mettez à jour le dépôt : git pull, puis redémarrez OllaDesk."
-
-#: olladesk/app_update.py:98
-msgid "Aggiorna il pacchetto Python: pipx upgrade olladesk (oppure pip install -U)."
-msgstr "Mettez à jour le paquet Python : pipx upgrade olladesk (ou pip install -U)."
+#: olladesk/app_update.py:99
+#, python-brace-format
+msgid "Installa il bundle Flatpak della versione {version} con: flatpak install --user OllaDesk-{version}.flatpak (oppure flatpak update, se l'hai installato da un repository)."
+msgstr "Installez le bundle Flatpak de la version {version} avec : flatpak install --user OllaDesk-{version}.flatpak (ou flatpak update, si vous l'avez installé depuis un dépôt)."
 
 #: olladesk/companion.py:1021
 msgid "lo stream eventi richiede GET"
@@ -209,7 +214,7 @@ msgstr "fichier vide ou de plus de {size} Mo"
 msgid "tipo di file non supportato: {name} (immagini, testo, PDF, documenti Office)"
 msgstr "type de fichier non pris en charge : {name} (images, texte, PDF, documents Office)"
 
-#: olladesk/config.py:223
+#: olladesk/config.py:239
 #: olladesk/engine.py:285
 #: olladesk/widgets/sidebar.py:124
 #: olladesk/web/app.js:164
@@ -253,8 +258,9 @@ msgid "{name} non è un file normale: ignorato"
 msgstr "{name} n'est pas un fichier ordinaire : ignoré"
 
 #: olladesk/context.py:181
-#: olladesk/office.py:805
-#: olladesk/office.py:807
+#: olladesk/office.py:936
+#: olladesk/office.py:938
+#: olladesk/office.py:946
 #, python-brace-format
 msgid "impossibile leggere {name}: {error}"
 msgstr "impossible de lire {name} : {error}"
@@ -464,6 +470,11 @@ msgstr ""
 msgid "Allegati"
 msgstr "Pièces jointes"
 
+#: olladesk/engine.py:560
+#, python-brace-format
+msgid "impossibile preparare la richiesta: {error}"
+msgstr "impossible de préparer la requête : {error}"
+
 #: olladesk/main_window.py:135
 msgid "Mostra/nascondi la barra laterale (Ctrl+B)"
 msgstr "Afficher/masquer la barre latérale (Ctrl+B)"
@@ -618,53 +629,64 @@ msgstr "Attendez la fin de la réponse (ou appuyez sur ■ pour l'interrompre) a
 msgid "Resta attivo nella tray: clic sull'icona per mostrare o nascondere la finestra, «Esci» dal menu per chiudere."
 msgstr "Toujours actif dans la zone de notification : cliquez sur l'icône pour afficher ou masquer la fenêtre, « Quitter » dans le menu pour fermer."
 
-#: olladesk/office.py:258
-#: olladesk/office.py:377
-#: olladesk/office.py:698
+#: olladesk/office.py:292
+#: olladesk/office.py:432
+#: olladesk/office.py:797
 #, python-brace-format
 msgid ""
 "## Foglio: {name}\n"
 msgstr ""
 "## Feuille : {name}\n"
 
-#: olladesk/office.py:533
-#: olladesk/office.py:542
-#: olladesk/office.py:559
+#: olladesk/office.py:604
+#: olladesk/office.py:613
+#: olladesk/office.py:635
+#: olladesk/office.py:632
 #, python-brace-format
 msgid "{name} non sembra un documento Word"
 msgstr "{name} ne semble pas être un document Word"
 
-#: olladesk/office.py:536
+#: olladesk/office.py:607
 #, python-brace-format
 msgid "{name}: formato Word troppo vecchio (prima di Word 97)"
 msgstr "{name} : format Word trop ancien (antérieur à Word 97)"
 
-#: olladesk/office.py:539
-#: olladesk/office.py:704
-#: olladesk/office.py:794
+#: olladesk/office.py:610
+#: olladesk/office.py:803
+#: olladesk/office.py:917
 #, python-brace-format
 msgid "{name} è protetto da password"
 msgstr "{name} est protégé par un mot de passe"
 
-#: olladesk/office.py:670
+#: olladesk/office.py:752
 #, python-brace-format
 msgid "{name}: formato Excel troppo vecchio (prima di Excel 97)"
 msgstr "{name} : format Excel trop ancien (antérieur à Excel 97)"
 
-#: olladesk/office.py:671
+#: olladesk/office.py:753
 #, python-brace-format
 msgid "{name} non sembra un foglio Excel"
 msgstr "{name} ne semble pas être une feuille Excel"
 
-#: olladesk/office.py:801
+#: olladesk/office.py:929
+#, python-brace-format
+msgid "{name}: documento troppo grande o lento da leggere, allegato solo in parte"
+msgstr "{name} : document trop volumineux ou trop lent à lire, joint seulement en partie"
+
+#: olladesk/office.py:932
 #, python-brace-format
 msgid "impossibile leggere {name}: parti del documento mancanti"
 msgstr "impossible de lire {name} : des parties du document sont manquantes"
 
-#: olladesk/office.py:803
+#: olladesk/office.py:934
 #, python-brace-format
 msgid "impossibile leggere {name}: non è un file Office valido"
 msgstr "impossible de lire {name} : ce n’est pas un fichier Office valide"
+
+#: olladesk/office.py:941
+#, python-brace-format
+msgid "impossibile leggere {name}: memoria insufficiente"
+msgstr "impossible de lire {name} : mémoire insuffisante"
 
 #: olladesk/ollama_client.py:103
 msgid "Modello non trovato sul server: scaricalo con `ollama pull <modello>`."
@@ -1052,15 +1074,15 @@ msgstr "{main} : {error} ; secours {spare} : {error2}"
 msgid "{main} non ha risposto ({error}): risultati da {spare}, il provider di riserva."
 msgstr "{main} n'a pas répondu ({error}) : résultats de {spare}, le fournisseur de secours."
 
-#: olladesk/widgets/chat_area.py:234
+#: olladesk/widgets/chat_area.py:236
 msgid "Allega come contesto file (testo, codice, PDF, immagini) o una cartella"
 msgstr "Joindre comme contexte des fichiers (texte, code, PDF, images) ou un dossier"
 
-#: olladesk/widgets/chat_area.py:244
+#: olladesk/widgets/chat_area.py:246
 msgid "Ricerca web: allega i risultati di una ricerca online al prossimo messaggio"
 msgstr "Recherche web : joindre les résultats d'une recherche en ligne au prochain message"
 
-#: olladesk/widgets/chat_area.py:257
+#: olladesk/widgets/chat_area.py:259
 msgid ""
 "Ragionamento (thinking): attivo (icona colorata), i modelli che sanno farlo ragionano prima di rispondere e il pensiero è visibile in chat;\n"
 "spento (icona grigia), il ragionamento viene disattivato inviando \"think\": false alla richiesta.\n"
@@ -1070,86 +1092,86 @@ msgstr ""
 "désactivée (icône grise), la réflexion est désactivée en envoyant \"think\": false avec la requête.\n"
 "Remarque : gpt-oss n'accepte pas la désactivation (Ollama n'accepte pour lui que les niveaux low/medium/high)."
 
-#: olladesk/widgets/chat_area.py:278
-#: olladesk/widgets/chat_area.py:704
+#: olladesk/widgets/chat_area.py:280
+#: olladesk/widgets/chat_area.py:706
 msgid "Invia messaggio"
 msgstr "Envoyer le message"
 
-#: olladesk/widgets/chat_area.py:354
+#: olladesk/widgets/chat_area.py:356
 msgid "⚠ File ignorati (tipo non supportato o non trovati): "
 msgstr "⚠ Fichiers ignorés (type non pris en charge ou introuvables) : "
 
-#: olladesk/widgets/chat_area.py:366
+#: olladesk/widgets/chat_area.py:368
 #, python-brace-format
 msgid "Chatta in locale con i tuoi modelli Ollama · v{version}"
 msgstr "Discutez en local avec vos modèles Ollama · v{version}"
 
-#: olladesk/widgets/chat_area.py:375
+#: olladesk/widgets/chat_area.py:377
 msgid "Spiegami in modo semplice come funziona un LLM"
 msgstr "Explique-moi simplement comment fonctionne un LLM"
 
-#: olladesk/widgets/chat_area.py:376
+#: olladesk/widgets/chat_area.py:378
 msgid "Scrivi uno script Python che ordina un elenco di file"
 msgstr "Écris un script Python qui trie une liste de fichiers"
 
-#: olladesk/widgets/chat_area.py:377
+#: olladesk/widgets/chat_area.py:379
 msgid "Riassumi le caratteristiche principali di Debian"
 msgstr "Résume les principales caractéristiques de Debian"
 
-#: olladesk/widgets/chat_area.py:57
-msgid "⚠ Impossibile leggere i file trascinati dalla sandbox Flatpak: "
-msgstr "⚠ Impossible de lire les fichiers glissés depuis le bac à sable Flatpak : "
-
-#: olladesk/widgets/chat_area.py:581
+#: olladesk/widgets/chat_area.py:583
 msgid "📄  File…"
 msgstr "📄  Fichiers…"
 
-#: olladesk/widgets/chat_area.py:582
+#: olladesk/widgets/chat_area.py:584
 msgid "📁  Cartella…"
 msgstr "📁  Dossier…"
 
-#: olladesk/widgets/chat_area.py:587
+#: olladesk/widgets/chat_area.py:589
 msgid "Allega cartella"
 msgstr "Joindre un dossier"
 
 #: olladesk/widgets/chat_area.py:59
-msgid ". Allegali con 📎, che passa dal selettore file del sistema."
-msgstr ". Joignez-les avec 📎, qui passe par le sélecteur de fichiers du système."
+msgid "⚠ Impossibile leggere i file trascinati dalla sandbox Flatpak: "
+msgstr "⚠ Impossible de lire les fichiers glissés depuis le bac à sable Flatpak : "
 
-#: olladesk/widgets/chat_area.py:592
+#: olladesk/widgets/chat_area.py:594
 msgid "Allega file"
 msgstr "Joindre des fichiers"
 
-#: olladesk/widgets/chat_area.py:597
+#: olladesk/widgets/chat_area.py:599
 msgid "⚠ Tipi di file non supportati: "
 msgstr "⚠ Types de fichiers non pris en charge : "
 
-#: olladesk/widgets/chat_area.py:60
+#: olladesk/widgets/chat_area.py:61
+msgid ". Allegali con 📎, che passa dal selettore file del sistema."
+msgstr ". Joignez-les avec 📎, qui passe par le sélecteur de fichiers du système."
+
+#: olladesk/widgets/chat_area.py:62
 msgid "⚠ File non trovati: "
 msgstr "⚠ Fichiers introuvables : "
 
-#: olladesk/widgets/chat_area.py:635
+#: olladesk/widgets/chat_area.py:637
 msgid "Rimuovi allegato"
 msgstr "Retirer la pièce jointe"
 
-#: olladesk/widgets/chat_area.py:69
-msgid "Documenti e immagini (*.txt *.md *.py *.json *.csv *.log *.yaml *.yml *.pdf *.doc *.docx *.xls *.xlsx *.odt *.ods *.png *.jpg *.jpeg *.webp *.gif);;Tutti i file (*)"
-msgstr "Documents et images (*.txt *.md *.py *.json *.csv *.log *.yaml *.yml *.pdf *.doc *.docx *.xls *.xlsx *.odt *.ods *.png *.jpg *.jpeg *.webp *.gif);;Tous les fichiers (*)"
-
-#: olladesk/widgets/chat_area.py:701
+#: olladesk/widgets/chat_area.py:703
 #: olladesk/web/app.js:662
 msgid "Interrompi"
 msgstr "Interrompre"
 
-#: olladesk/widgets/chat_area.py:712
+#: olladesk/widgets/chat_area.py:71
+msgid "Documenti e immagini (*.txt *.md *.py *.json *.csv *.log *.yaml *.yml *.pdf *.doc *.docx *.docm *.xls *.xlsx *.xlsm *.odt *.ods *.png *.jpg *.jpeg *.webp *.gif);;Tutti i file (*)"
+msgstr "Documents et images (*.txt *.md *.py *.json *.csv *.log *.yaml *.yml *.pdf *.doc *.docx *.docm *.xls *.xlsx *.xlsm *.odt *.ods *.png *.jpg *.jpeg *.webp *.gif);;Tous les fichiers (*)"
+
+#: olladesk/widgets/chat_area.py:714
 msgid "Invio: invia · Shift+Invio: a capo"
 msgstr "Entrée : envoyer · Maj+Entrée : nouvelle ligne"
 
-#: olladesk/widgets/chat_area.py:714
+#: olladesk/widgets/chat_area.py:716
 msgid "Ctrl+Invio: invia · Invio: a capo"
 msgstr "Ctrl+Entrée : envoyer · Entrée : nouvelle ligne"
 
-#: olladesk/widgets/chat_area.py:84
+#: olladesk/widgets/chat_area.py:86
 #: olladesk/web/index.html:100
 msgid "Scrivi un messaggio…"
 msgstr "Écrivez un message…"
@@ -1909,28 +1931,28 @@ msgstr "paquet .deb"
 msgid "pacchetto AUR"
 msgstr "paquet AUR"
 
-#: olladesk/widgets/settings_dialog.py:366
+#: olladesk/widgets/settings_dialog.py:367
 msgid "pacchetto Python"
 msgstr "paquet Python"
 
-#: olladesk/widgets/settings_dialog.py:366
+#: olladesk/widgets/settings_dialog.py:367
 msgid "sorgenti (git)"
 msgstr "sources (git)"
 
-#: olladesk/widgets/settings_dialog.py:369
+#: olladesk/widgets/settings_dialog.py:370
 #, python-brace-format
 msgid "Versione in uso: <b>{version}</b> ({method_label})"
 msgstr "Version utilisée : <b>{version}</b> ({method_label})"
 
-#: olladesk/widgets/settings_dialog.py:371
+#: olladesk/widgets/settings_dialog.py:372
 msgid "🔍  Verifica ora"
 msgstr "🔍  Vérifier maintenant"
 
-#: olladesk/widgets/settings_dialog.py:377
+#: olladesk/widgets/settings_dialog.py:378
 msgid "Controlla automaticamente all'avvio (al massimo una volta al giorno)"
 msgstr "Vérifier automatiquement au démarrage (au maximum une fois par jour)"
 
-#: olladesk/widgets/settings_dialog.py:381
+#: olladesk/widgets/settings_dialog.py:382
 msgid ""
 "Contatta solo api.github.com per leggere il numero dell'ultima release.\n"
 "Nessun download né installazione automatica: solo un avviso."
@@ -1938,101 +1960,101 @@ msgstr ""
 "Contacte uniquement api.github.com pour lire le numéro de la dernière version.\n"
 "Aucun téléchargement ni installation automatique : seulement un avis."
 
-#: olladesk/widgets/settings_dialog.py:398
+#: olladesk/widgets/settings_dialog.py:399
 msgid "Controllo l'ultima release su GitHub…"
 msgstr "Vérification de la dernière version sur GitHub…"
 
-#: olladesk/widgets/settings_dialog.py:416
+#: olladesk/widgets/settings_dialog.py:417
 msgid "Nessuna release pubblica trovata su GitHub (repository privato o senza release)."
 msgstr "Aucune version publique trouvée sur GitHub (dépôt privé ou sans version)."
 
-#: olladesk/widgets/settings_dialog.py:420
+#: olladesk/widgets/settings_dialog.py:421
 #, python-brace-format
 msgid "✓ OllaDesk è aggiornato (ultima release: {version})."
 msgstr "✓ OllaDesk est à jour (dernière version : {version})."
 
-#: olladesk/widgets/settings_dialog.py:426
+#: olladesk/widgets/settings_dialog.py:427
 #, python-brace-format
 msgid "✦ Disponibile OllaDesk <b>{version}</b>. {hint}<br><a href=\"{url}\">Apri la pagina di download</a>"
 msgstr "✦ OllaDesk <b>{version}</b> est disponible. {hint}<br><a href=\"{url}\">Ouvrir la page de téléchargement</a>"
 
-#: olladesk/widgets/settings_dialog.py:432
+#: olladesk/widgets/settings_dialog.py:433
 #, python-brace-format
 msgid "⚠ Verifica non riuscita: {err}"
 msgstr "⚠ Échec de la vérification : {err}"
 
-#: olladesk/widgets/settings_dialog.py:437
+#: olladesk/widgets/settings_dialog.py:438
 msgid "Aggiornamenti Ollama"
 msgstr "Mises à jour d'Ollama"
 
-#: olladesk/widgets/settings_dialog.py:443
+#: olladesk/widgets/settings_dialog.py:444
 #, python-brace-format
 msgid "Versione installata: <b>{installed}</b>"
 msgstr "Version installée : <b>{installed}</b>"
 
-#: olladesk/widgets/settings_dialog.py:447
-#: olladesk/widgets/settings_dialog.py:494
+#: olladesk/widgets/settings_dialog.py:448
+#: olladesk/widgets/settings_dialog.py:495
 msgid "🔍  Verifica aggiornamenti"
 msgstr "🔍  Rechercher des mises à jour"
 
-#: olladesk/widgets/settings_dialog.py:453
-#: olladesk/widgets/settings_dialog.py:532
+#: olladesk/widgets/settings_dialog.py:454
+#: olladesk/widgets/settings_dialog.py:533
 msgid "Ultima versione disponibile: —"
 msgstr "Dernière version disponible : —"
 
-#: olladesk/widgets/settings_dialog.py:456
+#: olladesk/widgets/settings_dialog.py:457
 msgid "⬆  Aggiorna ora"
 msgstr "⬆  Mettre à jour maintenant"
 
-#: olladesk/widgets/settings_dialog.py:460
+#: olladesk/widgets/settings_dialog.py:461
 msgid "Esegue lo script ufficiale di installazione (richiede la password di amministratore tramite pkexec)"
 msgstr "Exécute le script d'installation officiel (demande le mot de passe administrateur via pkexec)"
 
-#: olladesk/widgets/settings_dialog.py:475
+#: olladesk/widgets/settings_dialog.py:476
 msgid "…output dell'aggiornamento…"
 msgstr "…sortie de la mise à jour…"
 
-#: olladesk/widgets/settings_dialog.py:481
+#: olladesk/widgets/settings_dialog.py:482
 msgid "Versione attuale non nota: avvia Ollama o premi «Verifica aggiornamenti»."
 msgstr "Version actuelle inconnue : lancez Ollama ou appuyez sur « Rechercher des mises à jour »."
 
-#: olladesk/widgets/settings_dialog.py:494
+#: olladesk/widgets/settings_dialog.py:495
 msgid "⏳ Verifica…"
 msgstr "⏳ Vérification…"
 
-#: olladesk/widgets/settings_dialog.py:500
+#: olladesk/widgets/settings_dialog.py:501
 msgid "Ricontatto il server Ollama e GitHub…"
 msgstr "Nouvelle interrogation du serveur Ollama et de GitHub…"
 
-#: olladesk/widgets/settings_dialog.py:522
+#: olladesk/widgets/settings_dialog.py:523
 #, python-brace-format
 msgid "Versione installata: <b>{version}</b>"
 msgstr "Version installée : <b>{version}</b>"
 
-#: olladesk/widgets/settings_dialog.py:527
+#: olladesk/widgets/settings_dialog.py:528
 #, python-brace-format
 msgid "Ultima versione disponibile: <b>{tag}</b>"
 msgstr "Dernière version disponible : <b>{tag}</b>"
 
-#: olladesk/widgets/settings_dialog.py:542
+#: olladesk/widgets/settings_dialog.py:543
 msgid "✓ Ollama è aggiornato."
 msgstr "✓ Ollama est à jour."
 
-#: olladesk/widgets/settings_dialog.py:548
+#: olladesk/widgets/settings_dialog.py:549
 #, python-brace-format
 msgid "✦ Aggiornamento disponibile ({installed} → {latest}), ma il server configurato non è su questa macchina: aggiorna Ollama sull'host remoto."
 msgstr "✦ Mise à jour disponible ({installed} → {latest}), mais le serveur configuré n'est pas sur cette machine : mettez à jour Ollama sur l'hôte distant."
 
-#: olladesk/widgets/settings_dialog.py:555
+#: olladesk/widgets/settings_dialog.py:556
 #, python-brace-format
 msgid "✦ Aggiornamento disponibile: {installed} → {latest}. Premi «Aggiorna ora» (serve la password di amministratore)."
 msgstr "✦ Mise à jour disponible : {installed} → {latest}. Appuyez sur « Mettre à jour maintenant » (le mot de passe administrateur est requis)."
 
-#: olladesk/widgets/settings_dialog.py:561
+#: olladesk/widgets/settings_dialog.py:562
 msgid "⚠ Verifica non riuscita: controlla la connessione a internet o il server Ollama."
 msgstr "⚠ Échec de la vérification : vérifiez la connexion internet ou le serveur Ollama."
 
-#: olladesk/widgets/settings_dialog.py:567
+#: olladesk/widgets/settings_dialog.py:568
 #, python-brace-format
 msgid ""
 "⚠ `pkexec` non disponibile. Aggiorna manualmente da terminale:\n"
@@ -2045,20 +2067,20 @@ msgstr ""
 msgid "Impostazioni — OllaDesk"
 msgstr "Paramètres — OllaDesk"
 
-#: olladesk/widgets/settings_dialog.py:573
+#: olladesk/widgets/settings_dialog.py:574
 msgid "Scarico lo script ufficiale di installazione…"
 msgstr "Téléchargement du script d'installation officiel…"
 
-#: olladesk/widgets/settings_dialog.py:590
+#: olladesk/widgets/settings_dialog.py:591
 msgid "⚠ `pkexec` non disponibile sul sistema."
 msgstr "⚠ `pkexec` indisponible sur le système."
 
-#: olladesk/widgets/settings_dialog.py:596
+#: olladesk/widgets/settings_dialog.py:597
 #, python-brace-format
 msgid "Script ufficiale scaricato ({size} byte): passa a sh via stdin, esecuzione con privilegi di amministratore — inserisci la password quando richiesto…"
 msgstr "Script officiel téléchargé ({size} octets) : passé à sh via stdin, exécution avec les privilèges administrateur — saisissez le mot de passe quand il est demandé…"
 
-#: olladesk/widgets/settings_dialog.py:617
+#: olladesk/widgets/settings_dialog.py:618
 #, python-brace-format
 msgid ""
 "⚠ Impossibile avviare `pkexec`. Aggiorna manualmente da terminale:\n"
@@ -2067,7 +2089,7 @@ msgstr ""
 "⚠ Impossible de lancer `pkexec`. Mettez à jour manuellement depuis un terminal :\n"
 "    {command}"
 
-#: olladesk/widgets/settings_dialog.py:624
+#: olladesk/widgets/settings_dialog.py:625
 #, python-brace-format
 msgid ""
 "⚠ Impossibile scaricare lo script ({err}). Aggiorna manualmente da terminale:\n"
@@ -2076,48 +2098,48 @@ msgstr ""
 "⚠ Impossible de télécharger le script ({err}). Mettez à jour manuellement depuis un terminal :\n"
 "    {command}"
 
-#: olladesk/widgets/settings_dialog.py:640
+#: olladesk/widgets/settings_dialog.py:641
 msgid "✓ Aggiornamento completato. Riavvia il server Ollama per usare la nuova versione."
 msgstr "✓ Mise à jour terminée. Redémarrez le serveur Ollama pour utiliser la nouvelle version."
 
-#: olladesk/widgets/settings_dialog.py:645
+#: olladesk/widgets/settings_dialog.py:646
 #, python-brace-format
 msgid "⚠ Aggiornamento non riuscito (codice {code}). Vedi l'output qui sopra."
 msgstr "⚠ Échec de la mise à jour (code {code}). Voir la sortie ci-dessus."
 
-#: olladesk/widgets/settings_dialog.py:697
-#: olladesk/widgets/settings_dialog.py:746
+#: olladesk/widgets/settings_dialog.py:698
+#: olladesk/widgets/settings_dialog.py:747
 msgid "Aggiornamento in corso"
 msgstr "Mise à jour en cours"
 
-#: olladesk/widgets/settings_dialog.py:697
-#: olladesk/widgets/settings_dialog.py:746
+#: olladesk/widgets/settings_dialog.py:698
+#: olladesk/widgets/settings_dialog.py:747
 msgid "Attendi la fine dell'aggiornamento."
 msgstr "Attendez la fin de la mise à jour."
 
-#: olladesk/widgets/settings_dialog.py:712
+#: olladesk/widgets/settings_dialog.py:713
 msgid "Portachiavi non disponibile"
 msgstr "Trousseau indisponible"
 
-#: olladesk/widgets/settings_dialog.py:713
+#: olladesk/widgets/settings_dialog.py:714
 msgid ""
 "Non è stato possibile aggiornare la chiave nel portachiavi di KDE.\n"
 msgstr ""
 "Impossible de mettre à jour la clé dans le portefeuille KDE.\n"
 
-#: olladesk/widgets/settings_dialog.py:714
+#: olladesk/widgets/settings_dialog.py:715
 msgid "La chiave è stata salvata in settings.json (permessi 600)."
 msgstr "La clé a été enregistrée dans settings.json (permissions 600)."
 
-#: olladesk/widgets/settings_dialog.py:715
+#: olladesk/widgets/settings_dialog.py:716
 msgid "La chiave precedente potrebbe essere ancora salvata."
 msgstr "L'ancienne clé est peut-être encore enregistrée."
 
-#: olladesk/widgets/settings_dialog.py:722
+#: olladesk/widgets/settings_dialog.py:723
 msgid "Impostazioni"
 msgstr "Paramètres"
 
-#: olladesk/widgets/settings_dialog.py:723
+#: olladesk/widgets/settings_dialog.py:724
 #, python-brace-format
 msgid ""
 "Impossibile scrivere le impostazioni in {path}.\n"
@@ -2126,11 +2148,11 @@ msgstr ""
 "Impossible d'écrire les paramètres dans {path}.\n"
 "Les modifications ne valent que jusqu'à la fermeture de l'application."
 
-#: olladesk/widgets/settings_dialog.py:728
+#: olladesk/widgets/settings_dialog.py:729
 msgid "Lingua"
 msgstr "Langue"
 
-#: olladesk/widgets/settings_dialog.py:729
+#: olladesk/widgets/settings_dialog.py:730
 msgid "La nuova lingua sarà usata al prossimo avvio di OllaDesk."
 msgstr "La nouvelle langue sera utilisée au prochain démarrage d'OllaDesk."
 

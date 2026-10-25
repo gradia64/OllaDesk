@@ -13,6 +13,7 @@ Ogni funzione restituisce (testo, nota di errore o None), come
 """
 from __future__ import annotations
 
+import bisect
 import datetime
 import re
 import struct
@@ -38,10 +39,22 @@ MAX_PART_BYTES = 64 * 1024 * 1024
 MAX_OLE_BYTES = 64 * 1024 * 1024
 # celle vuote ripetute (ODS) o colonne lontane: una riga non esplode
 MAX_COLS = 256
+# righe ODS con contenuto ripetute (number-rows-repeated): oltre si scrive una volta
+MAX_REPEAT_ROWS = 100
+# stringhe condivise di un .xlsx: oltre, le celle che le usano restano vuote
+MAX_SHARED_STRINGS = 500_000
+# un documento allegato da solo (senza scadenza della cartella) non ferma
+# l'interfaccia più di così: oltre si usa il testo letto fin lì
+MAX_SECONDS = 5.0
 
 
 class _Stop(Exception):
-    """Limite di caratteri o scadenza raggiunti: il testo raccolto basta."""
+    """Lettura interrotta: «limit» (caratteri bastano), «deadline» (tempo
+    scaduto) o «size» (parte del documento troppo grande)."""
+
+    def __init__(self, reason: str = "limit"):
+        super().__init__(reason)
+        self.reason = reason
 
 
 class _Out:
@@ -57,9 +70,14 @@ class _Out:
         self.parts.append(s)
         self.size += len(s)
         if self.size > self.limit:
-            raise _Stop
+            raise _Stop("limit")
+        self.tick()
+
+    def tick(self) -> None:
+        """Da chiamare nei cicli che non scrivono testo (stringhe condivise,
+        stili, righe vuote, record binari): la scadenza vale anche lì."""
         if self.deadline is not None and time.monotonic() > self.deadline:
-            raise _Stop
+            raise _Stop("deadline")
 
     def text(self) -> str:
         return "".join(self.parts)
@@ -80,7 +98,7 @@ class _Limited:
         data = self.fh.read(n if n >= 0 else MAX_PART_BYTES)
         self.read_bytes += len(data)
         if self.read_bytes > MAX_PART_BYTES:
-            raise _Stop
+            raise _Stop("size")
         return data
 
 
@@ -99,8 +117,10 @@ def _fmt_number(v: float) -> str:
 
 # ------------------------------------------------------------------- date
 
-# formati numerici predefiniti di Excel che sono date o ore
-_BUILTIN_DATE_FMTS = set(range(14, 23)) | {45, 46, 47}
+# formati numerici predefiniti di Excel che sono date o ore (27–36 e 50–58:
+# date e ore nei formati locali dell'Asia orientale)
+_BUILTIN_DATE_FMTS = (set(range(14, 23)) | {45, 46, 47}
+                      | set(range(27, 37)) | set(range(50, 59)))
 
 
 def _is_date_code(code: str) -> bool:
@@ -125,9 +145,15 @@ def _serial_to_date(v: float, date1904: bool) -> str:
 # ------------------------------------------------------------- righe/celle
 
 def _col_index(ref: str) -> int:
-    """«C7» → 2 (colonne da zero)."""
+    """«C7» → 2 (colonne da zero); -1 per un riferimento non valido.
+
+    Al massimo tre lettere (l'ultima colonna di Excel è XFD): un riferimento
+    lunghissimo costruirebbe un intero enorme, con costo quadratico.
+    """
     n = 0
-    for ch in ref:
+    for i, ch in enumerate(ref):
+        if i == 3 and ch.isalpha():
+            return -1
         if "A" <= ch <= "Z":
             n = n * 26 + ord(ch) - 64
         elif "a" <= ch <= "z":
@@ -182,7 +208,7 @@ def _docx(path: Path, out: _Out) -> None:
 _R_ID = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id"
 
 
-def _xlsx_date_styles(zf: zipfile.ZipFile) -> list[bool]:
+def _xlsx_date_styles(zf: zipfile.ZipFile, out: _Out) -> list[bool]:
     """Per ogni stile di cella (indice di «s»): è un formato data?"""
     try:
         zf.getinfo("xl/styles.xml")
@@ -197,6 +223,7 @@ def _xlsx_date_styles(zf: zipfile.ZipFile) -> list[bool]:
             if name == "cellXfs":
                 in_xfs = True
             continue
+        out.tick()
         if name == "numFmt":
             try:
                 custom[int(el.get("numFmtId", "-1"))] = el.get("formatCode", "")
@@ -211,6 +238,7 @@ def _xlsx_date_styles(zf: zipfile.ZipFile) -> list[bool]:
                           or (fid in custom and _is_date_code(custom[fid])))
         elif name == "cellXfs":
             in_xfs = False
+        el.clear()
     return styles
 
 
@@ -239,20 +267,26 @@ def _xlsx(path: Path, out: _Out) -> None:
         shared: list[str] = []
         if "xl/sharedStrings.xml" in names:
             buf: list[str] = []
+            in_rph = 0   # pronuncia fonetica (giapponese) dentro <rPh>: non è testo
             for ev, el in _iterparse(zf, "xl/sharedStrings.xml"):
                 name = _local(el.tag)
                 if ev == "start":
                     if name == "si":
                         buf = []
+                    elif name == "rPh":
+                        in_rph += 1
                     continue
-                if name == "t":
+                if name == "t" and not in_rph:
                     buf.append(el.text or "")
                 elif name == "rPh":
-                    buf.append("")   # pronuncia fonetica (giapponese): non è testo
+                    in_rph -= 1
                 elif name == "si":
                     shared.append("".join(buf))
                     el.clear()
-        date_styles = _xlsx_date_styles(zf)
+                    out.tick()
+                    if len(shared) >= MAX_SHARED_STRINGS:
+                        break
+        date_styles = _xlsx_date_styles(zf, out)
 
         for sheet_name, target in sheets:
             out.add(_("## Foglio: {name}\n").format(name=sheet_name))
@@ -267,6 +301,8 @@ def _xlsx(path: Path, out: _Out) -> None:
                 if ev == "start":
                     if name == "c":
                         col = _col_index(el.get("r", "")) if el.get("r") else col + 1
+                        if col >= MAX_COLS:
+                            col = -1   # fuori dalle colonne lette: la cella si scarta
                         ctype = el.get("t", "n")
                         style = el.get("s", "0")
                         value, inline = None, []
@@ -282,12 +318,14 @@ def _xlsx(path: Path, out: _Out) -> None:
                 elif name == "is":
                     in_is = False
                 elif name == "c":
-                    cells[col] = _xlsx_cell(ctype, style, value, inline, shared,
-                                            date_styles, date1904)
+                    if col >= 0:
+                        cells[col] = _xlsx_cell(ctype, style, value, inline, shared,
+                                                date_styles, date1904)
                 elif name == "row":
                     _emit_row(out, cells)
                     cells = {}
                     el.clear()
+                    out.tick()
             out.add("\n")
 
 
@@ -324,22 +362,38 @@ _OFFICE = "{urn:oasis:names:tc:opendocument:xmlns:office:1.0}"
 
 
 def _odf_inline(el: ET.Element) -> str:
-    """Testo di un paragrafo ODF, con spazi, tabulazioni e a capo."""
-    parts = [el.text or ""]
-    for child in el:
-        tag = child.tag
-        if tag == _TEXT + "s":
-            try:
-                parts.append(" " * min(int(child.get(_TEXT + "c", "1")), 100))
-            except ValueError:
-                parts.append(" ")
-        elif tag == _TEXT + "tab":
-            parts.append("\t")
-        elif tag == _TEXT + "line-break":
-            parts.append("\n")
-        elif tag != _OFFICE + "annotation":
-            parts.append(_odf_inline(child))
-        parts.append(child.tail or "")
+    """Testo di un paragrafo ODF, con spazi, tabulazioni e a capo.
+
+    Visita con una pila esplicita, non ricorsiva: migliaia di <text:span>
+    annidati (pochi KB di file) superavano il limite di ricorsione.
+    """
+    parts: list[str] = []
+    stack: list[ET.Element | str] = [el]   # elementi da visitare e code di testo
+    while stack:
+        node = stack.pop()
+        if isinstance(node, str):
+            parts.append(node)
+            continue
+        tag = node.tag
+        if node is not el:
+            if tag == _TEXT + "s":
+                try:
+                    parts.append(" " * max(0, min(int(node.get(_TEXT + "c", "1")), 100)))
+                except ValueError:
+                    parts.append(" ")
+                continue
+            if tag == _TEXT + "tab":
+                parts.append("\t")
+                continue
+            if tag == _TEXT + "line-break":
+                parts.append("\n")
+                continue
+            if tag == _OFFICE + "annotation":
+                continue
+        parts.append(node.text or "")
+        for child in reversed(node):
+            stack.append(child.tail or "")
+            stack.append(child)
     return "".join(parts)
 
 
@@ -370,6 +424,7 @@ def _ods(path: Path, out: _Out) -> None:
     with zipfile.ZipFile(path) as zf:
         cells: dict[int, str] = {}
         col = 0
+        rows_rep = 1
         for ev, el in _iterparse(zf, "content.xml"):
             tag = el.tag
             if ev == "start":
@@ -377,6 +432,10 @@ def _ods(path: Path, out: _Out) -> None:
                     out.add(_("## Foglio: {name}\n").format(name=el.get(_TABLE + "name", "")))
                 elif tag == _TABLE + "table-row":
                     cells, col = {}, 0
+                    try:
+                        rows_rep = int(el.get(_TABLE + "number-rows-repeated", "1"))
+                    except ValueError:
+                        rows_rep = 1
                 continue
             if tag in (_TABLE + "table-cell", _TABLE + "covered-table-cell"):
                 try:
@@ -385,15 +444,18 @@ def _ods(path: Path, out: _Out) -> None:
                     rep = 1
                 text = "\n".join(_odf_inline(p) for p in el.iter(_TEXT + "p"))
                 if text.strip():
-                    for i in range(min(rep, MAX_COLS)):
+                    for i in range(max(0, min(rep, MAX_COLS - col))):
                         cells[col + i] = text
-                col += rep
+                col += max(rep, 1)
                 el.clear()
             elif tag == _TABLE + "table-row":
-                # una riga ripetuta mille volte è quasi sempre vuota: si
-                # scrive una volta sola
-                _emit_row(out, cells)
+                # le righe vuote ripetute (anche a migliaia, fino in fondo al
+                # foglio) non scrivono niente; quelle con contenuto si
+                # ripetono, fino a MAX_REPEAT_ROWS
+                for _i in range(max(1, min(rows_rep, MAX_REPEAT_ROWS))):
+                    _emit_row(out, cells)
                 el.clear()
+                out.tick()
             elif tag == _TABLE + "table":
                 out.add("\n")
                 el.clear()
@@ -421,19 +483,28 @@ class _Ole:
         n_fat, first_dir, _tx, self.cutoff, first_mini, n_mini, first_difat, n_difat = \
             struct.unpack_from("<IIIIIIII", data, 0x2C)
         self.nsect = (len(data) - 512) // self.ssz
+        # i contatori dell'intestazione non sono attendibili: un file costruito
+        # apposta con n_fat enorme e una catena DIFAT circolare faceva crescere
+        # la FAT di centinaia di volte la dimensione del file. Settori della
+        # FAT: al massimo quelli che servono a descrivere il file
+        per_fat = self.ssz // 4
+        n_fat = min(n_fat, self.nsect // per_fat + 1)
         # DIFAT: settori della FAT
         difat = list(struct.unpack_from("<109I", data, 0x4C))
-        sid, per = first_difat, self.ssz // 4 - 1
-        for _i in range(min(n_difat, self.nsect)):
-            if sid >= self.nsect:
-                break
+        sid, per = first_difat, per_fat - 1
+        seen: set[int] = set()
+        while len(difat) < n_fat and sid < self.nsect and sid not in seen:
+            seen.add(sid)
             vals = struct.unpack_from(f"<{per + 1}I", data, self._off(sid))
             difat.extend(vals[:per])
             sid = vals[per]
         fat_sects = [s for s in difat[:n_fat] if s < self.nsect]
+        if len(set(fat_sects)) != len(fat_sects):
+            raise _OleError("FAT sector listed twice")
         self.fat: list[int] = []
         for s in fat_sects:
-            self.fat.extend(struct.unpack_from(f"<{self.ssz // 4}I", data, self._off(s)))
+            self.fat.extend(struct.unpack_from(f"<{per_fat}I", data, self._off(s)))
+        del self.fat[self.nsect:]
         dir_data = self._chain_bytes(first_dir)
         self.entries: dict[str, tuple[int, int]] = {}
         root_start = root_size = None
@@ -551,10 +622,15 @@ def _doc(path: Path, ole: _Ole, out: _Out) -> str | None:
     pos += 2   # cbRgFcLcb
     fc_clx, lcb_clx = struct.unpack_from("<II", wd, pos + 33 * 8)
     clx = table[fc_clx:fc_clx + lcb_clx]
-    # Clx: zero o più Prc (0x01), poi un Pcdt (0x02) con la tabella dei pezzi
+    # Clx: zero o più Prc (0x01), poi un Pcdt (0x02) con la tabella dei pezzi.
+    # La lunghezza di un Prc è con segno: una negativa riportava indietro (o
+    # fermava) l'indice e il ciclo non finiva più
     i = 0
-    while i < len(clx) and clx[i] == 0x01:
-        i += 3 + struct.unpack_from("<h", clx, i + 1)[0]
+    while i + 3 <= len(clx) and clx[i] == 0x01:
+        cb = struct.unpack_from("<h", clx, i + 1)[0]
+        if cb < 0:
+            return _('{name} non sembra un documento Word').format(name=path.name)
+        i += 3 + cb
     if i + 5 > len(clx) or clx[i] != 0x02:
         return _('{name} non sembra un documento Word').format(name=path.name)
     lcb = struct.unpack_from("<I", clx, i + 1)[0]
@@ -581,6 +657,7 @@ def _doc(path: Path, ole: _Ole, out: _Out) -> str | None:
         budget -= count
         if budget <= 0 or (remaining is not None and remaining <= 0):
             break
+        out.tick()
     out.add(_doc_clean("".join(buf)))
     return None
 
@@ -600,15 +677,19 @@ class _Biff:
         while pos + 4 <= n:
             rtype, size = struct.unpack_from("<HH", data, pos)
             start = pos
-            body = data[pos + 4:pos + 4 + size]
+            first = data[pos + 4:pos + 4 + size]
             pos += 4 + size
-            bounds = []
+            # pezzi raccolti e uniti una volta sola: con `body +=` una catena
+            # di CONTINUE piccoli ricopiava tutto a ogni pezzo (tempo quadratico)
+            parts, bounds, length = [first], [], len(first)
             while pos + 4 <= n and struct.unpack_from("<H", data, pos)[0] == 0x003C:
                 csize = struct.unpack_from("<H", data, pos + 2)[0]
-                bounds.append(len(body))
-                body += data[pos + 4:pos + 4 + csize]
+                bounds.append(length)
+                piece = data[pos + 4:pos + 4 + csize]
+                parts.append(piece)
+                length += len(piece)
                 pos += 4 + csize
-            yield start, rtype, body, bounds
+            yield start, rtype, b"".join(parts) if bounds else first, bounds
 
 
 def _xl_string(data: bytes, pos: int, cch: int, flags: int,
@@ -618,7 +699,8 @@ def _xl_string(data: bytes, pos: int, cch: int, flags: int,
     parts = []
     high = flags & 1
     while cch > 0 and pos < len(data):
-        end = next((b for b in bounds if b > pos), len(data))
+        k = bisect.bisect_right(bounds, pos)
+        end = bounds[k] if k < len(bounds) else len(data)
         width = 2 if high else 1
         n = min(cch, (end - pos) // width)
         chunk = data[pos:pos + n * width]
@@ -678,17 +760,34 @@ def _xls(path: Path, ole: _Ole, out: _Out) -> str | None:
     rows: dict[int, dict[int, str]] = {}
     pending_string: tuple[int, int] | None = None   # FORMULA in attesa di STRING
 
+    pending = 0   # caratteri raccolti in `rows` e non ancora scritti
+
+    def put(r: int, c: int, v: str) -> None:
+        # le celle si scrivono a fine foglio, ordinate per riga: senza questo
+        # conteggio il limite di caratteri non fermava la lettura e un foglio
+        # enorme cresceva tutto in memoria
+        nonlocal pending
+        if c >= MAX_COLS:
+            return
+        rows.setdefault(r, {})[c] = v
+        pending += len(v) + 1
+        if pending > out.limit:
+            flush()   # scrive oltre il limite: solleva _Stop
+
     def num(r: int, c: int, xf: int, v: float) -> None:
         is_date = xf < len(xf_date) and xf_date[xf]
-        rows.setdefault(r, {})[c] = _serial_to_date(v, date1904) if is_date else _fmt_number(v)
+        put(r, c, _serial_to_date(v, date1904) if is_date else _fmt_number(v))
 
     def flush() -> None:
+        nonlocal pending
+        pending = 0
         for r in sorted(rows):
             _emit_row(out, rows[r])
         out.add("\n")
         rows.clear()
 
     for start, rtype, d, bounds in _Biff(wb).records():
+        out.tick()
         try:
             if rtype == 0x0809:   # BOF
                 if current is not None:
@@ -728,10 +827,10 @@ def _xls(path: Path, ole: _Ole, out: _Out) -> str | None:
             elif rtype == 0x00FD:   # LABELSST
                 r, c, _xf, isst = struct.unpack_from("<HHHI", d, 0)
                 if isst < len(sst):
-                    rows.setdefault(r, {})[c] = sst[isst]
+                    put(r, c, sst[isst])
             elif rtype == 0x0204:   # LABEL
                 r, c, _xf = struct.unpack_from("<HHH", d, 0)
-                rows.setdefault(r, {})[c] = _xl_unicode(d, 6, bounds)[0]
+                put(r, c, _xl_unicode(d, 6, bounds)[0])
             elif rtype == 0x0203:   # NUMBER
                 r, c, xf, v = struct.unpack_from("<HHHd", d, 0)
                 num(r, c, xf, v)
@@ -746,7 +845,7 @@ def _xls(path: Path, ole: _Ole, out: _Out) -> str | None:
             elif rtype == 0x0205:   # BOOLERR
                 r, c, _xf, v, err = struct.unpack_from("<HHHBB", d, 0)
                 if not err:
-                    rows.setdefault(r, {})[c] = "TRUE" if v else "FALSE"
+                    put(r, c, "TRUE" if v else "FALSE")
             elif rtype == 0x0006:   # FORMULA: si usa il risultato memorizzato
                 r, c, xf = struct.unpack_from("<HHH", d, 0)
                 res = d[6:14]
@@ -754,12 +853,12 @@ def _xls(path: Path, ole: _Ole, out: _Out) -> str | None:
                     if res[0] == 0:
                         pending_string = (r, c)
                     elif res[0] == 1:
-                        rows.setdefault(r, {})[c] = "TRUE" if res[2] else "FALSE"
+                        put(r, c, "TRUE" if res[2] else "FALSE")
                 else:
                     num(r, c, xf, struct.unpack("<d", res)[0])
             elif rtype == 0x0207 and pending_string:   # STRING
                 r, c = pending_string
-                rows.setdefault(r, {})[c] = _xl_unicode(d, 0, bounds)[0]
+                put(r, c, _xl_unicode(d, 0, bounds)[0])
                 pending_string = None
         except (struct.error, IndexError):
             continue   # record troncato: si salta
@@ -770,33 +869,65 @@ def _xls(path: Path, ole: _Ole, out: _Out) -> str | None:
 
 # ------------------------------------------------------------- ingresso
 
+def _zip_reader(zf: zipfile.ZipFile, sheet_ext: bool):
+    """Il lettore giusto per uno zip, dal contenuto; l'estensione decide solo
+    per un OpenDocument senza il file «mimetype»."""
+    names = set(zf.namelist())
+    if "xl/workbook.xml" in names:
+        return _xlsx
+    if "word/document.xml" in names:
+        return _docx
+    if "content.xml" in names:
+        mime = ""
+        if "mimetype" in names:
+            with zf.open("mimetype") as fh:
+                mime = fh.read(100).decode("ascii", "replace")
+        if "spreadsheet" in mime:
+            return _ods
+        if "text" in mime:
+            return _odt
+        return _ods if sheet_ext else _odt
+    raise KeyError("no document part")
+
+
 def office_text(path: Path, limit: int, deadline: float | None = None) -> tuple[str, str | None]:
-    """Testo di un documento d'ufficio, al massimo circa `limit` caratteri."""
+    """Testo di un documento d'ufficio, al massimo circa `limit` caratteri.
+
+    Senza `deadline` (un file allegato da solo) la lettura si ferma comunque
+    dopo MAX_SECONDS: avviene nel thread dell'interfaccia.
+    """
     ext = path.suffix.lower()
-    sheet = ext in XLSX_EXTS | XLS_EXTS | ODS_EXTS
+    sheet_ext = ext in XLSX_EXTS | XLS_EXTS | ODS_EXTS
+    if deadline is None:
+        deadline = time.monotonic() + MAX_SECONDS
     out = _Out(limit, deadline)
     note = None
     try:
-        # il formato si decide dal contenuto: un .docx salvato come .doc (o
-        # il contrario) capita spesso
+        # il formato si decide dal contenuto: un .docx salvato come .doc, o
+        # un foglio con l'estensione di un documento, capitano
         with open(path, "rb") as fh:
             magic = fh.read(8)
         if magic.startswith(b"PK"):
             with zipfile.ZipFile(path) as zf:
-                names = set(zf.namelist())
-            if sheet:
-                (_xlsx if "xl/workbook.xml" in names else _ods)(path, out)
-            else:
-                (_docx if "word/document.xml" in names else _odt)(path, out)
+                reader = _zip_reader(zf, sheet_ext)
+            reader(path, out)
         elif magic == b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1":
             ole = _read_ole(path)
             if ole.stream("EncryptedPackage") is not None:   # .docx/.xlsx cifrato
                 return "", _('{name} è protetto da password').format(name=path.name)
-            note = (_xls if sheet else _doc)(path, ole, out)
+            if "Workbook" in ole.entries or "Book" in ole.entries:
+                note = _xls(path, ole, out)
+            elif "WordDocument" in ole.entries:
+                note = _doc(path, ole, out)
+            else:
+                note = (_xls if sheet_ext else _doc)(path, ole, out)
         else:
             raise _OleError("unknown format")
-    except _Stop:
-        pass
+    except _Stop as stop:
+        if stop.reason != "limit":
+            # il testo si usa lo stesso, ma chi legge deve sapere che è parziale
+            note = _('{name}: documento troppo grande o lento da leggere, '
+                     'allegato solo in parte').format(name=path.name)
     except KeyError:
         return "", _('impossibile leggere {name}: parti del documento mancanti').format(name=path.name)
     except (_OleError, zipfile.BadZipFile):
@@ -805,6 +936,15 @@ def office_text(path: Path, limit: int, deadline: float | None = None) -> tuple[
         return "", _('impossibile leggere {name}: {error}').format(name=path.name, error=e)
     except OSError as e:
         return "", _('impossibile leggere {name}: {error}').format(name=path.name, error=e.strerror or e)
+    except MemoryError:
+        out = None   # libera il testo raccolto prima di proseguire
+        return "", _('impossibile leggere {name}: memoria insufficiente').format(name=path.name)
+    except Exception as e:  # noqa: BLE001 — file non attendibile: nessun errore deve arrivare al motore
+        # zip cifrati (RuntimeError), compressioni non supportate
+        # (NotImplementedError), dati deflate corrotti (zlib.error), e
+        # qualunque altro caso non previsto
+        return "", _('impossibile leggere {name}: {error}').format(
+            name=path.name, error=f"{type(e).__name__}: {e}")
     # spazi a fine cella e a fine riga: rumore per il modello
     text = re.sub(r" +\t", "\t", out.text())
     text = re.sub(r"[ \t]+\n", "\n", text)

@@ -4,6 +4,7 @@ I file vivono in ``$XDG_CONFIG_HOME/olladesk`` (di default ``~/.config/olladesk`
 """
 from __future__ import annotations
 
+import ipaddress
 import json
 import os
 import re
@@ -134,6 +135,19 @@ def save_settings(settings: dict) -> bool:
     return _write_json(config_dir() / "settings.json", merged)
 
 
+def _is_local_host(name: str) -> bool:
+    """Indirizzo di questo computer: localhost (anche .localdomain e
+    *.localhost), tutto 127.0.0.0/8, ::1 e 0.0.0.0."""
+    name = name.lower().rstrip(".")
+    if name in ("localhost", "localhost.localdomain") or name.endswith(".localhost"):
+        return True
+    try:
+        ip = ipaddress.ip_address(name)
+    except ValueError:
+        return False
+    return ip.is_loopback or ip.is_unspecified
+
+
 def reset_share_host(settings: dict, share_port: int) -> bool:
     """Riporta «Server Ollama» al predefinito se puntava alla condivisione.
 
@@ -144,13 +158,15 @@ def reset_share_host(settings: dict, share_port: int) -> bool:
     un indirizzo locale su quella porta; restituisce True se l'ha cambiato.
     """
     default = DEFAULT_SETTINGS["host"]
+    host = str(settings.get("host", "")).strip()
+    if host and "://" not in host:
+        host = "http://" + host   # «localhost:11435» salvato senza schema
     try:
-        parts = urllib.parse.urlsplit(str(settings.get("host", "")))
+        parts = urllib.parse.urlsplit(host)
         port = parts.port
     except ValueError:
         return False
-    local = (parts.hostname or "") in ("localhost", "127.0.0.1", "::1", "0.0.0.0")
-    if share_port == 11434 or port != share_port or not local:
+    if share_port == 11434 or port != share_port or not _is_local_host(parts.hostname or ""):
         return False
     settings["host"] = default
     return True

@@ -75,7 +75,7 @@ License: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   (pipes, sockets) and symlinks leaving the folder are kept out. Limits: 200
   files, 10 PDFs, 30,000 characters per file and 200,000 in total, 5,000
   entries examined (files and folders), 2 seconds between visiting and reading
-  (text files first, then PDFs). A warning summarizes what was left out, and
+  (text files first, then documents, then PDFs). A warning summarizes what was left out, and
   the model receives the same list. The folder is read at send time: only the
   path remains in the conversation.
 - **Reasoning (thinking)**: with models that support it (qwen3, deepseek-r1…)

@@ -514,11 +514,10 @@ class ChatEngine(QObject):
             self._start_generation(chat, p["think"])
         return chat, msg, p["think"]
 
-    def _start_generation(self, chat: dict, think: bool) -> None:
-        chat_id = chat["id"]
-        model = chat["model"]
+    def _build_messages(self, chat: dict) -> tuple[list[dict], list[str]]:
+        """Messaggi per Ollama: prompt di sistema, cronologia e allegati
+        dell'ultimo turno, letti ora dal disco. Restituisce anche gli avvisi."""
         s = self.settings
-
         messages: list[dict] = []
         warnings: list[str] = []
         if s["system_prompt"]:
@@ -546,6 +545,22 @@ class ChatEngine(QObject):
                 if imgs:
                     entry["images"] = imgs
             messages.append(entry)
+        return messages, warnings
+
+    def _start_generation(self, chat: dict, think: bool) -> None:
+        chat_id = chat["id"]
+        model = chat["model"]
+        s = self.settings
+
+        try:
+            messages, warnings = self._build_messages(chat)
+        except Exception as e:  # noqa: BLE001 — il motore non deve restare «occupato»
+            # gli allegati si leggono qui, dal disco: un errore imprevisto
+            # lasciava la fase a «chat» e rifiutava ogni invio successivo
+            self.notice.emit(chat_id, "⚠ " + _('impossibile preparare la richiesta: {error}').format(
+                error=f"{type(e).__name__}: {e}"))
+            self._set_idle()
+            return
 
         from .widgets.model_params import options_for_model
 

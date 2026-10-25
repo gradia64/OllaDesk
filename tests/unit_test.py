@@ -176,8 +176,9 @@ def test_drop_paths_through_flatpak_portal():
         return m
 
     calls = []
-    original = portal.retrieve_files
+    original, original_flatpak = portal.retrieve_files, portal.in_flatpak
     try:
+        portal.in_flatpak = lambda: True
         portal.retrieve_files = lambda key: calls.append(key) or ([str(d / "vero.txt")] if key.startswith("buona") else None)
         # percorsi leggibili: il portale non serve
         assert chat_area.paths_from_mime(mime([str(d / "vero.txt")], b"buona")) == ([str(d / "vero.txt")], [])
@@ -185,9 +186,228 @@ def test_drop_paths_through_flatpak_portal():
         assert chat_area.paths_from_mime(mime([host], b"buona\x00")) == ([str(d / "vero.txt")], [])
         assert chat_area.paths_from_mime(mime([host], b"scaduta")) == ([], ["relazione.docx"])
         assert chat_area.paths_from_mime(mime([host, str(d / "vero.txt")])) == ([str(d / "vero.txt")], ["relazione.docx"])
+        # fuori da Flatpak un percorso mancante è solo un file sparito: niente portale
+        portal.in_flatpak = lambda: False
+        calls.clear()
+        assert chat_area.paths_from_mime(mime([host], b"buona")) == ([], ["relazione.docx"])
+        assert calls == []
     finally:
-        portal.retrieve_files = original
+        portal.retrieve_files, portal.in_flatpak = original, original_flatpak
     assert "relazione.docx" in chat_area.unreadable_note(["relazione.docx"])
+
+
+# --- revisione 0.3.6: file Office costruiti apposta (dal disco, dalle
+# cartelle e dal telefono, letti nel thread dell'interfaccia)
+
+def _xlsx_bytes(sheet: str, shared: str | None = None, styles: str | None = None) -> bytes:
+    import io
+    import zipfile
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("xl/workbook.xml", '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
+                   'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+                   '<sheets><sheet name="s" r:id="rId1"/></sheets></workbook>')
+        z.writestr("xl/_rels/workbook.xml.rels", '<Relationships xmlns="http://schemas.openxmlformats.org/'
+                   'package/2006/relationships"><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>')
+        z.writestr("xl/worksheets/sheet1.xml", f"<worksheet><sheetData>{sheet}</sheetData></worksheet>")
+        if shared is not None:
+            z.writestr("xl/sharedStrings.xml", f"<sst>{shared}</sst>")
+        if styles is not None:
+            z.writestr("xl/styles.xml", f"<styleSheet>{styles}</styleSheet>")
+    return buf.getvalue()
+
+
+_ODF_NS = ('xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" '
+           'xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" '
+           'xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"')
+
+
+def _odf_bytes(body: str, mime: str = "application/vnd.oasis.opendocument.text") -> bytes:
+    import io
+    import zipfile
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("mimetype", mime)
+        z.writestr("content.xml", f"<office:document-content {_ODF_NS}><office:body>{body}"
+                   "</office:body></office:document-content>")
+    return buf.getvalue()
+
+
+def _ole_bytes(streams: dict, n_fat=None, difat_loop=False, pad_sectors=0) -> bytes:
+    """File OLE2 minimo: settori della FAT, directory, poi i flussi (≥ 4096
+    byte, fuori dal ministream). Con difat_loop, un settore DIFAT che punta a
+    sé stesso e contatori falsi."""
+    import struct
+    ss, per = 512, 128
+    names = list(streams)
+    datas = [streams[n] + b"\0" * (-len(streams[n]) % ss) for n in names]
+    body_sectors = 1 + sum(len(x) // ss for x in datas) + (1 if difat_loop else 0)
+    nf = 1
+    while nf * per < nf + body_sectors:
+        nf += 1
+    first_dir = nf
+    fat = [0xFFFFFFFD] * nf + [0xFFFFFFFE]   # settori FAT, directory
+    chains, nxt = [], nf + 1
+    for x in datas:
+        k = len(x) // ss
+        chains.append(nxt)
+        fat += [nxt + i + 1 for i in range(k - 1)] + [0xFFFFFFFE]
+        nxt += k
+    difat_sid = nxt
+    if difat_loop:
+        fat.append(0xFFFFFFFC)
+    fat += [0xFFFFFFFF] * (nf * per - len(fat))
+    fat_secs = b"".join(struct.pack(f"<{per}I", *fat[i * per:(i + 1) * per]) for i in range(nf))
+    dirs = bytearray()
+    for name, typ, st, size in [("Root Entry", 5, 0xFFFFFFFE, 0)] + [
+            (n, 2, c, len(streams[n])) for n, c in zip(names, chains)]:
+        e = bytearray(128)
+        enc = (name + "\0").encode("utf-16-le")
+        e[:len(enc)] = enc
+        struct.pack_into("<H", e, 64, len(enc))
+        e[66] = typ
+        struct.pack_into("<II", e, 116, st, size)
+        dirs += e
+    dirs = bytes(dirs) + b"\0" * (ss - len(dirs))
+    h = bytearray(512)
+    h[:8] = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
+    struct.pack_into("<HH", h, 0x1E, 9, 6)
+    struct.pack_into("<IIIIIIII", h, 0x2C, n_fat or nf, first_dir, 0, 4096, 0xFFFFFFFE, 0,
+                     difat_sid if difat_loop else 0xFFFFFFFE, 0xFFFFFFFF if difat_loop else 0)
+    struct.pack_into("<109I", h, 0x4C, *range(nf), *([0xFFFFFFFF] * (109 - nf)))
+    extra = struct.pack("<127I", *([0] * 127)) + struct.pack("<I", difat_sid) if difat_loop else b""
+    return bytes(h) + fat_secs + dirs + b"".join(datas) + extra + b"\0" * (ss * pad_sectors)
+
+
+def test_office_hostile_files_never_raise_or_hang():
+    import struct
+    import time
+    import zipfile
+    from olladesk import office
+    d = Path(tempfile.mkdtemp())
+    files = {}
+    # .doc con un Prc di lunghezza -3 nel CLX: ciclo infinito
+    raw = bytearray((OFFICE_DIR / "relazione.doc").read_bytes())
+    ole = office._Ole(bytes(raw))
+    wd = ole.stream("WordDocument")
+    table = ole.stream("1Table" if struct.unpack_from("<H", wd, 0x0A)[0] & 0x200 else "0Table")
+    pos = 32 + 2 + struct.unpack_from("<H", wd, 32)[0] * 2
+    pos += 2 + struct.unpack_from("<H", wd, pos)[0] * 4 + 2
+    fc_clx = struct.unpack_from("<I", wd, pos + 33 * 8)[0]
+    off = bytes(raw).find(table[fc_clx:fc_clx + 16])
+    raw[off:off + 3] = b"\x01\xfd\xff"
+    files["clx.doc"] = bytes(raw)
+    # zip cifrato, compressione non supportata, deflate corrotto
+    src = (OFFICE_DIR / "relazione.docx").read_bytes()
+    enc = bytearray(src)
+    for sig, flag in ((b"PK\x03\x04", 6), (b"PK\x01\x02", 8)):
+        i = enc.find(sig)
+        while i >= 0:
+            enc[i + flag] |= 1
+            i = enc.find(sig, i + 4)
+    files["cifrato.docx"] = bytes(enc)
+    meth = bytearray(src)
+    for sig, at in ((b"PK\x03\x04", 8), (b"PK\x01\x02", 10)):
+        i = meth.find(sig)
+        while i >= 0:
+            struct.pack_into("<H", meth, i + at, 99)
+            i = meth.find(sig, i + 4)
+    files["metodo99.docx"] = bytes(meth)
+    z = d / "zlib.docx"
+    with zipfile.ZipFile(z, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("word/document.xml", "<w:document xmlns:w='x'>" + "<w:p/>" * 500 + "</w:document>")
+    zb = bytearray(z.read_bytes())
+    nl, el = struct.unpack_from("<HH", zb, 26)
+    zb[30 + nl + el:38 + nl + el] = b"\xff" * 8
+    files["zlib.docx"] = bytes(zb)
+    # ODT con 5000 span annidati: ricorsione
+    files["profondo.odt"] = _odf_bytes("<office:text><text:p>" + "<text:span>" * 5000 + "fondo"
+                                       + "</text:span>" * 5000 + "</text:p></office:text>")
+    # riferimento di colonna da 200 000 lettere: intero enorme, tempo quadratico
+    files["colonna.xlsx"] = _xlsx_bytes('<row><c r="' + "A" * 200_000 + '1"><v>1</v></c>'
+                                        '<c r="B1"><v>7</v></c></row>')
+    # OLE con n_fat falso e DIFAT circolare: memoria centinaia di volte il file
+    files["difat.doc"] = _ole_bytes({"WordDocument": b"\0" * 4096}, n_fat=0xFFFFFFFF,
+                                    difat_loop=True, pad_sectors=2000)
+    # .xls con 300 000 CONTINUE da un byte: unione quadratica
+    files["continue.xls"] = _ole_bytes({"Workbook": struct.pack("<HH", 0x1234, 0)
+                                        + (struct.pack("<HH", 0x3C, 1) + b"\xaa") * 200_000})
+    for name, data in files.items():
+        p = d / name
+        p.write_bytes(data)
+        t = time.monotonic()
+        text, note = extract_text(p)
+        assert time.monotonic() - t < 2, (name, time.monotonic() - t)
+        assert isinstance(text, str), name
+        if name in ("cifrato.docx", "metodo99.docx", "zlib.docx", "clx.doc"):
+            assert note and "impossibile leggere" in note or "non sembra" in note, (name, note)
+    assert extract_text(d / "profondo.odt")[0] == "fondo"
+    assert extract_text(d / "colonna.xlsx")[0] == "## Foglio: s\n\t7"
+    # la FAT del file con DIFAT circolare resta grande quanto il file
+    big = office._Ole(files["difat.doc"])
+    assert len(big.fat) <= big.nsect
+
+
+def test_office_shared_strings_respect_deadline():
+    import time
+    d = Path(tempfile.mkdtemp())
+    p = d / "condivise.xlsx"
+    p.write_bytes(_xlsx_bytes('<row><c r="A1" t="s"><v>0</v></c></row>', "<si><t>x</t></si>" * 400_000))
+    t = time.monotonic()
+    text, note = extract_text(p, deadline=time.monotonic() + 0.05)
+    assert time.monotonic() - t < 1.5
+    assert note and "allegato solo in parte" in note, note
+
+
+def test_office_correctness_fixes():
+    d = Path(tempfile.mkdtemp())
+    # formati data 27–36/50–58 e pronuncia fonetica (rPh) fuori dal testo
+    (d / "date.xlsx").write_bytes(_xlsx_bytes(
+        '<row><c r="A1" s="0"><v>45000</v></c><c r="B1" t="s"><v>0</v></c></row>',
+        "<si><t>giapponese</t><rPh><t>NIHONGO</t></rPh></si>",
+        '<cellXfs><xf numFmtId="27"/></cellXfs>'))
+    assert extract_text(d / "date.xlsx") == ("## Foglio: s\n2023-03-15\tgiapponese", None)
+    # righe ODS ripetute con contenuto: si ripetono (fino a un limite)
+    ods = ('<office:spreadsheet><table:table table:name="S"><table:table-row table:number-rows-repeated="3">'
+           '<table:table-cell><text:p>ripetuta</text:p></table:table-cell></table:table-row>'
+           '<table:table-row table:number-rows-repeated="1000000"><table:table-cell/></table:table-row>'
+           '</table:table></office:spreadsheet>')
+    (d / "righe.ods").write_bytes(_odf_bytes(ods, "application/vnd.oasis.opendocument.spreadsheet"))
+    assert extract_text(d / "righe.ods")[0] == "## Foglio: S\nripetuta\nripetuta\nripetuta"
+    # foglio con l'estensione di un documento (e viceversa): conta il contenuto
+    (d / "foglio.docx").write_bytes((OFFICE_DIR / "foglio.xlsx").read_bytes())
+    (d / "relazione.xls").write_bytes((OFFICE_DIR / "relazione.doc").read_bytes())
+    (d / "relazione.ods").write_bytes((OFFICE_DIR / "relazione.odt").read_bytes())
+    assert "Pera è\t2\t2026-04-01\t4" in extract_text(d / "foglio.docx")[0]
+    assert "Ultimo paragrafo" in extract_text(d / "relazione.xls")[0]
+    assert "Ultimo paragrafo" in extract_text(d / "relazione.ods")[0]
+
+
+def test_engine_idle_after_unreadable_attachment():
+    # revisione 0.3.6: un'eccezione nella lettura degli allegati lasciava il
+    # motore «occupato» e senza avviso
+    from PySide6.QtWidgets import QApplication
+
+    from olladesk import config, context
+    from olladesk.engine import ChatEngine
+    with _isolated_config():
+        QApplication.instance() or QApplication([])
+        engine = ChatEngine(config.load_settings())
+        notices = []
+        engine.notice.connect(lambda cid, text: notices.append(text))
+        f = Path(tempfile.mkdtemp()) / "a.txt"
+        f.write_text("x", encoding="utf-8")
+        original = context.build_api_content
+
+        def boom(*_a, **_kw):
+            raise RuntimeError("guasto")
+        try:
+            context.build_api_content = boom
+            cid = engine.send(None, "ciao", "m", attachments=[{"path": str(f), "name": "a.txt", "kind": "text"}])
+        finally:
+            context.build_api_content = original
+        assert cid and not engine.busy()
+        assert any("impossibile preparare la richiesta" in n and "guasto" in n for n in notices), notices
 
 
 def test_context_build_api_content():
@@ -620,9 +840,10 @@ def test_app_update_install_method_and_hint():
     assert app_update.install_method(pkg) == "pip"
     (d / ".git").mkdir()
     assert app_update.install_method(pkg) == "source"
-    for m in ("deb", "arch"):
+    for m in ("deb", "arch", "flatpak"):
         (pkg / app_update.MARKER_NAME).write_text(m + "\n", encoding="utf-8")
         assert app_update.install_method(pkg) == m
+    assert "flatpak install --user OllaDesk-0.3.6.flatpak" in app_update.update_hint("flatpak", "0.3.6")
     (pkg / app_update.MARKER_NAME).write_text("sconosciuto", encoding="utf-8")
     assert app_update.install_method(pkg) == "source"
     assert "olladesk_0.2.3_all.deb" in app_update.update_hint("deb", "0.2.3")
@@ -706,6 +927,11 @@ def test_reset_share_host():
     assert reset_share_host(s, 11435) and s["host"] == "http://localhost:11434"
     s = {"host": "http://127.0.0.1:11435/"}
     assert reset_share_host(s, 11435) and s["host"] == "http://localhost:11434"
+    # revisione 0.3.6: altre forme dello stesso computer, e senza schema
+    for host in ("localhost:11435", "http://localhost.localdomain:11435", "http://127.0.0.2:11435",
+                 "http://[::1]:11435", "http://LOCALHOST:11435", "http://0.0.0.0:11435"):
+        s = {"host": host}
+        assert reset_share_host(s, 11435) and s["host"] == "http://localhost:11434", host
     # un altro server, un'altra porta o la porta standard: non si tocca
     for host, port in (("http://192.168.1.20:11435", 11435), ("http://localhost:11434", 11435),
                        ("http://localhost:11434", 11434), ("http://localhost:9999", 11435),

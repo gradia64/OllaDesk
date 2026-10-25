@@ -77,7 +77,7 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   socket) e i collegamenti simbolici che escono dalla cartella. Limiti: 200 file, 10 PDF,
   30.000 caratteri per file e 200.000 in tutto, 5000 voci esaminate (file e
   cartelle), 2 secondi tra visita e lettura (prima i file di testo, poi i
-  PDF). Un avviso riassume cosa è rimasto fuori, e il
+  documenti, infine i PDF). Un avviso riassume cosa è rimasto fuori, e il
   modello riceve lo stesso elenco. La cartella si legge al momento
   dell'invio: nella conversazione resta solo il percorso.
 - **Ragionamento (thinking)**: con i modelli che lo supportano (qwen3,

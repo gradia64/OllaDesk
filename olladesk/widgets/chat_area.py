@@ -41,7 +41,9 @@ def paths_from_mime(mime) -> tuple[list[str], list[str]]:
     local = [u.toLocalFile() for u in mime.urls() if u.isLocalFile()]
     if not local or all(Path(p).exists() for p in local):
         return local, []
-    if mime.hasFormat(portal.FILETRANSFER_MIME):
+    # fuori dalla sandbox un percorso mancante è solo un file sparito: niente
+    # chiamata al portale (bloccherebbe il drop fino al suo timeout)
+    if portal.in_flatpak() and mime.hasFormat(portal.FILETRANSFER_MIME):
         key = bytes(mime.data(portal.FILETRANSFER_MIME).data()).decode("utf-8", "replace")
         got = portal.retrieve_files(key)
         if got:
@@ -68,7 +70,7 @@ COLUMN_MAX_W = 900
 
 FILE_FILTER = N_(
     "Documenti e immagini (*.txt *.md *.py *.json *.csv *.log *.yaml *.yml "
-    "*.pdf *.doc *.docx *.xls *.xlsx *.odt *.ods *.png *.jpg *.jpeg *.webp *.gif);;"
+    "*.pdf *.doc *.docx *.docm *.xls *.xlsx *.xlsm *.odt *.ods *.png *.jpg *.jpeg *.webp *.gif);;"
     "Tutti i file (*)"
 )
 
@@ -122,7 +124,7 @@ class ChatInput(QPlainTextEdit):
             super().dragMoveEvent(ev)
 
     def dropEvent(self, ev) -> None:  # noqa: N802 (API Qt)
-        if ev.mimeData().hasUrls():
+        if ev.mimeData().hasUrls() and any(u.isLocalFile() for u in ev.mimeData().urls()):
             self._emit_paths(ev.mimeData())
             ev.acceptProposedAction()
         elif ev.mimeData().hasImage():
