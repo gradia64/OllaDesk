@@ -56,11 +56,13 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   l'archiviazione automatica all'avvio delle chat senza messaggi da un certo
   numero di giorni (Impostazioni → Interfaccia, spenta di default).
 - **Allegati come contesto** (📎 nell'input): file di testo e codice (inlinati
-  nel messaggio), PDF (richiede il pacchetto opzionale `pypdf`) e immagini
-  (inviate in base64 ai modelli visione: llava, llama3.2-vision, gemma3…).
+  nel messaggio), PDF (richiede il pacchetto opzionale `pypdf`), documenti
+  Word, Excel e OpenDocument (`.docx`, `.doc`, `.xlsx`, `.xls`, `.odt`, `.ods`:
+  il testo, e i fogli di calcolo riga per riga, senza dipendenze aggiuntive) e
+  immagini (inviate in base64 ai modelli visione: llava, llama3.2-vision, gemma3…).
   Gli allegati compaiono come chip sopra l'input e nella bolla del messaggio.
 - **Cartella come contesto** (📎 → «Cartella…», oppure trascinandola
-  nell'input): un solo allegato «📁 nome/» con i file di testo, codice e PDF
+  nell'input): un solo allegato «📁 nome/» con i file di testo, codice, PDF e documenti
   che contiene, ciascuno con il percorso relativo. Sono ora inclusi anche i
   moduli JavaScript (`.mjs`, `.cjs`) e altri tipi comuni (`.vue`, `.svelte`,
   `.swift`, `.dart`, `.cs`, `.proto`, `.tf`, `.nix`, `.lock`…) e file come
@@ -100,7 +102,7 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   il PC resta libero di aprire altre conversazioni: la risposta continua in
   background e si ritrova riaprendo la sua chat.
   - **Dal telefono:** allegati con 📎 (foto dalla fotocamera o dalla
-    galleria, file di testo e PDF, fino a 20 MB ciascuno): le foto vengono
+    galleria, file di testo, PDF e documenti Office, fino a 20 MB ciascuno): le foto vengono
     ridotte sul telefono prima del caricamento e il PC le passa ai modelli
     che leggono le immagini. Dal menu «⋯» di una chat si rinomina, si
     archivia (o ripristina) o si elimina la conversazione, anche dal PC; le
@@ -521,6 +523,7 @@ olladesk/
   md.py                     Markdown → HTML (subset Qt rich text)
   i18n.py                   traduzioni dell'interfaccia (cataloghi in locale/*.po)
   context.py                allegati: testo/PDF/immagini come contesto
+  office.py                 testo di .docx/.doc/.xlsx/.xls/.odt/.ods
   web_search.py             ricerca web (DuckDuckGo/Ollama Cloud/SearXNG) + worker
   updater.py                aggiornamenti di Ollama (release GitHub + pkexec)
   app_update.py             aggiornamenti di OllaDesk (solo controllo e avviso)

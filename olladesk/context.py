@@ -4,7 +4,9 @@
   (funziona con i modelli visione di Ollama: llava, llama3.2-vision, gemma3…).
 - Testo/codice → il contenuto viene inlined nel messaggio come blocco allegato.
 - PDF → estrazione del testo se è installato il pacchetto opzionale `pypdf`.
-- Cartelle → i file di testo e PDF che contengono, con i percorsi relativi,
+- Documenti Office/OpenDocument (.docx, .doc, .xlsx, .xls, .odt, .ods) →
+  estrazione del testo con la sola libreria standard (`office.py`).
+- Cartelle → i file di testo, PDF e documenti che contengono, con i percorsi relativi,
   entro limiti di numero e dimensione (`folder_block`).
 """
 from __future__ import annotations
@@ -17,6 +19,7 @@ import time
 from pathlib import Path
 
 from .i18n import _
+from .office import OFFICE_EXTS, office_text
 
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
 PDF_EXTS = {".pdf"}
@@ -58,6 +61,8 @@ def classify(path: Path) -> str:
         return "image"
     if ext in PDF_EXTS:
         return "pdf"
+    if ext in OFFICE_EXTS:
+        return "document"
     if ext in TEXT_EXTS:
         return "text"
     return "unknown"
@@ -156,14 +161,17 @@ def extract_text(path: Path, limit: int = MAX_TEXT_CHARS,
     """Restituisce (contenuto, nota di errore o None), al massimo `limit` caratteri.
 
     `deadline` (time.monotonic) ferma la lettura di un PDF tra una pagina e
-    l'altra.
+    l'altra, e quella di un documento Office tra una riga e l'altra.
     """
     # pipe, socket, dispositivi: open() su una FIFO chiamata «x.txt» blocca
     # per sempre il thread dell'interfaccia
     if not path.is_file():
         return "", _('{name} non è un file normale: ignorato').format(name=path.name)
-    if classify(path) == "pdf":
+    kind = classify(path)
+    if kind == "pdf":
         text, note = _pdf_text(path, limit, deadline)
+    elif kind == "document":
+        text, note = office_text(path, limit, deadline)
     else:
         try:
             with open(path, "r", encoding="utf-8", errors="replace") as fh:
@@ -287,7 +295,7 @@ def folder_files(root: Path, deadline: float | None = None,
     """File della cartella da allegare, e quante voci sono state escluse e perché.
 
     Restituisce ([(percorso relativo, percorso)], {motivo: quante}). Si
-    tengono i file che `classify` riconosce come testo o PDF; si saltano i
+    tengono i file che `classify` riconosce come testo, PDF o documento; si saltano i
     nascosti, le cartelle di FOLDER_SKIP_DIRS, ciò che il .gitignore esclude,
     i probabili file di credenziali, le immagini e i collegamenti simbolici
     che escono dalla cartella. La visita si ferma dopo MAX_FOLDER_SCAN voci
@@ -364,7 +372,7 @@ def folder_files(root: Path, deadline: float | None = None,
             if kind == "image":
                 skip(_("immagini (allegale una per una)"))
                 continue
-            if kind not in ("text", "pdf"):
+            if kind not in ("text", "pdf", "document"):
                 skip(_("tipo non supportato"))
                 unsupported.append(rel)
                 continue
@@ -405,9 +413,10 @@ def folder_block(root: Path) -> tuple[str, list[str]]:
     def skip(reason: str) -> None:
         skipped[reason] = skipped.get(reason, 0) + 1
 
-    # prima i file di testo, che si leggono subito, poi i PDF: un PDF lento
-    # non deve lasciare fuori tutto il resto
-    files.sort(key=lambda f: classify(f[1]) == "pdf")
+    # prima i file di testo, che si leggono subito, poi i documenti Office e
+    # infine i PDF: un PDF lento non deve lasciare fuori tutto il resto
+    order = {"text": 0, "document": 1, "pdf": 2}
+    files.sort(key=lambda f: order.get(classify(f[1]), 0))
     for rel, p in files:
         if budget <= 0:
             skip(_('oltre {max} caratteri').format(max=MAX_FOLDER_CHARS))
@@ -439,7 +448,7 @@ def folder_block(root: Path) -> tuple[str, list[str]]:
             note += _(" — non supportati: ") + ", ".join(shown) + (_(' e altri {more}').format(more=more) if more else "")
         warnings.append(note)
     if not included:
-        warnings.append(_('cartella {name}: nessun file di testo o PDF da allegare').format(name=name))
+        warnings.append(_('cartella {name}: nessun file di testo, PDF o documento da allegare').format(name=name))
     return "\n".join(lines) + ("\n\n" + "\n\n".join(parts) if parts else ""), warnings
 
 

@@ -39,7 +39,8 @@ COLUMN_MAX_W = 900
 
 FILE_FILTER = N_(
     "Documenti e immagini (*.txt *.md *.py *.json *.csv *.log *.yaml *.yml "
-    "*.pdf *.png *.jpg *.jpeg *.webp *.gif);;Tutti i file (*)"
+    "*.pdf *.doc *.docx *.xls *.xlsx *.odt *.ods *.png *.jpg *.jpeg *.webp *.gif);;"
+    "Tutti i file (*)"
 )
 
 

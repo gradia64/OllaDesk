@@ -6,6 +6,7 @@ Prepara gli allegati (file di testo/codice, PDF e immagini) e la cronologia da i
 - **Immagini:** vengono codificate in base64 e inviate nel campo `"images"` del messaggio. Servono i modelli visione di Ollama (llava, llama3.2-vision, gemma3…).
 - **Testo/codice:** il contenuto viene inserito nel testo del messaggio come blocco allegato.
 - **PDF:** il testo viene estratto solo se è installato il pacchetto opzionale `pypdf`.
+- **Documenti Office e OpenDocument** (`.docx`, `.doc`, `.xlsx`, `.xls`, `.odt`, `.ods`): il testo viene estratto da `olladesk/office.py`, con la sola libreria standard. I fogli di calcolo diventano righe con le celle separate da tabulazioni, sotto un'intestazione `## Foglio: <nome>`; le date vengono scritte in formato ISO e delle formule si usa il risultato salvato. Il formato si riconosce dal contenuto, non dall'estensione.
 
 Il modulo stima anche l'occupazione della finestra di contesto e sceglie quali messaggi della cronologia inviare.
 
@@ -15,6 +16,7 @@ Il modulo stima anche l'occupazione della finestra di contesto e sceglie quali m
 |---|---|---|
 | `IMAGE_EXTS` | `.png .jpg .jpeg .webp .gif .bmp` | estensioni classificate come immagine |
 | `PDF_EXTS` | `.pdf` | estensioni classificate come PDF |
+| `OFFICE_EXTS` (da `office.py`) | `.docx .docm .doc .xlsx .xlsm .xls .odt .ods` | estensioni classificate come documento |
 | `TEXT_EXTS` | ~60 estensioni di testo e codice (`.txt`, `.md`, `.py`, `.json`, `.yaml`, `.sh`, `.c`, `.rs`, `.go`, `.sql`, `.diff`, `.desktop`, `.cmake`…) | estensioni classificate come testo |
 | `_NO_SUFFIX_FILES` | `.gitignore`, `.env`, `.bashrc`, `.vimrc`, `.tmux.conf`, `dockerfile`, `makefile`, `license`, `readme`… | file riconosciuti come testo dal nome completo (senza distinguere maiuscole e minuscole) |
 | `MAX_TEXT_CHARS` | `120_000` | caratteri massimi letti da un file di testo |
@@ -24,9 +26,9 @@ Il modulo stima anche l'occupazione della finestra di contesto e sceglie quali m
 ## Funzioni
 
 ### `classify(path: Path) -> str`
-Restituisce `"text"`, `"image"`, `"pdf"` oppure `"unknown"`.
+Restituisce `"text"`, `"image"`, `"pdf"`, `"document"` oppure `"unknown"`.
 1. Controlla prima il nome completo del file, in minuscolo, contro `_NO_SUFFIX_FILES`. Così `Makefile` e `LICENSE` risultano `"text"`.
-2. Poi controlla l'estensione, in minuscolo, contro `IMAGE_EXTS`, `PDF_EXTS` e `TEXT_EXTS`, in quest'ordine.
+2. Poi controlla l'estensione, in minuscolo, contro `IMAGE_EXTS`, `PDF_EXTS`, `OFFICE_EXTS` e `TEXT_EXTS`, in quest'ordine.
 
 ### `_to_png(path: Path) -> bytes | None`
 Converte un'immagine in PNG con `QImage` di PySide6 e restituisce i byte del PNG. Restituisce `None` in tre casi:
@@ -62,6 +64,7 @@ Estrae il testo delle prime **50 pagine** con `pypdf.PdfReader`. Le pagine senza
 
 ### `extract_text(path: Path) -> tuple[str, str | None]`
 - I PDF, riconosciuti con `classify`, passano a `_pdf_text`.
+- I documenti (`"document"`) passano a `office.office_text`, che restituisce anche lui `(testo, nota)`.
 - Tutti gli altri file vengono letti come testo UTF-8 con `errors="replace"`, compresi quelli `"unknown"`.
 - Vengono letti al massimo `MAX_TEXT_CHARS + 1` caratteri, così un file enorme non finisce in memoria.
 - Oltre `MAX_TEXT_CHARS` il testo viene tagliato e chiuso dal marcatore `…[troncato a 120000 caratteri]`. Il troncamento non produce una nota.

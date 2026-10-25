@@ -118,6 +118,46 @@ def test_context_bounded_read():
     assert len(text) <= 120_000 + 60                  # troncato, senza leggere tutto
 
 
+OFFICE_DIR = Path(__file__).parent / "fixtures" / "office"
+
+
+def test_context_office_documents():
+    # file salvati da LibreOffice: una relazione con una tabella, un foglio
+    # con una data e una formula
+    for ext in ("docx", "doc", "odt"):
+        p = OFFICE_DIR / f"relazione.{ext}"
+        assert classify(p) == "document"
+        text, note = extract_text(p)
+        assert note is None, (ext, note)
+        assert "Il fatturato è cresciuto del 12% — città" in text, (ext, text)
+        assert "Regione\tVendite" in text and "Ultimo paragrafo" in text, (ext, text)
+    for ext in ("xlsx", "xls", "ods"):
+        p = OFFICE_DIR / f"foglio.{ext}"
+        assert classify(p) == "document"
+        text, note = extract_text(p)
+        assert note is None, (ext, note)
+        assert "## Foglio: sheet" in text, (ext, text)
+        assert "Prodotto\tPrezzo\tData\tTotale" in text, (ext, text)
+        assert "Pera è\t2\t2026-04-01\t4" in text, (ext, text)   # data e formula
+
+
+def test_context_office_wrong_extension_and_garbage():
+    d = Path(tempfile.mkdtemp())
+    # un .docx salvato con il nome .doc: conta il contenuto
+    (d / "rinominato.doc").write_bytes((OFFICE_DIR / "relazione.docx").read_bytes())
+    text, note = extract_text(d / "rinominato.doc")
+    assert note is None and "Ultimo paragrafo" in text
+    for name in ("finto.docx", "finto.xls"):
+        (d / name).write_bytes(b"non sono un documento" * 40)
+        text, note = extract_text(d / name)
+        assert text == "" and "non è un file Office valido" in note, note
+
+
+def test_context_office_bounded():
+    text, note = extract_text(OFFICE_DIR / "foglio.xlsx", limit=20)
+    assert note is None and len(text) <= 20 + 60
+
+
 def test_context_build_api_content():
     d = Path(tempfile.mkdtemp())
     (d / "note.txt").write_text("CIAO", encoding="utf-8")
@@ -1148,7 +1188,7 @@ def test_folder_block_content_and_limits():
         context.MAX_FOLDER_SECONDS = old_s
     empty = Path(tempfile.mkdtemp()) / "vuota"
     empty.mkdir()
-    assert context.folder_block(empty)[1] == ["cartella vuota/: nessun file di testo o PDF da allegare"]
+    assert context.folder_block(empty)[1] == ["cartella vuota/: nessun file di testo, PDF o documento da allegare"]
     assert context.folder_block(empty / "manca")[1] == ["cartella non trovata: manca/"]
 
 
@@ -1773,9 +1813,9 @@ def test_i18n_catalogs_complete_and_formattable():
             names = set(placeholder.findall(msg))
             if names:   # il testo tradotto deve accettare gli stessi argomenti di .format
                 cat[msg].format(**{n: 1 for n in names})
-        filt = "Documenti e immagini (*.txt *.md *.py *.json *.csv *.log *.yaml *.yml " \
-               "*.pdf *.png *.jpg *.jpeg *.webp *.gif);;Tutti i file (*)"
-        assert cat[filt].count(";;") == 1 and "*.pdf" in cat[filt]
+        from olladesk.widgets.chat_area import FILE_FILTER
+        assert cat[FILE_FILTER].count(";;") == 1 and "*.pdf" in cat[FILE_FILTER]
+        assert "*.docx" in cat[FILE_FILTER] and "*.xlsx" in cat[FILE_FILTER]
 
 
 def test_i18n_translates_after_setup():

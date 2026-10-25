@@ -940,7 +940,7 @@ class _Handler(BaseHTTPRequestHandler):
         name = safe_filename(query.get("name", ["file"])[0])
         kind = context.classify(Path(name))
         if kind == "unknown":
-            self._error(415, _('tipo di file non supportato: {name} (immagini, testo, PDF)').format(name=name))
+            self._error(415, _('tipo di file non supportato: {name} (immagini, testo, PDF, documenti Office)').format(name=name))
             return
         try:
             meta = self.ctx.uploads.add(name, kind, self.rfile, length)

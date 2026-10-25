@@ -55,11 +55,13 @@ License: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   automatic archiving on startup of chats with no messages for a given number
   of days (Settings → Interface, off by default).
 - **Attachments as context** (📎 in the input): text and code files (inlined
-  in the message), PDFs (requires the optional `pypdf` package) and images
+  in the message), PDFs (requires the optional `pypdf` package), Word, Excel
+  and OpenDocument documents (`.docx`, `.doc`, `.xlsx`, `.xls`, `.odt`, `.ods`:
+  the text, and spreadsheets row by row, with no extra dependencies) and images
   (sent as base64 to vision models: llava, llama3.2-vision, gemma3…).
   Attachments appear as chips above the input and in the message bubble.
 - **Folder as context** (📎 → "Folder…", or by dragging it into the input): a
-  single "📁 name/" attachment with the text, code and PDF files it contains,
+  single "📁 name/" attachment with the text, code, PDF and document files it contains,
   each with its relative path. JavaScript modules (`.mjs`, `.cjs`) and other
   common types (`.vue`, `.svelte`, `.swift`, `.dart`, `.cs`, `.proto`, `.tf`,
   `.nix`, `.lock`…) plus files such as `COPYING`, `CHANGELOG` and `PKGBUILD`
@@ -96,7 +98,7 @@ License: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   the PC is free to open other conversations: the reply continues in the
   background and is found again by reopening its chat.
   - **From the phone:** attachments with 📎 (photos from the camera or gallery,
-    text files and PDFs, up to 20 MB each): photos are resized on the phone
+    text files, PDFs and Office documents, up to 20 MB each): photos are resized on the phone
     before upload and the PC passes them to models that read images. From a
     chat's "⋯" menu you rename, archive (or restore) or delete the
     conversation, even from the PC; archived ones sit in a closed box at the
@@ -507,6 +509,7 @@ olladesk/
   md.py                     Markdown → HTML (Qt rich text subset)
   i18n.py                   interface translations (catalogs in locale/*.po)
   context.py                attachments: text/PDF/images as context
+  office.py                 text of .docx/.doc/.xlsx/.xls/.odt/.ods
   web_search.py             web search (DuckDuckGo/Ollama Cloud/SearXNG) + worker
   updater.py                Ollama updates (GitHub release + pkexec)
   app_update.py             OllaDesk updates (check and notice only)

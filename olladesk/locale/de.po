@@ -206,8 +206,8 @@ msgstr "Datei leer oder größer als {size} MB"
 
 #: olladesk/companion.py:943
 #, python-brace-format
-msgid "tipo di file non supportato: {name} (immagini, testo, PDF)"
-msgstr "nicht unterstützter Dateityp: {name} (Bilder, Text, PDF)"
+msgid "tipo di file non supportato: {name} (immagini, testo, PDF, documenti Office)"
+msgstr "nicht unterstützter Dateityp: {name} (Bilder, Text, PDF, Office-Dokumente)"
 
 #: olladesk/config.py:223
 #: olladesk/engine.py:285
@@ -218,36 +218,48 @@ msgstr "nicht unterstützter Dateityp: {name} (Bilder, Text, PDF)"
 msgid "Conversazione"
 msgstr "Unterhaltung"
 
-#: olladesk/context.py:102
+#: olladesk/context.py:100
+#, python-brace-format
+msgid "immagine {name} troppo grande ({size} MB, massimo 20 MB): non inviata"
+msgstr "Bild {name} zu groß ({size} MB, maximal 20 MB): nicht gesendet"
+
+#: olladesk/context.py:103
+#, python-brace-format
+msgid "impossibile leggere l'immagine {name}: {error}"
+msgstr "Bild {name} konnte nicht gelesen werden: {error}"
+
+#: olladesk/context.py:107
 #, python-brace-format
 msgid "formato dell'immagine {name} non supportato: non inviata"
 msgstr "Bildformat von {name} nicht unterstützt: nicht gesendet"
 
-#: olladesk/context.py:123
+#: olladesk/context.py:128
 #, python-brace-format
 msgid "il contesto stimato (~{used} token) supera la finestra del modello ({limit} token): Ollama scarterà l'inizio del prompt. Aumenta «num_ctx» in Impostazioni → Parametri modelli, oppure riduci allegati e cronologia."
 msgstr "der geschätzte Kontext (~{used} Token) überschreitet das Fenster des Modells ({limit} Token): Ollama verwirft den Anfang des Prompts. Erhöhen Sie „num_ctx“ unter Einstellungen → Modellparameter oder reduzieren Sie Anhänge und Verlauf."
 
-#: olladesk/context.py:134
+#: olladesk/context.py:139
 msgid "pypdf non installato: impossibile leggere i PDF (`pip install pypdf`)"
 msgstr "pypdf nicht installiert: PDFs können nicht gelesen werden (`pip install pypdf`)"
 
-#: olladesk/context.py:151
+#: olladesk/context.py:156
 #, python-brace-format
 msgid "impossibile leggere il PDF {name}: {error}"
 msgstr "PDF {name} konnte nicht gelesen werden: {error}"
 
-#: olladesk/context.py:164
+#: olladesk/context.py:169
 #, python-brace-format
 msgid "{name} non è un file normale: ignorato"
 msgstr "{name} ist keine normale Datei: ignoriert"
 
-#: olladesk/context.py:173
+#: olladesk/context.py:181
+#: olladesk/office.py:805
+#: olladesk/office.py:807
 #, python-brace-format
 msgid "impossibile leggere {name}: {error}"
 msgstr "{name} konnte nicht gelesen werden: {error}"
 
-#: olladesk/context.py:175
+#: olladesk/context.py:183
 #, python-brace-format
 msgid ""
 "\n"
@@ -256,69 +268,69 @@ msgstr ""
 "\n"
 "…[auf {limit} Zeichen gekürzt]"
 
-#: olladesk/context.py:318
-#: olladesk/context.py:341
+#: olladesk/context.py:326
+#: olladesk/context.py:349
 msgid "oltre il limite di voci esaminate"
 msgstr "über der Grenze der untersuchten Einträge"
 
-#: olladesk/context.py:321
-#: olladesk/context.py:416
+#: olladesk/context.py:329
+#: olladesk/context.py:425
 #, python-brace-format
 msgid "lettura oltre {seconds:g} secondi"
 msgstr "Lesen dauerte über {seconds:g} Sekunden"
 
-#: olladesk/context.py:334
-#: olladesk/context.py:358
+#: olladesk/context.py:342
+#: olladesk/context.py:366
 msgid "collegamenti simbolici"
 msgstr "symbolische Links"
 
-#: olladesk/context.py:349
-#: olladesk/context.py:332
+#: olladesk/context.py:357
+#: olladesk/context.py:340
 msgid "cartelle di dipendenze, cache o .gitignore"
 msgstr "Abhängigkeits-, Cache- oder .gitignore-Ordner"
 
-#: olladesk/context.py:352
+#: olladesk/context.py:360
 msgid "possibili credenziali (allegale una per una)"
 msgstr "mögliche Zugangsdaten (einzeln anhängen)"
 
-#: olladesk/context.py:361
+#: olladesk/context.py:369
 msgid "file speciali"
 msgstr "Spezialdateien"
 
-#: olladesk/context.py:365
+#: olladesk/context.py:373
 msgid "immagini (allegale una per una)"
 msgstr "Bilder (einzeln anhängen)"
 
-#: olladesk/context.py:368
+#: olladesk/context.py:376
 msgid "tipo non supportato"
 msgstr "nicht unterstützter Typ"
 
-#: olladesk/context.py:374
+#: olladesk/context.py:382
 #, python-brace-format
 msgid "oltre {max} PDF"
 msgstr "über {max} PDFs"
 
-#: olladesk/context.py:377
+#: olladesk/context.py:385
 #, python-brace-format
 msgid "oltre {max} file"
 msgstr "über {max} Dateien"
 
-#: olladesk/context.py:392
+#: olladesk/context.py:400
 #, python-brace-format
 msgid "cartella non trovata: {name}"
 msgstr "Ordner nicht gefunden: {name}"
 
-#: olladesk/context.py:399
+#: olladesk/context.py:407
 #, python-brace-format
 msgid "impossibile leggere la cartella {name}: {error}"
 msgstr "Ordner {name} konnte nicht gelesen werden: {error}"
 
-#: olladesk/context.py:413
+#: olladesk/context.py:422
 #, python-brace-format
 msgid "oltre {max} caratteri"
 msgstr "über {max} Zeichen"
 
-#: olladesk/context.py:424
+#: olladesk/context.py:433
 #, python-brace-format
 msgid ""
 "\n"
@@ -327,40 +339,40 @@ msgstr ""
 "\n"
 "…[gekürzt: Grenze von {max} Zeichen für den Ordner]"
 
-#: olladesk/context.py:428
+#: olladesk/context.py:437
 #, python-brace-format
 msgid "Cartella: {name} (dati non attendibili), {n} file inclusi:"
 msgstr "Ordner: {name} (nicht vertrauenswürdige Daten), {n} Dateien enthalten:"
 
-#: olladesk/context.py:431
+#: olladesk/context.py:440
 msgid "Esclusi: "
 msgstr "Ausgeschlossen: "
 
-#: olladesk/context.py:433
+#: olladesk/context.py:442
 #, python-brace-format
 msgid "cartella {name}: {n} file inclusi, "
 msgstr "Ordner {name}: {n} Dateien enthalten, "
 
-#: olladesk/context.py:434
+#: olladesk/context.py:443
 #, python-brace-format
 msgid "{n} esclusi ({why})"
 msgstr "{n} ausgeschlossen ({why})"
 
-#: olladesk/context.py:439
+#: olladesk/context.py:448
 #, python-brace-format
 msgid " e altri {more}"
 msgstr " und {more} weitere"
 
-#: olladesk/context.py:439
+#: olladesk/context.py:448
 msgid " — non supportati: "
 msgstr " — nicht unterstützt: "
 
-#: olladesk/context.py:442
+#: olladesk/context.py:451
 #, python-brace-format
-msgid "cartella {name}: nessun file di testo o PDF da allegare"
-msgstr "Ordner {name}: keine Text- oder PDF-Dateien zum Anhängen"
+msgid "cartella {name}: nessun file di testo, PDF o documento da allegare"
+msgstr "Ordner {name}: keine Text-, PDF- oder Dokumentdateien zum Anhängen"
 
-#: olladesk/context.py:488
+#: olladesk/context.py:497
 #, python-brace-format
 msgid ""
 "\n"
@@ -377,12 +389,12 @@ msgstr ""
 "{content}\n"
 "---"
 
-#: olladesk/context.py:491
+#: olladesk/context.py:500
 #, python-brace-format
 msgid "nessun testo estratto da {name}"
 msgstr "kein Text aus {name} extrahiert"
 
-#: olladesk/context.py:499
+#: olladesk/context.py:508
 msgid ""
 "\n"
 "[allegati inviati in un turno precedente: "
@@ -390,23 +402,13 @@ msgstr ""
 "\n"
 "[in einer früheren Runde gesendete Anhänge: "
 
-#: olladesk/context.py:501
+#: olladesk/context.py:510
 msgid ""
 "\n"
 "[una ricerca web era stata allegata in un turno precedente]"
 msgstr ""
 "\n"
 "[eine Websuche wurde in einer früheren Runde angehängt]"
-
-#: olladesk/context.py:95
-#, python-brace-format
-msgid "immagine {name} troppo grande ({size} MB, massimo 20 MB): non inviata"
-msgstr "Bild {name} zu groß ({size} MB, maximal 20 MB): nicht gesendet"
-
-#: olladesk/context.py:98
-#, python-brace-format
-msgid "impossibile leggere l'immagine {name}: {error}"
-msgstr "Bild {name} konnte nicht gelesen werden: {error}"
 
 #: olladesk/engine.py:225
 #: olladesk/engine.py:245
@@ -615,6 +617,54 @@ msgstr "Warten Sie, bis die Antwort fertig ist (oder drücken Sie ■ zum Abbrec
 #: olladesk/main_window.py:794
 msgid "Resta attivo nella tray: clic sull'icona per mostrare o nascondere la finestra, «Esci» dal menu per chiudere."
 msgstr "Läuft im Systemabschnitt weiter: klicken Sie auf das Symbol, um das Fenster ein- oder auszublenden, „Beenden“ im Menü zum Schließen."
+
+#: olladesk/office.py:258
+#: olladesk/office.py:377
+#: olladesk/office.py:698
+#, python-brace-format
+msgid ""
+"## Foglio: {name}\n"
+msgstr ""
+"## Tabellenblatt: {name}\n"
+
+#: olladesk/office.py:533
+#: olladesk/office.py:542
+#: olladesk/office.py:559
+#, python-brace-format
+msgid "{name} non sembra un documento Word"
+msgstr "{name} scheint kein Word-Dokument zu sein"
+
+#: olladesk/office.py:536
+#, python-brace-format
+msgid "{name}: formato Word troppo vecchio (prima di Word 97)"
+msgstr "{name}: Word-Format zu alt (vor Word 97)"
+
+#: olladesk/office.py:539
+#: olladesk/office.py:704
+#: olladesk/office.py:794
+#, python-brace-format
+msgid "{name} è protetto da password"
+msgstr "{name} ist passwortgeschützt"
+
+#: olladesk/office.py:670
+#, python-brace-format
+msgid "{name}: formato Excel troppo vecchio (prima di Excel 97)"
+msgstr "{name}: Excel-Format zu alt (vor Excel 97)"
+
+#: olladesk/office.py:671
+#, python-brace-format
+msgid "{name} non sembra un foglio Excel"
+msgstr "{name} scheint keine Excel-Tabelle zu sein"
+
+#: olladesk/office.py:801
+#, python-brace-format
+msgid "impossibile leggere {name}: parti del documento mancanti"
+msgstr "{name} kann nicht gelesen werden: Teile des Dokuments fehlen"
+
+#: olladesk/office.py:803
+#, python-brace-format
+msgid "impossibile leggere {name}: non è un file Office valido"
+msgstr "{name} kann nicht gelesen werden: keine gültige Office-Datei"
 
 #: olladesk/ollama_client.py:103
 msgid "Modello non trovato sul server: scaricalo con `ollama pull <modello>`."
@@ -1002,15 +1052,15 @@ msgstr "{main}: {error}; Ersatz {spare}: {error2}"
 msgid "{main} non ha risposto ({error}): risultati da {spare}, il provider di riserva."
 msgstr "{main} hat nicht geantwortet ({error}): Ergebnisse von {spare}, dem Ersatzanbieter."
 
-#: olladesk/widgets/chat_area.py:198
+#: olladesk/widgets/chat_area.py:199
 msgid "Allega come contesto file (testo, codice, PDF, immagini) o una cartella"
 msgstr "Dateien (Text, Code, PDF, Bilder) oder einen Ordner als Kontext anhängen"
 
-#: olladesk/widgets/chat_area.py:208
+#: olladesk/widgets/chat_area.py:209
 msgid "Ricerca web: allega i risultati di una ricerca online al prossimo messaggio"
 msgstr "Websuche: die Ergebnisse einer Online-Suche an die nächste Nachricht anhängen"
 
-#: olladesk/widgets/chat_area.py:221
+#: olladesk/widgets/chat_area.py:222
 msgid ""
 "Ragionamento (thinking): attivo (icona colorata), i modelli che sanno farlo ragionano prima di rispondere e il pensiero è visibile in chat;\n"
 "spento (icona grigia), il ragionamento viene disattivato inviando \"think\": false alla richiesta.\n"
@@ -1020,75 +1070,75 @@ msgstr ""
 "aus (graues Symbol), das Denken wird durch Senden von \"think\": false in der Anfrage deaktiviert.\n"
 "Hinweis: gpt-oss akzeptiert das Deaktivieren nicht (Ollama akzeptiert dafür nur die Stufen low/medium/high)."
 
-#: olladesk/widgets/chat_area.py:241
-#: olladesk/widgets/chat_area.py:664
+#: olladesk/widgets/chat_area.py:242
+#: olladesk/widgets/chat_area.py:665
 msgid "Invia messaggio"
 msgstr "Nachricht senden"
 
-#: olladesk/widgets/chat_area.py:314
+#: olladesk/widgets/chat_area.py:315
 msgid "⚠ File ignorati (tipo non supportato o non trovati): "
 msgstr "⚠ Dateien ignoriert (nicht unterstützter Typ oder nicht gefunden): "
 
-#: olladesk/widgets/chat_area.py:326
+#: olladesk/widgets/chat_area.py:327
 #, python-brace-format
 msgid "Chatta in locale con i tuoi modelli Ollama · v{version}"
 msgstr "Chatten Sie lokal mit Ihren Ollama-Modellen · v{version}"
 
-#: olladesk/widgets/chat_area.py:335
+#: olladesk/widgets/chat_area.py:336
 msgid "Spiegami in modo semplice come funziona un LLM"
 msgstr "Erkläre mir einfach, wie ein LLM funktioniert"
 
-#: olladesk/widgets/chat_area.py:336
+#: olladesk/widgets/chat_area.py:337
 msgid "Scrivi uno script Python che ordina un elenco di file"
 msgstr "Schreibe ein Python-Skript, das eine Liste von Dateien sortiert"
 
-#: olladesk/widgets/chat_area.py:337
+#: olladesk/widgets/chat_area.py:338
 msgid "Riassumi le caratteristiche principali di Debian"
 msgstr "Fasse die wichtigsten Merkmale von Debian zusammen"
 
 #: olladesk/widgets/chat_area.py:40
-msgid "Documenti e immagini (*.txt *.md *.py *.json *.csv *.log *.yaml *.yml *.pdf *.png *.jpg *.jpeg *.webp *.gif);;Tutti i file (*)"
-msgstr "Dokumente und Bilder (*.txt *.md *.py *.json *.csv *.log *.yaml *.yml *.pdf *.png *.jpg *.jpeg *.webp *.gif);;Alle Dateien (*)"
+msgid "Documenti e immagini (*.txt *.md *.py *.json *.csv *.log *.yaml *.yml *.pdf *.doc *.docx *.xls *.xlsx *.odt *.ods *.png *.jpg *.jpeg *.webp *.gif);;Tutti i file (*)"
+msgstr "Dokumente und Bilder (*.txt *.md *.py *.json *.csv *.log *.yaml *.yml *.pdf *.doc *.docx *.xls *.xlsx *.odt *.ods *.png *.jpg *.jpeg *.webp *.gif);;Alle Dateien (*)"
 
-#: olladesk/widgets/chat_area.py:53
+#: olladesk/widgets/chat_area.py:54
 #: olladesk/web/index.html:100
 msgid "Scrivi un messaggio…"
 msgstr "Nachricht schreiben…"
 
-#: olladesk/widgets/chat_area.py:541
+#: olladesk/widgets/chat_area.py:542
 msgid "📄  File…"
 msgstr "📄  Dateien…"
 
-#: olladesk/widgets/chat_area.py:542
+#: olladesk/widgets/chat_area.py:543
 msgid "📁  Cartella…"
 msgstr "📁  Ordner…"
 
-#: olladesk/widgets/chat_area.py:547
+#: olladesk/widgets/chat_area.py:548
 msgid "Allega cartella"
 msgstr "Ordner anhängen"
 
-#: olladesk/widgets/chat_area.py:552
+#: olladesk/widgets/chat_area.py:553
 msgid "Allega file"
 msgstr "Dateien anhängen"
 
-#: olladesk/widgets/chat_area.py:557
+#: olladesk/widgets/chat_area.py:558
 msgid "⚠ Tipi di file non supportati: "
 msgstr "⚠ Nicht unterstützte Dateitypen: "
 
-#: olladesk/widgets/chat_area.py:595
+#: olladesk/widgets/chat_area.py:596
 msgid "Rimuovi allegato"
 msgstr "Anhang entfernen"
 
-#: olladesk/widgets/chat_area.py:661
+#: olladesk/widgets/chat_area.py:662
 #: olladesk/web/app.js:662
 msgid "Interrompi"
 msgstr "Abbrechen"
 
-#: olladesk/widgets/chat_area.py:672
+#: olladesk/widgets/chat_area.py:673
 msgid "Invio: invia · Shift+Invio: a capo"
 msgstr "Eingabe: senden · Umschalt+Eingabe: neue Zeile"
 
-#: olladesk/widgets/chat_area.py:674
+#: olladesk/widgets/chat_area.py:675
 msgid "Ctrl+Invio: invia · Invio: a capo"
 msgstr "Strg+Eingabe: senden · Eingabe: neue Zeile"
 
