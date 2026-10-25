@@ -158,6 +158,38 @@ def test_context_office_bounded():
     assert note is None and len(text) <= 20 + 60
 
 
+def test_drop_paths_through_flatpak_portal():
+    # in Flatpak il text/uri-list ha i percorsi dell'host (inesistenti nella
+    # sandbox): si usano quelli che il portale FileTransfer restituisce
+    from PySide6.QtCore import QMimeData, QUrl
+    from olladesk import portal
+    from olladesk.widgets import chat_area
+    d = Path(tempfile.mkdtemp())
+    (d / "vero.txt").write_text("x", encoding="utf-8")
+    host = "/home/qualcuno/Documenti/relazione.docx"
+
+    def mime(paths, key=None):
+        m = QMimeData()
+        m.setUrls([QUrl.fromLocalFile(p) for p in paths])
+        if key is not None:
+            m.setData(portal.FILETRANSFER_MIME, key)
+        return m
+
+    calls = []
+    original = portal.retrieve_files
+    try:
+        portal.retrieve_files = lambda key: calls.append(key) or ([str(d / "vero.txt")] if key.startswith("buona") else None)
+        # percorsi leggibili: il portale non serve
+        assert chat_area.paths_from_mime(mime([str(d / "vero.txt")], b"buona")) == ([str(d / "vero.txt")], [])
+        assert calls == []
+        assert chat_area.paths_from_mime(mime([host], b"buona\x00")) == ([str(d / "vero.txt")], [])
+        assert chat_area.paths_from_mime(mime([host], b"scaduta")) == ([], ["relazione.docx"])
+        assert chat_area.paths_from_mime(mime([host, str(d / "vero.txt")])) == ([str(d / "vero.txt")], ["relazione.docx"])
+    finally:
+        portal.retrieve_files = original
+    assert "relazione.docx" in chat_area.unreadable_note(["relazione.docx"])
+
+
 def test_context_build_api_content():
     d = Path(tempfile.mkdtemp())
     (d / "note.txt").write_text("CIAO", encoding="utf-8")

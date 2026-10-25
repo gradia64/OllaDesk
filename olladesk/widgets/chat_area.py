@@ -26,10 +26,39 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .. import config, context, theme
+from .. import config, context, portal, theme
 from .. import __version__
 from ..i18n import N_, _
 from .message import MessageWidget, SystemNoteWidget
+
+def paths_from_mime(mime) -> tuple[list[str], list[str]]:
+    """File trascinati o incollati: (percorsi leggibili, nomi illeggibili).
+
+    In Flatpak i percorsi del text/uri-list sono quelli dell'host e nella
+    sandbox non esistono: se il file manager li ha passati anche al portale
+    FileTransfer, si usano quelli del portale (vedi portal.py).
+    """
+    local = [u.toLocalFile() for u in mime.urls() if u.isLocalFile()]
+    if not local or all(Path(p).exists() for p in local):
+        return local, []
+    if mime.hasFormat(portal.FILETRANSFER_MIME):
+        key = bytes(mime.data(portal.FILETRANSFER_MIME).data()).decode("utf-8", "replace")
+        got = portal.retrieve_files(key)
+        if got:
+            return got, []
+    readable = [p for p in local if Path(p).exists()]
+    missing = [Path(p).name or p for p in local if not Path(p).exists()]
+    return readable, missing
+
+
+def unreadable_note(names: list[str]) -> str:
+    """Avviso per i file trascinati che l'app non può leggere."""
+    if portal.in_flatpak():
+        return (_("⚠ Impossibile leggere i file trascinati dalla sandbox Flatpak: ")
+                + ", ".join(names)
+                + _(". Allegali con 📎, che passa dal selettore file del sistema."))
+    return _("⚠ File non trovati: ") + ", ".join(names)
+
 
 ASSISTANT_MAX_W = 860
 USER_MAX_W = 620
@@ -47,6 +76,7 @@ FILE_FILTER = N_(
 class ChatInput(QPlainTextEdit):
     sendPressed = Signal()
     pathsDropped = Signal(list)   # percorsi trascinati o incollati (file/immagini)
+    pathsUnreadable = Signal(list)   # nomi di file trascinati che non si possono leggere
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -93,7 +123,7 @@ class ChatInput(QPlainTextEdit):
 
     def dropEvent(self, ev) -> None:  # noqa: N802 (API Qt)
         if ev.mimeData().hasUrls():
-            self.pathsDropped.emit([u.toLocalFile() for u in ev.mimeData().urls() if u.isLocalFile()])
+            self._emit_paths(ev.mimeData())
             ev.acceptProposedAction()
         elif ev.mimeData().hasImage():
             self._paste_image(ev.mimeData().imageData())
@@ -103,15 +133,20 @@ class ChatInput(QPlainTextEdit):
 
     def insertFromMimeData(self, mime) -> None:  # noqa: N802 (API Qt)
         """Intercolla incolla Ctrl+V: allega file/immagini invece del testo."""
-        if mime.hasUrls():
-            local = [u.toLocalFile() for u in mime.urls() if u.isLocalFile()]
-            if local:
-                self.pathsDropped.emit(local)
-                return
+        if mime.hasUrls() and any(u.isLocalFile() for u in mime.urls()):
+            self._emit_paths(mime)
+            return
         if mime.hasImage():
             self._paste_image(mime.imageData())
             return
         super().insertFromMimeData(mime)
+
+    def _emit_paths(self, mime) -> None:
+        paths, missing = paths_from_mime(mime)
+        if paths:
+            self.pathsDropped.emit(paths)
+        if missing:
+            self.pathsUnreadable.emit(missing)
 
     def _paste_image(self, image) -> None:
         from PySide6.QtGui import QImage
@@ -234,6 +269,7 @@ class ChatArea(QWidget):
         self.input = ChatInput(self.input_frame)
         self.input.sendPressed.connect(self._emit_send)
         self.input.pathsDropped.connect(self._handle_dropped_paths)
+        self.input.pathsUnreadable.connect(lambda names: self.add_system_note(unreadable_note(names)))
         fl.addWidget(self.input, 1)
 
         self.send_btn = QPushButton("➤", self.input_frame)
@@ -303,9 +339,12 @@ class ChatArea(QWidget):
             ev.acceptProposedAction()
 
     def dropEvent(self, ev) -> None:  # noqa: N802 (API Qt)
-        paths = [u.toLocalFile() for u in ev.mimeData().urls() if u.isLocalFile()]
+        paths, missing = paths_from_mime(ev.mimeData())
         if paths:
             self._handle_dropped_paths(paths)
+        if missing:
+            self.add_system_note(unreadable_note(missing))
+        if paths or missing:
             ev.acceptProposedAction()
 
     def _handle_dropped_paths(self, paths: list) -> None:

@@ -1052,15 +1052,15 @@ msgstr "{main}: {error}; respaldo {spare}: {error2}"
 msgid "{main} non ha risposto ({error}): risultati da {spare}, il provider di riserva."
 msgstr "{main} no respondió ({error}): resultados de {spare}, el proveedor de respaldo."
 
-#: olladesk/widgets/chat_area.py:199
+#: olladesk/widgets/chat_area.py:234
 msgid "Allega come contesto file (testo, codice, PDF, immagini) o una cartella"
 msgstr "Adjuntar como contexto archivos (texto, código, PDF, imágenes) o una carpeta"
 
-#: olladesk/widgets/chat_area.py:209
+#: olladesk/widgets/chat_area.py:244
 msgid "Ricerca web: allega i risultati di una ricerca online al prossimo messaggio"
 msgstr "Búsqueda web: adjunta los resultados de una búsqueda en línea al siguiente mensaje"
 
-#: olladesk/widgets/chat_area.py:222
+#: olladesk/widgets/chat_area.py:257
 msgid ""
 "Ragionamento (thinking): attivo (icona colorata), i modelli che sanno farlo ragionano prima di rispondere e il pensiero è visibile in chat;\n"
 "spento (icona grigia), il ragionamento viene disattivato inviando \"think\": false alla richiesta.\n"
@@ -1070,77 +1070,89 @@ msgstr ""
 "desactivado (icono gris), el razonamiento se desactiva enviando \"think\": false con la solicitud.\n"
 "Nota: gpt-oss no acepta la desactivación (Ollama solo acepta para él los niveles low/medium/high)."
 
-#: olladesk/widgets/chat_area.py:242
-#: olladesk/widgets/chat_area.py:665
+#: olladesk/widgets/chat_area.py:278
+#: olladesk/widgets/chat_area.py:704
 msgid "Invia messaggio"
 msgstr "Enviar mensaje"
 
-#: olladesk/widgets/chat_area.py:315
+#: olladesk/widgets/chat_area.py:354
 msgid "⚠ File ignorati (tipo non supportato o non trovati): "
 msgstr "⚠ Archivos ignorados (tipo no compatible o no encontrados): "
 
-#: olladesk/widgets/chat_area.py:327
+#: olladesk/widgets/chat_area.py:366
 #, python-brace-format
 msgid "Chatta in locale con i tuoi modelli Ollama · v{version}"
 msgstr "Chatea en local con tus modelos de Ollama · v{version}"
 
-#: olladesk/widgets/chat_area.py:336
+#: olladesk/widgets/chat_area.py:375
 msgid "Spiegami in modo semplice come funziona un LLM"
 msgstr "Explícame de forma sencilla cómo funciona un LLM"
 
-#: olladesk/widgets/chat_area.py:337
+#: olladesk/widgets/chat_area.py:376
 msgid "Scrivi uno script Python che ordina un elenco di file"
 msgstr "Escribe un script de Python que ordene una lista de archivos"
 
-#: olladesk/widgets/chat_area.py:338
+#: olladesk/widgets/chat_area.py:377
 msgid "Riassumi le caratteristiche principali di Debian"
 msgstr "Resume las características principales de Debian"
 
-#: olladesk/widgets/chat_area.py:40
-msgid "Documenti e immagini (*.txt *.md *.py *.json *.csv *.log *.yaml *.yml *.pdf *.doc *.docx *.xls *.xlsx *.odt *.ods *.png *.jpg *.jpeg *.webp *.gif);;Tutti i file (*)"
-msgstr "Documentos e imágenes (*.txt *.md *.py *.json *.csv *.log *.yaml *.yml *.pdf *.doc *.docx *.xls *.xlsx *.odt *.ods *.png *.jpg *.jpeg *.webp *.gif);;Todos los archivos (*)"
+#: olladesk/widgets/chat_area.py:57
+msgid "⚠ Impossibile leggere i file trascinati dalla sandbox Flatpak: "
+msgstr "⚠ No se pueden leer los archivos arrastrados desde el sandbox de Flatpak: "
 
-#: olladesk/widgets/chat_area.py:54
-#: olladesk/web/index.html:100
-msgid "Scrivi un messaggio…"
-msgstr "Escribe un mensaje…"
-
-#: olladesk/widgets/chat_area.py:542
+#: olladesk/widgets/chat_area.py:581
 msgid "📄  File…"
 msgstr "📄  Archivos…"
 
-#: olladesk/widgets/chat_area.py:543
+#: olladesk/widgets/chat_area.py:582
 msgid "📁  Cartella…"
 msgstr "📁  Carpeta…"
 
-#: olladesk/widgets/chat_area.py:548
+#: olladesk/widgets/chat_area.py:587
 msgid "Allega cartella"
 msgstr "Adjuntar carpeta"
 
-#: olladesk/widgets/chat_area.py:553
+#: olladesk/widgets/chat_area.py:59
+msgid ". Allegali con 📎, che passa dal selettore file del sistema."
+msgstr ". Adjúntalos con 📎, que usa el selector de archivos del sistema."
+
+#: olladesk/widgets/chat_area.py:592
 msgid "Allega file"
 msgstr "Adjuntar archivos"
 
-#: olladesk/widgets/chat_area.py:558
+#: olladesk/widgets/chat_area.py:597
 msgid "⚠ Tipi di file non supportati: "
 msgstr "⚠ Tipos de archivo no compatibles: "
 
-#: olladesk/widgets/chat_area.py:596
+#: olladesk/widgets/chat_area.py:60
+msgid "⚠ File non trovati: "
+msgstr "⚠ Archivos no encontrados: "
+
+#: olladesk/widgets/chat_area.py:635
 msgid "Rimuovi allegato"
 msgstr "Quitar adjunto"
 
-#: olladesk/widgets/chat_area.py:662
+#: olladesk/widgets/chat_area.py:69
+msgid "Documenti e immagini (*.txt *.md *.py *.json *.csv *.log *.yaml *.yml *.pdf *.doc *.docx *.xls *.xlsx *.odt *.ods *.png *.jpg *.jpeg *.webp *.gif);;Tutti i file (*)"
+msgstr "Documentos e imágenes (*.txt *.md *.py *.json *.csv *.log *.yaml *.yml *.pdf *.doc *.docx *.xls *.xlsx *.odt *.ods *.png *.jpg *.jpeg *.webp *.gif);;Todos los archivos (*)"
+
+#: olladesk/widgets/chat_area.py:701
 #: olladesk/web/app.js:662
 msgid "Interrompi"
 msgstr "Detener"
 
-#: olladesk/widgets/chat_area.py:673
+#: olladesk/widgets/chat_area.py:712
 msgid "Invio: invia · Shift+Invio: a capo"
 msgstr "Intro: enviar · Mayús+Intro: nueva línea"
 
-#: olladesk/widgets/chat_area.py:675
+#: olladesk/widgets/chat_area.py:714
 msgid "Ctrl+Invio: invia · Invio: a capo"
 msgstr "Ctrl+Intro: enviar · Intro: nueva línea"
+
+#: olladesk/widgets/chat_area.py:84
+#: olladesk/web/index.html:100
+msgid "Scrivi un messaggio…"
+msgstr "Escribe un mensaje…"
 
 #: olladesk/widgets/companion_dialog.py:103
 msgid "Servizio"
