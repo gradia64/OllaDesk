@@ -61,11 +61,11 @@
       <li xml:lang="fr">Réponses en streaming avec Markdown et blocs de code, et la réflexion des modèles qui raisonnent</li>
       <li xml:lang="de">Gestreamte Antworten mit Markdown und Codeblöcken sowie die Gedankengänge denkender Modelle</li>
       <li xml:lang="es">Respuestas en streaming con Markdown y bloques de código, y el razonamiento de los modelos que piensan</li>
-      <li>Text files, PDFs and images as context, with vision models</li>
-      <li xml:lang="it">File di testo, PDF e immagini come contesto, anche per i modelli visione</li>
-      <li xml:lang="fr">Fichiers texte, PDF et images comme contexte, y compris pour les modèles de vision</li>
-      <li xml:lang="de">Textdateien, PDFs und Bilder als Kontext, auch für Vision-Modelle</li>
-      <li xml:lang="es">Archivos de texto, PDF e imágenes como contexto, también para los modelos de visión</li>
+      <li>Text files, PDFs, Word, Excel and OpenDocument documents and images as context, with vision models</li>
+      <li xml:lang="it">File di testo, PDF, documenti Word, Excel e OpenDocument e immagini come contesto, anche per i modelli visione</li>
+      <li xml:lang="fr">Fichiers texte, PDF, documents Word, Excel et OpenDocument et images comme contexte, y compris pour les modèles de vision</li>
+      <li xml:lang="de">Textdateien, PDFs, Word-, Excel- und OpenDocument-Dokumente und Bilder als Kontext, auch für Vision-Modelle</li>
+      <li xml:lang="es">Archivos de texto, PDF, documentos Word, Excel y OpenDocument e imágenes como contexto, también para los modelos de visión</li>
       <li>Optional web search (DuckDuckGo, SearXNG or Ollama Cloud) with the sources listed under the answer</li>
       <li xml:lang="it">Ricerca web facoltativa (DuckDuckGo, SearXNG o Ollama Cloud) con le fonti elencate sotto la risposta</li>
       <li xml:lang="fr">Recherche web facultative (DuckDuckGo, SearXNG ou Ollama Cloud) avec les sources listées sous la réponse</li>
@@ -178,6 +178,9 @@
   </languages>
 
   <releases>
+    <release version="0.3.6" date="2026-10-25">
+      <url type="details">https://github.com/gradia64/OllaDesk/releases/tag/v0.3.6</url>
+    </release>
     <release version="0.3.5" date="2026-10-19">
       <url type="details">https://github.com/gradia64/OllaDesk/releases/tag/v0.3.5</url>
     </release>

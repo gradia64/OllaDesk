@@ -1,3 +1,3 @@
 """OllaDesk — interfaccia desktop leggera in stile ChatGPT per Ollama."""
 
-__version__ = "0.3.5"
+__version__ = "0.3.6"
