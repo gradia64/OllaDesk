@@ -65,6 +65,7 @@ class _Out:
         self.size = 0
         self.limit = limit
         self.deadline = deadline
+        self.partial = False   # parte del documento saltata (oltre un limite)
 
     def add(self, s: str) -> None:
         self.parts.append(s)
@@ -135,10 +136,10 @@ def _serial_to_date(v: float, date1904: bool) -> str:
         dt = base + datetime.timedelta(days=v)
     except (OverflowError, ValueError):
         return _fmt_number(v)
+    if 0 <= v < 1:   # solo un'ora (anche mezzanotte: 0 non è il 30/12/1899)
+        return dt.time().isoformat(timespec="seconds")
     if v == int(v):
         return dt.date().isoformat()
-    if 0 <= v < 1:
-        return dt.time().isoformat(timespec="seconds")
     return dt.isoformat(sep=" ", timespec="seconds")
 
 
@@ -285,13 +286,14 @@ def _xlsx(path: Path, out: _Out) -> None:
                     el.clear()
                     out.tick()
                     if len(shared) >= MAX_SHARED_STRINGS:
+                        out.partial = True   # le celle oltre restano vuote
                         break
         date_styles = _xlsx_date_styles(zf, out)
 
         for sheet_name, target in sheets:
             out.add(_("## Foglio: {name}\n").format(name=sheet_name))
             cells: dict[int, str] = {}
-            col = -1
+            col: int | None = -1
             ctype = style = ""
             value: str | None = None
             inline: list[str] = []
@@ -300,16 +302,22 @@ def _xlsx(path: Path, out: _Out) -> None:
                 name = _local(el.tag)
                 if ev == "start":
                     if name == "c":
-                        col = _col_index(el.get("r", "")) if el.get("r") else col + 1
-                        if col >= MAX_COLS:
-                            col = -1   # fuori dalle colonne lette: la cella si scarta
+                        # posizione vera, anche oltre MAX_COLS: una cella senza
+                        # «r» segue la precedente. None dopo un riferimento non
+                        # valido (prima, -1 faceva ripartire la successiva dalla
+                        # colonna A, sopra il suo contenuto)
+                        if el.get("r"):
+                            col = _col_index(el.get("r", ""))
+                            col = col if col >= 0 else None
+                        elif col is not None:
+                            col += 1
                         ctype = el.get("t", "n")
                         style = el.get("s", "0")
                         value, inline = None, []
                     elif name == "is":
                         in_is = True
                     elif name == "row":
-                        cells, col = {}, -1
+                        cells, col = {}, -1   # la prima cella senza «r» è la colonna A
                     continue
                 if name == "v":
                     value = el.text or ""
@@ -318,7 +326,7 @@ def _xlsx(path: Path, out: _Out) -> None:
                 elif name == "is":
                     in_is = False
                 elif name == "c":
-                    if col >= 0:
+                    if col is not None and 0 <= col < MAX_COLS:
                         cells[col] = _xlsx_cell(ctype, style, value, inline, shared,
                                                 date_styles, date1904)
                 elif name == "row":
@@ -420,6 +428,27 @@ def _odt(path: Path, out: _Out) -> None:
                 el.clear()
 
 
+def _ods_value(cell: ET.Element) -> str:
+    """Valore di una cella ODS: numeri, date, ore e valori logici dagli
+    attributi office:*, come per .xlsx e .xls; il testo visualizzato
+    («1,5», «31/03/25») dipende dalla lingua di chi ha salvato il file."""
+    vtype = cell.get(_OFFICE + "value-type", "")
+    if vtype == "date" and cell.get(_OFFICE + "date-value"):
+        return cell.get(_OFFICE + "date-value").replace("T", " ")
+    if vtype == "time" and cell.get(_OFFICE + "time-value"):
+        m = re.fullmatch(r"PT(\d+)H(\d+)M(\d+)(?:\.\d+)?S", cell.get(_OFFICE + "time-value"))
+        if m:
+            return "{:02d}:{:02d}:{:02d}".format(*map(int, m.groups()))
+    if vtype == "boolean" and cell.get(_OFFICE + "boolean-value"):
+        return "TRUE" if cell.get(_OFFICE + "boolean-value") == "true" else "FALSE"
+    if vtype in ("float", "percentage", "currency") and cell.get(_OFFICE + "value"):
+        try:
+            return _fmt_number(float(cell.get(_OFFICE + "value")))
+        except ValueError:
+            pass
+    return "\n".join(_odf_inline(p) for p in cell.iter(_TEXT + "p"))
+
+
 def _ods(path: Path, out: _Out) -> None:
     with zipfile.ZipFile(path) as zf:
         cells: dict[int, str] = {}
@@ -442,7 +471,7 @@ def _ods(path: Path, out: _Out) -> None:
                     rep = int(el.get(_TABLE + "number-columns-repeated", "1"))
                 except ValueError:
                     rep = 1
-                text = "\n".join(_odf_inline(p) for p in el.iter(_TEXT + "p"))
+                text = _ods_value(el)
                 if text.strip():
                     for i in range(max(0, min(rep, MAX_COLS - col))):
                         cells[col + i] = text
@@ -573,6 +602,9 @@ def _doc_clean(raw: str) -> str:
     # campi: 0x13 inizio, 0x14 separatore, 0x15 fine; il codice del campo
     # (tra 0x13 e 0x14) non è testo, il risultato (tra 0x14 e 0x15) sì
     stack: list[bool] = []   # per campo aperto: siamo nella parte del codice?
+    width: int | None = None   # celle per riga della tabella in corso
+    cells = 0                  # celle chiuse nella riga in corso
+    after_cell = False         # l'ultimo carattere scritto chiudeva una cella
     for ch in raw:
         o = ord(ch)
         if o == 0x13:
@@ -588,14 +620,31 @@ def _doc_clean(raw: str) -> str:
             continue
         if any(stack):
             continue
+        if o == 0x07:
+            # 0x07 chiude una cella; la fine della riga è un secondo 0x07 subito
+            # dopo l'ultima cella. Ma anche una cella vuota è un 0x07 subito
+            # dopo il precedente: il doppio 0x07 vale come fine riga solo
+            # quando la riga ha le celle della prima riga della tabella (per la
+            # prima riga, al primo doppio 0x07). Resta ambigua solo una cella
+            # vuota nella prima riga
+            if after_cell and (width is None or cells >= width):
+                out[-1] = "\n"   # il «\t» dell'ultima cella diventa fine riga
+                if width is None:
+                    width = cells
+                cells, after_cell = 0, False
+            else:
+                out.append("\t")
+                cells += 1
+                after_cell = True
+            continue
+        after_cell = False
         if ch in "\r\x0b\x0c":
+            if cells == 0:
+                width = None   # paragrafo fuori dalle celle: la tabella è finita
             out.append("\n")
-        elif o == 0x07:      # fine cella / fine riga di tabella
-            out.append("\t")
         elif ch == "\t" or o >= 0x20:
             out.append(ch)
-    text = "".join(out)
-    return re.sub(r"\t\n", "\n", text)
+    return "".join(out)
 
 
 def _doc(path: Path, ole: _Ole, out: _Out) -> str | None:
@@ -925,9 +974,7 @@ def office_text(path: Path, limit: int, deadline: float | None = None) -> tuple[
             raise _OleError("unknown format")
     except _Stop as stop:
         if stop.reason != "limit":
-            # il testo si usa lo stesso, ma chi legge deve sapere che è parziale
-            note = _('{name}: documento troppo grande o lento da leggere, '
-                     'allegato solo in parte').format(name=path.name)
+            out.partial = True
     except KeyError:
         return "", _('impossibile leggere {name}: parti del documento mancanti').format(name=path.name)
     except (_OleError, zipfile.BadZipFile):
@@ -945,6 +992,10 @@ def office_text(path: Path, limit: int, deadline: float | None = None) -> tuple[
         # qualunque altro caso non previsto
         return "", _('impossibile leggere {name}: {error}').format(
             name=path.name, error=f"{type(e).__name__}: {e}")
+    if out.partial and note is None:
+        # il testo si usa lo stesso, ma chi legge deve sapere che è parziale
+        note = _('{name}: documento troppo grande o lento da leggere, '
+                 'allegato solo in parte').format(name=path.name)
     # spazi a fine cella e a fine riga: rumore per il modello
     text = re.sub(r" +\t", "\t", out.text())
     text = re.sub(r"[ \t]+\n", "\n", text)

@@ -383,6 +383,49 @@ def test_office_correctness_fixes():
     assert "Ultimo paragrafo" in extract_text(d / "relazione.ods")[0]
 
 
+def test_office_post_release_fixes():
+    # revisione post-rilascio 0.3.6
+    from olladesk import office
+    d = Path(tempfile.mkdtemp())
+    # .doc: la fine riga di tabella (doppio 0x07) non fonde più le righe
+    text = extract_text(OFFICE_DIR / "relazione.doc")[0]
+    assert "Regione\tVendite\nNord\t1500\nUltimo paragrafo" in text, text
+    # cella vuota in una riga successiva alla prima, poi una tabella più stretta
+    raw = "A\x07B\x07C\x07\x07D\x07\x07F\x07\x07G\x07H\x07I\x07\x07fine\rX\x07Y\x07\x07Z\x07W\x07\x07"
+    assert office._doc_clean(raw) == "A\tB\tC\nD\t\tF\nG\tH\tI\nfine\nX\tY\nZ\tW\n"
+    # .ods: numeri, date, ore e valori logici dagli attributi, non dal testo locale
+    cell = '<table:table-cell office:value-type="{t}" {a}><text:p>{shown}</text:p></table:table-cell>'
+    row = "".join(cell.format(t=t, a=a, shown=shown) for t, a, shown in (
+        ("float", 'office:value="1234.5"', "1.234,5"),
+        ("date", 'office:date-value="2025-03-31"', "31/03/25"),
+        ("time", 'office:time-value="PT14H05M00S"', "14:05"),
+        ("boolean", 'office:boolean-value="true"', "VERO"),
+        ("string", "", "testo")))
+    ods = f'<office:spreadsheet><table:table table:name="S"><table:table-row>{row}</table:table-row></table:table></office:spreadsheet>'
+    (d / "valori.ods").write_bytes(_odf_bytes(ods, "application/vnd.oasis.opendocument.spreadsheet"))
+    assert extract_text(d / "valori.ods")[0] == "## Foglio: S\n1234.5\t2025-03-31\t14:05:00\tTRUE\ttesto"
+    # .xlsx: una cella oltre la colonna 256 non fa ripartire la successiva da A
+    (d / "lontano.xlsx").write_bytes(_xlsx_bytes(
+        '<row><c r="A1" t="inlineStr"><is><t>A</t></is></c><c r="IW1" t="inlineStr"><is><t>LONTANO</t></is></c>'
+        '<c t="inlineStr"><is><t>DOPO</t></is></c></row>'
+        '<row><c t="inlineStr"><is><t>prima</t></is></c><c t="inlineStr"><is><t>seconda</t></is></c></row>'))
+    assert extract_text(d / "lontano.xlsx")[0] == "## Foglio: s\nA\nprima\tseconda"
+    # stringhe condivise oltre il limite: le celle restano vuote, ma con un avviso
+    original = office.MAX_SHARED_STRINGS
+    try:
+        office.MAX_SHARED_STRINGS = 2
+        (d / "condivise.xlsx").write_bytes(_xlsx_bytes(
+            '<row><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>2</v></c></row>',
+            "<si><t>uno</t></si><si><t>due</t></si><si><t>tre</t></si>"))
+        text, note = extract_text(d / "condivise.xlsx")
+        assert text == "## Foglio: s\nuno" and note and "allegato solo in parte" in note, (text, note)
+    finally:
+        office.MAX_SHARED_STRINGS = original
+    # un'ora a zero è mezzanotte, non il 30/12/1899
+    assert office._serial_to_date(0.0, False) == "00:00:00"
+    assert office._serial_to_date(45000.0, False) == "2023-03-15"
+
+
 def test_engine_idle_after_unreadable_attachment():
     # revisione 0.3.6: un'eccezione nella lettura degli allegati lasciava il
     # motore «occupato» e senza avviso
