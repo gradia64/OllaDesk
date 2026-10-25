@@ -214,7 +214,7 @@ msgstr "file empty or larger than {size} MB"
 msgid "tipo di file non supportato: {name} (immagini, testo, PDF, documenti Office)"
 msgstr "unsupported file type: {name} (images, text, PDF, Office documents)"
 
-#: olladesk/config.py:239
+#: olladesk/config.py:271
 #: olladesk/engine.py:285
 #: olladesk/widgets/sidebar.py:124
 #: olladesk/web/app.js:164
@@ -475,49 +475,49 @@ msgstr "Attachments"
 msgid "impossibile preparare la richiesta: {error}"
 msgstr "cannot prepare the request: {error}"
 
-#: olladesk/main_window.py:135
+#: olladesk/main_window.py:137
 msgid "Mostra/nascondi la barra laterale (Ctrl+B)"
 msgstr "Show/hide the sidebar (Ctrl+B)"
 
-#: olladesk/main_window.py:140
+#: olladesk/main_window.py:142
 msgid "Modello da usare per la conversazione"
 msgstr "Model to use for the conversation"
 
-#: olladesk/main_window.py:145
+#: olladesk/main_window.py:147
 msgid "Ricarica l'elenco dei modelli installati"
 msgstr "Reload the list of installed models"
 
-#: olladesk/main_window.py:162
+#: olladesk/main_window.py:164
 msgid "connessione…"
 msgstr "connecting…"
 
-#: olladesk/main_window.py:274
+#: olladesk/main_window.py:276
 msgid "offline"
 msgstr "offline"
 
-#: olladesk/main_window.py:297
+#: olladesk/main_window.py:299
 #: olladesk/web/app.js:618
 msgid "— nessun modello —"
 msgstr "— no models —"
 
-#: olladesk/main_window.py:329
+#: olladesk/main_window.py:331
 msgid "Attendi la fine della risposta (o premi ■ per interrompere) prima di gestire i modelli."
 msgstr "Wait for the answer to finish (or press ■ to stop) before managing models."
 
-#: olladesk/main_window.py:381
+#: olladesk/main_window.py:383
 msgid "⚠ Conversazione non leggibile dal disco: rimossa dall'elenco."
 msgstr "⚠ Conversation not readable from disk: removed from the list."
 
-#: olladesk/main_window.py:442
-#: olladesk/main_window.py:516
+#: olladesk/main_window.py:444
+#: olladesk/main_window.py:518
 msgid "🌐 Ricerca web in corso…"
 msgstr "🌐 Searching the web…"
 
-#: olladesk/main_window.py:455
+#: olladesk/main_window.py:457
 msgid "Il PC sta già rispondendo in un'altra conversazione (forse dal telefono): attendi la fine oppure aprila e premi ■."
 msgstr "The PC is already answering in another conversation (maybe from the phone): wait for it to finish, or open it and press ■."
 
-#: olladesk/main_window.py:462
+#: olladesk/main_window.py:464
 msgid ""
 "Nessun modello disponibile.\n"
 "Scaricalo dalla sezione «Modelli» (Ctrl+M) o controlla che Ollama sia avviato."
@@ -525,12 +525,12 @@ msgstr ""
 "No models available.\n"
 "Download one from the «Models» section (Ctrl+M) or check that Ollama is running."
 
-#: olladesk/main_window.py:468
+#: olladesk/main_window.py:470
 #, python-brace-format
 msgid "Invio non possibile: {refusal}."
 msgstr "Cannot send: {refusal}."
 
-#: olladesk/main_window.py:554
+#: olladesk/main_window.py:556
 msgid ""
 "\n"
 "\n"
@@ -540,7 +540,7 @@ msgstr ""
 "\n"
 "Tip: the model may not accept the «think» field: turn the 🧠 button in the input back on."
 
-#: olladesk/main_window.py:559
+#: olladesk/main_window.py:561
 msgid ""
 "\n"
 "\n"
@@ -550,15 +550,22 @@ msgstr ""
 "\n"
 "Tip: start Ollama with `ollama serve` and check the URL in the settings (Ctrl+,)."
 
-#: olladesk/main_window.py:590
+#: olladesk/main_window.py:592
 msgid "Mostra / nascondi"
 msgstr "Show / hide"
 
-#: olladesk/main_window.py:594
+#: olladesk/main_window.py:596
 msgid "Esci"
 msgstr "Quit"
 
-#: olladesk/main_window.py:628
+#: olladesk/main_window.py:629
+#, python-brace-format
+msgid ""
+"⚠ Il file delle impostazioni era illeggibile (non è JSON valido): OllaDesk è ripartito dalle impostazioni predefinite. Il file com'era è conservato in:\n"
+"{path}"
+msgstr "⚠ The settings file was unreadable (not valid JSON): OllaDesk started again from the default settings. The file as it was is kept in:\n{path}"
+
+#: olladesk/main_window.py:638
 #, python-brace-format
 msgid ""
 "\n"
@@ -567,15 +574,15 @@ msgstr ""
 "\n"
 "The «Ollama server» field pointed to port {port}, the one of the instance that ran the sharing: it has been reset to {host}. If your Ollama uses another address, change it in the settings (Ctrl+,)."
 
-#: olladesk/main_window.py:634
+#: olladesk/main_window.py:644
 msgid "ℹ La condivisione dell'API Ollama in rete è stata rimossa: per usare OllaDesk dal telefono attiva la «Companion web» (voce «📱 Companion» della barra laterale, Ctrl+D), che chiede un abbinamento. Per i client di terze parti vedi il README (OLLAMA_HOST nel servizio di sistema)."
 msgstr "ℹ Sharing the Ollama API on the network has been removed: to use OllaDesk from your phone, turn on the «Web companion» («📱 Companion» in the sidebar, Ctrl+D), which requires pairing. For third-party clients see the README (OLLAMA_HOST in the system service)."
 
-#: olladesk/main_window.py:653
+#: olladesk/main_window.py:663
 msgid "(nessun indirizzo di rete trovato)"
 msgstr "(no network address found)"
 
-#: olladesk/main_window.py:655
+#: olladesk/main_window.py:665
 #, python-brace-format
 msgid ""
 "Companion web attiva, sul telefono apri:\n"
@@ -586,7 +593,7 @@ msgstr ""
 "  {where}\n"
 "Click to pair a device (Ctrl+D)"
 
-#: olladesk/main_window.py:662
+#: olladesk/main_window.py:672
 #, python-brace-format
 msgid ""
 "⚠ Companion web non avviata: {detail}.\n"
@@ -595,37 +602,37 @@ msgstr ""
 "⚠ Web companion not started: {detail}.\n"
 "Choose another port in the «Companion» window (Ctrl+D)."
 
-#: olladesk/main_window.py:712
+#: olladesk/main_window.py:722
 #, python-brace-format
 msgid "È disponibile OllaDesk {new} (in uso: {current})"
 msgstr "OllaDesk {new} is available (in use: {current})"
 
-#: olladesk/main_window.py:722
+#: olladesk/main_window.py:732
 msgid "Aggiornamento di OllaDesk"
 msgstr "OllaDesk update"
 
-#: olladesk/main_window.py:725
+#: olladesk/main_window.py:735
 #, python-brace-format
 msgid "È disponibile OllaDesk {new} (in uso: {current})."
 msgstr "OllaDesk {new} is available (in use: {current})."
 
-#: olladesk/main_window.py:728
+#: olladesk/main_window.py:738
 msgid "Apri la pagina di download"
 msgstr "Open the download page"
 
-#: olladesk/main_window.py:729
+#: olladesk/main_window.py:739
 msgid "Salta questa versione"
 msgstr "Skip this version"
 
-#: olladesk/main_window.py:730
+#: olladesk/main_window.py:740
 msgid "Più tardi"
 msgstr "Later"
 
-#: olladesk/main_window.py:747
+#: olladesk/main_window.py:757
 msgid "Attendi la fine della risposta (o premi ■ per interrompere) prima di aprire le impostazioni."
 msgstr "Wait for the answer to finish (or press ■ to stop) before opening the settings."
 
-#: olladesk/main_window.py:794
+#: olladesk/main_window.py:804
 msgid "Resta attivo nella tray: clic sull'icona per mostrare o nascondere la finestra, «Esci» dal menu per chiudere."
 msgstr "Still running in the system tray: click the icon to show or hide the window, «Quit» from the menu to close."
 

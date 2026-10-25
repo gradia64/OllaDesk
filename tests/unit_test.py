@@ -475,6 +475,34 @@ def test_settings_roundtrip_and_permissions():
             os.environ["XDG_CONFIG_HOME"] = old
 
 
+def test_unreadable_settings_kept_as_backup():
+    # dopo la 0.3.6: un settings.json illeggibile veniva sovrascritto con i
+    # predefiniti al primo salvataggio, senza lasciare traccia
+    from olladesk import config
+    with _isolated_config():
+        path = config.config_dir() / "settings.json"
+        try:
+            config._settings_backup = None
+            path.write_text('{"host": "http://x:1", rotto', encoding="utf-8")
+            s = config.load_settings()
+            assert s == config.DEFAULT_SETTINGS
+            backup = config.settings_backup()
+            assert backup and backup.parent == path.parent
+            assert backup.read_text(encoding="utf-8") == '{"host": "http://x:1", rotto'
+            assert not (os.stat(backup).st_mode & 0o077)
+            config.load_settings()   # stessa sessione: nessuna seconda copia
+            assert len(list(path.parent.glob("settings.json.corrupt-*"))) == 1
+            # un file valido, o assente, non lascia copie
+            config._settings_backup = None
+            config.save_settings(s)
+            config.load_settings()
+            path.unlink()
+            config.load_settings()
+            assert config.settings_backup() is None
+        finally:
+            config._settings_backup = None
+
+
 def test_chat_split_and_legacy_migration():
     from olladesk import config
     old = os.environ.get("XDG_CONFIG_HOME")

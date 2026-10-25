@@ -106,11 +106,43 @@ def _write_json(path: Path, data: Any) -> bool:
 
 # ---------------------------------------------------------------- impostazioni
 
+# copia di un settings.json illeggibile fatta in questa sessione (vedi
+# load_settings): la finestra principale lo dice all'utente
+_settings_backup: Path | None = None
+
+
+def settings_backup() -> Path | None:
+    """Copia del settings.json trovato illeggibile all'avvio, se c'è stata."""
+    return _settings_backup
+
+
+def _backup_unreadable_settings(path: Path) -> None:
+    """Conserva un settings.json esistente ma illeggibile prima che il primo
+    salvataggio lo sostituisca con i predefiniti: il contenuto (e l'indizio
+    di chi l'ha rovinato) non va perso."""
+    global _settings_backup
+    if _settings_backup is not None:
+        return   # già copiato in questa sessione
+    dest = path.with_name(f"settings.json.corrupt-{time.strftime('%Y%m%d-%H%M%S')}")
+    try:
+        shutil.copy2(path, dest)
+        os.chmod(dest, 0o600)
+    except OSError:
+        return
+    _settings_backup = dest
+
+
 def load_settings() -> dict:
-    data = _read_json(config_dir() / "settings.json", {})
+    path = config_dir() / "settings.json"
+    data = _read_json(path, None)
+    if not isinstance(data, dict):
+        # JSON non valido, vuoto, non un oggetto o non leggibile: si riparte
+        # dai predefiniti, ma prima si conserva il file com'era
+        if path.exists():
+            _backup_unreadable_settings(path)
+        data = {}
     out = dict(DEFAULT_SETTINGS)
-    if isinstance(data, dict):
-        out.update({k: v for k, v in data.items() if k in out})
+    out.update({k: v for k, v in data.items() if k in out})
     return out
 
 

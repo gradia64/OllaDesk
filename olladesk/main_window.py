@@ -104,6 +104,8 @@ class MainWindow(QMainWindow):
         legacy_port = self._legacy_share_port
         if legacy_port is not None:
             QTimer.singleShot(800, lambda: self._explain_share_removed(legacy_port))
+        if config.settings_backup() is not None:
+            QTimer.singleShot(800, self._explain_settings_backup)
         QTimer.singleShot(800, self._sync_companion)
 
     # -------------------------------------------------------------------- UI
@@ -620,6 +622,14 @@ class MainWindow(QMainWindow):
         self.close()
 
     # ------------------------------------- condivisione API (rimossa nella 0.3)
+
+    def _explain_settings_backup(self) -> None:
+        """settings.json era illeggibile: si è ripartiti dai predefiniti."""
+        self.chat_area.add_system_note(
+            _("⚠ Il file delle impostazioni era illeggibile (non è JSON valido): "
+              "OllaDesk è ripartito dalle impostazioni predefinite. Il file com'era è "
+              "conservato in:\n{path}").format(path=config.settings_backup())
+        )
 
     def _explain_share_removed(self, port: int) -> None:
         """Una volta sola: la condivisione dell'API non c'è più."""
