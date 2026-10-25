@@ -116,7 +116,11 @@ modules:
       - install -D -m 0644 olladesk/assets/olladesk.svg /app/share/icons/hicolor/scalable/apps/io.github.gradia64.OllaDesk.svg
       - install -D -m 0644 io.github.gradia64.OllaDesk.metainfo.xml /app/share/metainfo/io.github.gradia64.OllaDesk.metainfo.xml
 
-      # 6) Bytecode riproducibile (unchecked-hash, come build-appimage.sh): l'immagine è in sola lettura.
+      # 6) fontconfig: esclude i font WOFF/WOFF2 dell'host, che nella sandbox non hanno
+      #    set di caratteri e mandano in segfault il Qt del runtime (vedi il file).
+      - install -D -m 0644 packaging/flatpak/fontconfig-local.conf /app/etc/fonts/local.conf
+
+      # 7) Bytecode riproducibile (unchecked-hash, come build-appimage.sh): l'immagine è in sola lettura.
       - python3 -B -E -s -m compileall -q -f --invalidation-mode unchecked-hash -s /app/share/olladesk -p / /app/share/olladesk
 
     sources:

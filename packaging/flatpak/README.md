@@ -1,8 +1,10 @@
 # Flatpak (in preparazione, non su Flathub)
 
 Bundle Flatpak di OllaDesk, da distribuire insieme alle release. Per ora **non**
-va consegnato a Flathub. Il manifest non è ancora stato costruito per intero: i
-punti segnati `⚠️` vanno verificati al primo build (vedi «Cosa verificare»).
+va consegnato a Flathub. Primo build riuscito il 2026-10-25 (Plasma 6, Wayland):
+l'app parte, PySide6 viene dalla base app, Ollama risponde dalla sandbox e il
+trascinamento da Dolphin allega file e cartelle. Restano i punti di «Cosa verificare»
+non ancora segnati ✅.
 
 ## File
 
@@ -11,6 +13,8 @@ punti segnati `⚠️` vanno verificati al primo build (vedi «Cosa verificare»
   `packaging/appimage/requirements.txt` **senza** `PySide6_Essentials`/`shiboken6`,
   ma con gli hash delle wheel per Python 3.13. Gli stessi URL e hash sono le
   `sources` del modulo `python3-deps` nel manifest.
+- `fontconfig-local.conf` — installato come `/app/etc/fonts/local.conf`: esclude i
+  font WOFF/WOFF2 dell'host (vedi «Font WOFF dell'host»).
 
 ## Scelte di base
 
@@ -67,14 +71,33 @@ flatpak run --user --unshare=network --filesystem=/tmp/fp-wheels --cwd=/tmp/fp-w
   --require-hashes --no-deps --prefix=/tmp/fp-prefix -r requirements.txt
 ```
 
+## Font WOFF dell'host
+
+Senza `fontconfig-local.conf` l'app va in segfault all'avvio. I font WOFF/WOFF2
+dell'host (`/usr/share/fonts/woff`, da `fonts-roboto-slab` e `fonts-font-awesome`
+su Debian) arrivano nella sandbox da `/run/host/fonts` **senza set di caratteri**.
+Il Qt del runtime (6.11.2, `QFontEngineMultiFontConfig::shouldLoadFontEngineForCharacter`)
+non controlla l'esito di `FcPatternGetCharSet` e legge un puntatore non
+inizializzato. Succede al primo carattere che il font principale non ha: con Noto
+Sans, «➤» del pulsante Invia (Roboto Slab è il secondo font di ripiego). Sono font
+per il web, inutili per un'interfaccia desktop, quindi si escludono. Per verificare
+che un host abbia font senza set di caratteri:
+
+```sh
+flatpak run --command=sh io.github.gradia64.OllaDesk -c \
+  'fc-list -f "%{file}|%{charset}\n" | awk -F"|" "\$2==\"\""'
+```
+
 ## Cosa verificare PRIMA di consegnare a Flathub (la policy è restrittiva)
 
-1. **Rete / Ollama** — `--share=network` (non è il predefinito: senza, niente rete)
+1. ✅ **Rete / Ollama** (verificato al primo build: 7 modelli da `localhost:11434`;
+   la companion verso il telefono è ancora da provare) — `--share=network` (non è il predefinito: senza, niente rete)
    rende raggiungibile `localhost:11434` dell'host + la companion in entrata.
    Test reale sulla box: avvia il bundle e controlla che Ollama risponda e che la
    companion veda la LAN. Se Flathub contestasse l'accesso al loopback, alternativa:
    Ollama su `OLLAMA_HOST=0.0.0.0` + app sull'IP LAN, oppure Ollama dentro lo stesso Flatpak.
-2. **File** — nessun `--filesystem`: allegati e cartelle passano dal portale
+2. ✅ **File** (verificato al primo build: file e cartella trascinati da Dolphin fuori
+   dalle cartelle XDG vengono allegati) — nessun `--filesystem`: allegati e cartelle passano dal portale
    FileChooser, che dà percorsi `/run/user/<uid>/doc/…` già leggibili. Il
    **trascinamento** dal file manager passa dal portale FileTransfer: il Qt del runtime
    KDE non lo gestisce (la chiave `application/vnd.portal.filetransfer` c'è solo in GTK3
@@ -98,13 +121,22 @@ flatpak run --user --unshare=network --filesystem=/tmp/fp-wheels --cwd=/tmp/fp-w
    `"pip"` (istruzioni di aggiornamento sbagliate). Verificare anche che
    `app._desktop_file_installed()` trovi il `.desktop` nella sandbox, altrimenti
    `setDesktopFileName` non viene chiamato e su Wayland app_id e icona sono sbagliati.
-7. **PySide6 della base app** — `io.qt.PySide.BaseApp // 6.11` è PySide 6.11.2,
+7. ✅ **PySide6 della base app** (verificato: 6.11.2 da `/app/lib/python3.13/site-packages`) — `io.qt.PySide.BaseApp // 6.11` è PySide 6.11.2,
    allineato al pin dell'AppImage. Quando si passa a un altro runtime, `base-version`
    e `runtime-version` vanno cambiati insieme. Dopo la pulizia restano in `/app/lib`
    le librerie LLVM/clang della base (servono solo a generare i binding): possibile
    risparmio di spazio da valutare dopo il primo build.
 
 ## Note
+
+- **Permessi ereditati dalla base app:** oltre ai nostri `finish-args`, il bundle
+  riceve quelli di `io.qt.PySide.BaseApp`: `--filesystem=xdg-config/kdeglobals:ro` e
+  `--talk-name` per `com.canonical.AppMenu.Registrar`, `org.kde.kconfig.notify` e
+  `org.kde.KGlobalSettings` (tema e colori di KDE). Controllarli con
+  `flatpak info --show-permissions io.github.gradia64.OllaDesk`.
+- **Spazio:** dopo la pulizia restano in `/app/lib` circa 150 MB di librerie LLVM e
+  clang della base (`libLLVM.so.21.1`, `libclang-cpp.so.21.1`), che servono solo a
+  generare i binding.
 
 - Formato YAML per i commenti; Flathub usa spesso JSON (senza commenti). Equivalenti.
 - `sources` punta a `../../` (checkout locale). In CI/Flathub: `type: git` (tag) o
