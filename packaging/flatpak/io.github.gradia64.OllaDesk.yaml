@@ -1,0 +1,200 @@
+# io.github.gradia64.OllaDesk.yaml
+# ---------------------------------------------------------------------------
+# MANIFEST flatpak-builder di OllaDesk (WIP). Bundle distribuito con le release,
+# non consegnato a Flathub per ora.
+#
+# Formato YAML (flatpak-builder lo accetta; i repo Flathub usano spesso JSON,
+# ma JSON non ha commenti, e qui ogni permesso è motivato).
+#
+# Runtime org.kde.Platform // 6.11: porta Qt 6.11.2 ma NON PySide6 (verificato:
+# `import PySide6` fallisce nel runtime). PySide6 arriva dalla base app di
+# Flathub io.qt.PySide.BaseApp // 6.11, costruita da pyside-setup v6.11.2: la
+# stessa versione fissata nell'AppImage (PySide6-Essentials==6.11.2). Mai una
+# wheel PySide6 da pip qui: porterebbe un secondo Qt accanto a quello del runtime.
+# ---------------------------------------------------------------------------
+
+app-id: io.github.gradia64.OllaDesk
+runtime: org.kde.Platform
+runtime-version: "6.11"
+sdk: org.kde.Sdk
+base: io.qt.PySide.BaseApp
+base-version: "6.11"             # PySide 6.11.2, Python 3.13 del runtime
+
+command: olladesk                # → /app/bin/olladesk (wrapper installato qui sotto)
+
+build-options:
+  env:
+    # letti da /app/cleanup-BaseApp.sh (cleanup-commands qui sotto): OllaDesk non usa
+    # QtWebEngine né numpy, che la base app porta con sé (centinaia di MB)
+    BASEAPP_REMOVE_WEBENGINE: "1"
+    BASEAPP_DISABLE_NUMPY: "1"
+
+# pulizia prescritta dalla base app, eseguita alla fine del build
+cleanup-commands:
+  - /app/cleanup-BaseApp.sh
+
+# --- dipendenze e costruzione dell'app -------------------------------------
+modules:
+  # Dipendenze Python terze. flatpak-builder costruisce i moduli SENZA rete: le wheel
+  # sono sources scaricate (e verificate con sha256) prima del build, e pip installa
+  # solo da qui (--no-index). Versioni = packaging/appimage/requirements.txt (senza
+  # PySide6/shiboken6), ma wheel per Python 3.13 (il runtime): l'AppImage usa il 3.12
+  # e la wheel di cffi è specifica per versione. requirements.txt (stesse wheel,
+  # stessi hash) fa ricontrollare gli hash a pip con --require-hashes.
+  # Per rigenerare le due liste: vedi «Dipendenze Python» nel README.
+  - name: python3-deps
+    buildsystem: simple
+    build-commands:
+      - pip3 install --no-index --find-links="file://${PWD}" --require-hashes --no-deps
+        --no-cache-dir --prefix=${FLATPAK_DEST} -r requirements.txt
+    sources:
+      - type: file
+        path: requirements.txt
+      - type: file
+        url: https://files.pythonhosted.org/packages/95/95/86342356ff5953b3fb06f7ef7c5bee212d45e770abc7218d451b9148313c/cffi-2.1.1-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
+        sha256: a931079504ecc49efed7744c476a5c343a92fabf66dec2db95edb1b2fdc770e2
+      - type: file
+        url: https://files.pythonhosted.org/packages/d3/69/2c833a049475e0a3444e94c7d0aca0aa51d166374a449b09e92ac98138de/cryptography-50.0.2-cp311-abi3-manylinux_2_34_x86_64.whl
+        sha256: 9dab55f57c74c3cad24c323bacbbd04be4705ba6eb0d92e920b1fc4837ed5079
+      - type: file
+        url: https://files.pythonhosted.org/packages/7f/66/b15ce62552d84bbfcec9a4873ab79d993a1dd4edb922cbfccae192bd5b5f/jaraco.classes-3.4.0-py3-none-any.whl
+        sha256: f662826b6bed8cace05e7ff873ce0f9283b5c924470fe664fff1c2f00f581790
+      - type: file
+        url: https://files.pythonhosted.org/packages/f2/58/bc8954bda5fcda97bd7c19be11b85f91973d67a706ed4a3aec33e7de22db/jaraco_context-6.1.2-py3-none-any.whl
+        sha256: bf8150b79a2d5d91ae48629d8b427a8f7ba0e1097dd6202a9059f29a36379535
+      - type: file
+        url: https://files.pythonhosted.org/packages/02/36/ecc85bc96c273dc8a11273ed4782272975e6338d4a3e9228621175edf0e3/jaraco_functools-4.6.0-py3-none-any.whl
+        sha256: 99e3dc0060c5cbe8fcd1cdb36258e2a65ca40f1566b2033b12abb1bb44dd3c30
+      - type: file
+        url: https://files.pythonhosted.org/packages/b2/a3/e137168c9c44d18eff0376253da9f1e9234d0239e0ee230d2fee6cea8e55/jeepney-0.9.0-py3-none-any.whl
+        sha256: 97e5714520c16fc0a45695e5365a2e11b81ea79bba796e26f9f1d178cb182683
+      - type: file
+        url: https://files.pythonhosted.org/packages/81/db/e655086b7f3a705df045bf0933bdd9c2f79bb3c97bfef1384598bb79a217/keyring-25.7.0-py3-none-any.whl
+        sha256: be4a0b195f149690c166e850609a477c532ddbfbaed96a404d4e43f8d5e2689f
+      - type: file
+        url: https://files.pythonhosted.org/packages/e8/3d/1087453384dbde46a8c7f9356eead2c58be8a7bf156bca40243377c85715/more_itertools-11.1.0-py3-none-any.whl
+        sha256: 4b65538ae22f6fed0ce4874efd317463a7489796a0939fa66824dd542125a192
+      - type: file
+        url: https://files.pythonhosted.org/packages/90/11/0e6f11117525ff0eec40ebac3d313376f102df93ca44ad9e893ee85e4f89/pycparser-3.11-py3-none-any.whl
+        sha256: 51d5a8ba2be0bbe440b99d2112604c95bbbc3c2748a64260186c541e1729cd80
+      - type: file
+        url: https://files.pythonhosted.org/packages/3c/2c/c43c03eaf630435f023f1dc61ec4a4a78951ad5530a62c71cc89bde307b7/pypdf-6.19.0-py3-none-any.whl
+        sha256: 7e5d6e730e7dae87d560a2cee218b852f6498c8be61966f3cd02ead971e48d14
+      - type: file
+        url: https://files.pythonhosted.org/packages/dd/b8/d2d6d731733f51684bbf76bf34dab3b70a9148e8f2cef2bb544fccec681a/qrcode-8.2-py3-none-any.whl
+        sha256: 16e64e0716c14960108e85d853062c9e8bba5ca8252c0b4d0231b9df4060ff4f
+      - type: file
+        url: https://files.pythonhosted.org/packages/b7/46/f5af3402b579fd5e11573ce652019a67074317e18c1935cc0b4ba9b35552/secretstorage-3.5.0-py3-none-any.whl
+        sha256: 0ce65888c0725fcb2c5bc0fdb8e5438eece02c523557ea40ce0703c266248137
+
+  - name: olladesk
+    buildsystem: simple
+
+    build-commands:
+      # 1) Dipendenze terze: modulo python3-deps qui sopra.
+
+      # 2) Pacchetto Python dell'app → /app/share/olladesk/olladesk
+      #    (stessa collocazione dell'AppImage e del .deb; l'app legge __file__).
+      - install -d /app/share/olladesk
+      - cp -r olladesk /app/share/olladesk/olladesk
+      - find /app/share/olladesk -name __pycache__ -type d -prune -exec rm -rf {} +
+
+      # 3) Marcatore di install_method (app_update.py lo legge: ora "deb|arch|appimage|source|pip"
+      #    — va aggiunta la branca "flatpak"; il valore qui deve combaciare).
+      - printf 'flatpak\n' > /app/share/olladesk/olladesk/_packaging
+
+      # 4) Wrapper di avvio /app/bin/olladesk. NON `python -m olladesk`: -m mette la cartella
+      #    di avvio in sys.path[0] (vedi packaging/common/launcher.py). launcher.py fa sys.path[0]=/app/share/olladesk.
+      - install -D -m 0755 packaging/common/launcher.py /app/share/olladesk/launcher.py
+      #    /app parte vuota: la cartella bin va creata.
+      - install -d /app/bin
+      - printf '#!/bin/sh\nexec python3 /app/share/olladesk/launcher.py "$@"\n' > /app/bin/olladesk && chmod 0755 /app/bin/olladesk
+
+      # 5) Integrazione desktop. StartupWMClass nel .desktop = app-id (serve al matching finestra
+      #    sotto Gear Lever/AppImageLauncher; qui in Flatpak è già stabile).
+      - install -D -m 0644 io.github.gradia64.OllaDesk.desktop /app/share/applications/io.github.gradia64.OllaDesk.desktop
+      - install -D -m 0644 olladesk/assets/olladesk.svg /app/share/icons/hicolor/scalable/apps/io.github.gradia64.OllaDesk.svg
+      - install -D -m 0644 io.github.gradia64.OllaDesk.metainfo.xml /app/share/metainfo/io.github.gradia64.OllaDesk.metainfo.xml
+
+      # 6) Bytecode riproducibile (unchecked-hash, come build-appimage.sh): l'immagine è in sola lettura.
+      - python3 -B -E -s -m compileall -q -f --invalidation-mode unchecked-hash -s /app/share/olladesk -p / /app/share/olladesk
+
+    sources:
+      # ⚠️ WIP locale: punta al checkout. path va dal dir del manifest al root del repo (../..).
+      #    In CI/Flathub sostituisci con `type: git` (tag) o `type: archive` (tarball con hash).
+      - type: dir
+        path: ../../
+        # git-ignore: true   # opzionale: esclude .git se presenti
+
+    cleanup:
+      - /include
+      - /lib/pkgconfig
+      - "*.a"
+      - "*.la"
+      - /share/man
+      - /share/gtk-doc
+
+# --- permessi (la parte che Flathub scrutinizza) ---------------------------
+# Principio: solo ciò che il codice usa davvero. I file scelti dall'utente
+# arrivano dai portali (nessun accesso statico alla home), config e cache
+# sono quelle private della sandbox (~/.var/app/<app-id>/).
+finish-args:
+  # ===== GUI =====
+  - --socket=wayland          # sessione Wayland (KDE): socket principale per Qt6.
+  - --socket=fallback-x11     # X11 solo se Wayland manca: con --socket=x11 su Wayland l'app
+                              # vedrebbe il server X (tastiera e finestre degli altri client X).
+  - --share=ipc               # memoria condivisa (MIT-SHM) per X11: senza, Qt su X11 è lento.
+
+  # ===== GPU =====
+  - --device=dri              # /dev/dri: OpenGL/Vulkan usati dal RHI di Qt. L'estensione GL
+                              # dell'host viene scelta in base al driver; non va dichiarata qui.
+
+  # ===== Rete =====
+  - --share=network           # NON è il predefinito: senza, l'app non ha rete. Condivide il
+                              # namespace di rete dell'host →
+                              #   • Ollama su localhost:11434 è raggiungibile (loopback host);
+                              #   • netinfo.lan_urls() vede le interfacce LAN e la companion (bind 0.0.0.0,
+                              #     companion.py:1106) accetta connessioni in entrata dal telefono;
+                              #   • web search (DuckDuckGo/SearXNG/ollama.com) e GitHub (update) escono.
+                              # ⚠️ È il permesso più sensibile: espone i servizi del loopback host.
+                              #   Per OllaDesk è il cuore del prodotto.
+
+  # ===== D-Bus =====
+  # I portali (FileChooser, OpenURI, Settings per il tema chiaro/scuro…) sono sempre
+  # raggiungibili: non servono --talk-name per loro.
+  - --talk-name=org.freedesktop.secrets       # Secret Service (KWallet su Plasma): chiave API
+                                              # Ollama Cloud nel portachiavi (keyring → D-Bus, non
+                                              # il portale). Senza: secrets_store.py degrada già
+                                              # senza errori (chiave in settings.json, 600).
+  - --talk-name=org.kde.StatusNotifierWatcher # icona nella tray (QSystemTrayIcon → SNI). Vale anche
+                                              # su GNOME con l'estensione AppIndicator, che espone
+                                              # lo stesso nome.
+  - --own-name=org.kde.StatusNotifierItem-2-1 # nome con cui Qt registra l'icona:
+                                              # StatusNotifierItem-<pid>-<n>, e nella sandbox il pid
+                                              # è 2. ⚠️ Da verificare al primo avvio: se l'icona
+                                              # compare anche senza, toglierlo.
+  - --talk-name=org.freedesktop.Notifications # avvisi della tray (main_window.py, showMessage).
+  # MAI --talk-name=org.freedesktop.Flatpak: flatpak-spawn --host è un'uscita dalla sandbox.
+  # L'aggiornamento di Ollama via pkexec qui non è possibile; l'app mostra già il comando
+  # da eseguire a mano quando pkexec manca.
+
+  # ===== File =====
+  # Nessun --filesystem. Gli allegati (📎 file e 📎 cartella) passano dal portale FileChooser:
+  # Qt riceve percorsi /run/user/<uid>/doc/… già leggibili, cartelle comprese, ovunque
+  # l'utente li scelga (anche ~/Progetti, che nessun xdg-* coprirebbe).
+  # Trascinamento e incolla dal file manager: il Qt del runtime non gestisce il portale
+  # FileTransfer, lo fa l'app (olladesk/portal.py, chiave application/vnd.portal.filetransfer
+  # → RetrieveFiles). Dolphin e i file manager GTK la mandano; da sorgenti che non la mandano
+  # (terminale…) l'app avvisa di usare 📎. Niente --filesystem=home:ro.
+  # ⚠️ Da verificare al primo avvio: trascinare un file e una cartella da Dolphin.
+  # Dati dell'app: XDG_CONFIG_HOME e XDG_CACHE_HOME della sandbox
+  # (~/.var/app/io.github.gradia64.OllaDesk/{config,cache}), scrivibili senza permessi.
+  # NON usare --filesystem=xdg-config/olladesk o xdg-cache: aprirebbero le cartelle
+  # dell'HOST (~/.config/olladesk dell'installazione nativa, con chat e token della
+  # companion; tutta ~/.cache in scrittura).
+
+# --- pulizia finale (riduce il bundle) -------------------------------------
+# Le .dist-info restano (piccole, utili per il debug delle dipendenze).
+cleanup:
+  - /lib/python*/site-packages/*/tests
+  - /lib/python*/site-packages/*/test
