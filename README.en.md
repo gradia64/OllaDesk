@@ -220,7 +220,7 @@ License: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   suited to how it was installed (.deb, AUR, AppImage, pip or sources). Just a
   notice: no automatic download or install. You can skip a version, check
   manually or disable the check in Settings → Updates.
-- **Settings** (General, Appearance, Web search and Updates pages, chosen from the menu on the left): Ollama server URL, dark/light/**system**
+- **Settings** (General, Appearance, Web search, Updates, Help and About pages, chosen from the menu on the left; F1 opens Help, with the main features and the shortcuts; About has versions, license, links and "Copy system information" for bug reports): Ollama server URL, dark/light/**system**
   theme (follows KDE Plasma, even hot when you change it), font size,
   streaming on/off, send with Enter, timestamps in messages, tray icon, amount
   of context sent to the model, automatic archiving of inactive chats, default
@@ -431,6 +431,7 @@ menu.
 | `Ctrl+M` | Model management (download/removal) |
 | `Ctrl+D` | Web companion (phone and tablet) |
 | `Ctrl+,` | Open settings |
+| `F1` | Help: main features and shortcuts |
 | `Enter` | Send message (configurable) |
 | `Ctrl+Enter` | Send message (always) |
 | `Shift+Enter` | New line |

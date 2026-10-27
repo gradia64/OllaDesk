@@ -1965,6 +1965,38 @@ def test_header_new_chat_archive_and_ollama_badge():
             win.close()
 
 
+def test_about_info_and_help():
+    import getpass
+    from olladesk import __version__
+    from olladesk.widgets import about
+    info = about.system_info("0.40.2")
+    assert info.startswith(f"OllaDesk {__version__} (") and "Ollama 0.40.2" in info
+    assert "Qt " in info and "PySide6 " in info and "Python " in info
+    # niente dati personali in un testo da incollare in una issue pubblica
+    assert str(Path.home()) not in info and getpass.getuser() not in info.split()
+    assert all(url.startswith("https://github.com/gradia64/OllaDesk") for _l, url in about.LINKS)
+    assert about.HELP_SECTIONS and all(t and body for t, body in about.HELP_SECTIONS)
+    assert ("F1", "Questo aiuto") in about.SHORTCUTS
+    assert about.install_label("flatpak") == "Flatpak" and about.install_label("deb") == "pacchetto .deb"
+
+
+def test_f1_opens_help_page():
+    from olladesk.widgets.settings_dialog import SettingsDialog
+    with _isolated_config():
+        win = _make_window()
+        opened = []
+        original = SettingsDialog.exec
+        try:
+            SettingsDialog.exec = lambda dlg: opened.append(dlg.pages.currentWidget() is dlg.help_page)
+            win.open_settings("help")
+            win.open_settings()
+        finally:
+            SettingsDialog.exec = original
+            win._really_quit = True
+            win.close()
+        assert opened == [True, False]
+
+
 def test_settings_dialog_pages():
     # fase 4: menu a sinistra e cinque pagine; «Salva» restituisce le stesse
     # impostazioni di prima, i campi dei provider si mostrano come prima
@@ -1978,8 +2010,13 @@ def test_settings_dialog_pages():
         dlg = SettingsDialog(s, lambda: [], "dark", "0.40.2")
         try:
             assert [dlg.nav.item(i).text() for i in range(dlg.nav.count())] == [
-                "Generale", "Aspetto", "Ricerca web", "Parametri modelli", "Aggiornamenti"]
-            assert dlg.pages.count() == 5 and dlg.pages.currentIndex() == 0
+                "Generale", "Aspetto", "Ricerca web", "Parametri modelli", "Aggiornamenti",
+                "Aiuto", "Info"]
+            assert dlg.pages.count() == 7 and dlg.pages.currentIndex() == 0
+            dlg.show_page(dlg.help_page)
+            assert dlg.nav.currentRow() == 5
+            dlg.show_page(dlg.info_page)
+            assert dlg.nav.currentRow() == 6
             got = dlg.collect_settings()
             assert {k: got[k] for k in s if k in got and got[k] != s[k]} == {}
             dlg.show_page(dlg.params_tab)

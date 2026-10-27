@@ -8,14 +8,17 @@ e avviso, vedi app_update.py) e il riquadro di aggiornamento di Ollama
 from __future__ import annotations
 
 import html
+from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtGui import QGuiApplication, QIcon
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialog,
     QFormLayout,
     QFrame,
+    QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -35,6 +38,7 @@ from .. import __version__, app_update, config, icons, secrets_store, theme
 from .. import i18n
 from ..i18n import _
 from ..ollama_client import shutdown_workers
+from . import about
 from .model_params import ModelParamsTab
 from .ollama_update import OllamaUpdateBox
 from .steppers import IntStepper
@@ -92,6 +96,8 @@ class SettingsDialog(QDialog):
             ("globe", _("Ricerca web"), self._build_web_page(settings)),
             ("sliders-horizontal", _("Parametri modelli"), self._titled(_("Parametri modelli"), self.params_tab)),
             ("circle-arrow-up", _("Aggiornamenti"), self._build_updates_page(settings)),
+            ("circle-question-mark", _("Aiuto"), self._build_help_page()),
+            ("info", _("Info"), self._build_info_page()),
         ):
             item = QListWidgetItem(title)
             ic = icons.icon(icon_name, theme.palette_for(theme_name)["text"], 16)
@@ -259,13 +265,6 @@ class SettingsDialog(QDialog):
         self.close_tray_chk.setEnabled(self.tray_chk.isChecked())
 
         lay.addLayout(form)
-        info = QLabel(
-            _('Impostazioni, parametri e conversazioni sono salvati in:\n{path}').format(path=config.config_dir()),
-            w,
-        )
-        info.setObjectName("metaLabel")
-        info.setWordWrap(True)
-        lay.addWidget(info)
         lay.addStretch(1)
         return page
 
@@ -389,6 +388,105 @@ class SettingsDialog(QDialog):
         self._update_provider_fields()
         return page
 
+    def _build_info_page(self) -> QWidget:
+        page, lay = self._page(_("Info"), _("Versioni, licenza, collegamenti e informazioni "
+                                            "da allegare a una segnalazione."))
+        w = lay.parentWidget()
+        self.info_page = page
+        method = app_update.install_method()
+
+        head = QHBoxLayout()
+        head.setSpacing(14)
+        logo = QLabel(w)
+        app_icon = QIcon(str(Path(__file__).resolve().parent.parent / "assets" / "olladesk.svg"))
+        if not app_icon.isNull():
+            logo.setPixmap(app_icon.pixmap(56, 56))
+        head.addWidget(logo, 0, Qt.AlignmentFlag.AlignTop)
+        name = QLabel(
+            f"<b style='font-size: 16px'>OllaDesk {html.escape(__version__)}</b><br>"
+            + html.escape(_("Client desktop per Ollama, i modelli di linguaggio in locale")), w)
+        name.setWordWrap(True)
+        head.addWidget(name, 1)
+        lay.addLayout(head)
+
+        form = self._form()
+        form.addRow(_("Installata come:"), QLabel(about.install_label(method), w))
+        form.addRow(_("Server Ollama:"), QLabel(
+            self._installed_version if self._installed_version not in ("", "?") else _("non raggiungibile"), w))
+        form.addRow(_("Componenti:"), QLabel(about.component_versions(), w))
+        form.addRow(_("Maintainer:"), QLabel(html.escape(about.MAINTAINER), w))
+        form.addRow(_("Licenza:"), QLabel(about.LICENSE_NAME, w))
+        key = QLabel(about.RELEASE_KEY, w)
+        key.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        key.setToolTip(_("Impronta della chiave che firma tag e allegati delle release "
+                         "(README, «Verifica delle firme»)"))
+        form.addRow(_("Chiave di firma:"), key)
+        form.addRow(_("Icone:"), QLabel("Lucide (ISC)", w))
+        cfg = QLabel(str(config.config_dir()), w)
+        cfg.setWordWrap(True)
+        cfg.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        cfg.setToolTip(_("Impostazioni, parametri e conversazioni sono salvati qui"))
+        form.addRow(_("Configurazione:"), cfg)
+        lay.addLayout(form)
+
+        links = QLabel(w)
+        links.setTextFormat(Qt.TextFormat.RichText)
+        links.setOpenExternalLinks(True)
+        links.setWordWrap(True)
+        links.setText("<br>".join(
+            f'<a href="{html.escape(url, quote=True)}">{html.escape(_(label))}</a>'
+            for label, url in about.LINKS))
+        lay.addWidget(links)
+
+        self.copy_info_btn = QPushButton(_("Copia informazioni di sistema"), w)
+        self.copy_info_btn.setToolTip(_("Versioni di OllaDesk, Qt, Python e Ollama, sistema e desktop: "
+                                        "da incollare in una segnalazione. Niente dati personali."))
+        self.copy_info_btn.clicked.connect(self._copy_system_info)
+        row = QHBoxLayout()
+        row.addWidget(self.copy_info_btn)
+        row.addStretch(1)
+        lay.addLayout(row)
+        lay.addStretch(1)
+        return page
+
+    def _copy_system_info(self) -> None:
+        QGuiApplication.clipboard().setText(about.system_info(
+            self._installed_version if self._installed_version not in ("", "?") else ""))
+        self.copy_info_btn.setText(_("Copiato ✓"))
+        QTimer.singleShot(1500, lambda: self.copy_info_btn.setText(_("Copia informazioni di sistema")))
+
+    def _build_help_page(self) -> QWidget:
+        page, lay = self._page(_("Aiuto"), _("Le funzioni principali di OllaDesk. La guida completa "
+                                             "è nel README su GitHub."))
+        w = lay.parentWidget()
+        self.help_page = page
+        for title, text in about.HELP_SECTIONS:
+            head = QLabel(_(title), w)
+            head.setObjectName("helpTitle")
+            lay.addWidget(head)
+            body = QLabel(_(text), w)
+            body.setWordWrap(True)
+            body.setTextFormat(Qt.TextFormat.PlainText)
+            body.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+            lay.addWidget(body)
+        head = QLabel(_("Scorciatoie da tastiera"), w)
+        head.setObjectName("helpTitle")
+        lay.addWidget(head)
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(18)
+        grid.setVerticalSpacing(4)
+        for i, (keys, desc) in enumerate(about.SHORTCUTS):
+            k = QLabel(f"<b>{html.escape(_(keys))}</b>", w)
+            grid.addWidget(k, i, 0)
+            grid.addWidget(QLabel(_(desc), w), i, 1)
+        grid.setColumnStretch(1, 1)
+        lay.addLayout(grid)
+        readme = QLabel(f'<a href="{about.REPO_URL}#readme">{html.escape(_("Guida completa (README)"))}</a>', w)
+        readme.setOpenExternalLinks(True)
+        lay.addWidget(readme)
+        lay.addStretch(1)
+        return page
+
     def _build_updates_page(self, s: dict) -> QWidget:
         page, lay = self._page(_("Aggiornamenti"), _("Nuove versioni di OllaDesk e di Ollama."))
         w = lay.parentWidget()
@@ -460,11 +558,7 @@ class SettingsDialog(QDialog):
         lay.setSpacing(8)
 
         self._install_method = app_update.install_method()
-        method_label = {
-            "deb": _("pacchetto .deb"), "arch": _("pacchetto AUR"), "appimage": "AppImage",
-            "flatpak": "Flatpak",
-            "source": _("sorgenti (git)"), "pip": _("pacchetto Python"),
-        }[self._install_method]
+        method_label = about.install_label(self._install_method)
         row = QHBoxLayout()
         row.addWidget(QLabel(_('Versione in uso: <b>{version}</b> ({method_label})').format(version=__version__, method_label=method_label), box))
         row.addStretch(1)

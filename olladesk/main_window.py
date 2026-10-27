@@ -285,6 +285,7 @@ class MainWindow(QMainWindow):
             ("Ctrl+B", self._toggle_sidebar),
             ("Ctrl+K", self._focus_chat_search),
             ("Ctrl+,", self.open_settings),
+            ("F1", lambda: self.open_settings("help")),
             ("Ctrl+M", self._open_models),
             ("Ctrl+D", self._open_companion),
         ):
@@ -949,7 +950,8 @@ class MainWindow(QMainWindow):
 
     # ---------------------------------------------------------------- impostazioni
 
-    def open_settings(self) -> None:
+    def open_settings(self, page: str | None = None) -> None:
+        """Impostazioni; `page` = "help" apre direttamente l'Aiuto (F1)."""
         if self._busy():
             self.chat_area.add_system_note(
                 _("Attendi la fine della risposta (o premi ■ per interrompere) prima di aprire le impostazioni.")
@@ -961,6 +963,8 @@ class MainWindow(QMainWindow):
         dlg.applied.connect(self._apply_settings)
         # «Verifica ora» nelle impostazioni: l'esito aggiorna anche l'avviso
         dlg.appReleaseChecked.connect(self._on_app_release)
+        if page == "help":
+            dlg.show_page(dlg.help_page)
         dlg.exec()
         dlg.deleteLater()
 

@@ -76,7 +76,7 @@ Lizenz: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   Als Abfrage wird nur die erste Zeile der Nachricht verwendet (maximal 200 Zeichen), nicht der gesamte Text. Die Anzahl der Ergebnisse ist konfigurierbar. Die Modelle rufen das Tool nicht selbst auf: die Ergebnisse werden von der GUI in den Prompt injiziert (e2e verifiziert).
 - **Ollama-Aktualisierungen** (beim Start höchstens einmal am Tag und in Einstellungen → Aktualisierungen; eine neue Version erscheint als «⬆ Version» an der Statusanzeige oben rechts, ein Klick darauf öffnet das Aktualisierungsmenü): Vergleich der Serverversion mit dem letzten Release auf GitHub, mit **Aktualisierung per Klick** über das offizielle Skript (ausgeführt mit `pkexec`, also mit dem Administratorpasswort von KDE).
 - **OllaDesk-Aktualisierungen**: beim Start, höchstens einmal am Tag, prüft die App auf GitHub, ob eine neue Version erschienen ist, und zeigt in dem Fall einen Hinweis in der oberen Leiste mit Anweisungen, die zur Installationsart passen (.deb, AUR, AppImage, pip oder Quellen). Nur ein Hinweis: kein automatischer Download und keine Installation. Eine Version kann übersprungen, manuell geprüft oder die Prüfung in Einstellungen → Aktualisierungen deaktiviert werden.
-- **Einstellungen** (Seiten Allgemein, Erscheinungsbild, Websuche und Aktualisierungen, im Menü links): URL des Ollama-Servers, dunkles/helles/**System**-Thema (folgt KDE Plasma, auch live beim Wechsel), Schriftgröße, Streaming an/aus, Senden mit Enter, Uhrzeit in Nachrichten, Tray-Icon, Menge des Kontexts, der an das Modell gesendet wird, automatische Archivierung inaktiver Chats, Standard-Systemprompt, Ergebnisse der Websuche.
+- **Einstellungen** (Seiten Allgemein, Erscheinungsbild, Websuche, Aktualisierungen, Hilfe und Info, im Menü links; F1 öffnet die Hilfe mit den wichtigsten Funktionen und Tastenkürzeln; Info enthält Versionen, Lizenz, Links und «Systeminformationen kopieren» für Fehlermeldungen): URL des Ollama-Servers, dunkles/helles/**System**-Thema (folgt KDE Plasma, auch live beim Wechsel), Schriftgröße, Streaming an/aus, Senden mit Enter, Uhrzeit in Nachrichten, Tray-Icon, Menge des Kontexts, der an das Modell gesendet wird, automatische Archivierung inaktiver Chats, Standard-Systemprompt, Ergebnisse der Websuche.
 - **Einstellungen → «Modellparameter»**: separates Parameterprofil für jedes Modell (Temperatur, top_k, top_p, min_p, num_ctx, num_predict, Wiederholungs-/Präsenz-/Frequenz-Strafe, Seed, Stop-Sequenzen, mirostat, num_gpu, num_thread…). Nur die angehakten Parameter werden an Ollama gesendet: die anderen bleiben bei den Server-Standards. Jedes Profil kann **gespeichert** und mit einem Klick **auf die Standards zurückgesetzt** werden.
 - Verbindungsstatus immer sichtbar (grün/rot) mit automatischer Neuprüfung alle 30 s.
 
@@ -228,6 +228,7 @@ Bis 0.3.3 hießen die Dateien `olladesk.desktop` und `olladesk.svg`: hatte man s
 | `Ctrl+M` | Modellverwaltung (Download/Entfernung) |
 | `Ctrl+D` | Web-Companion (Telefon und Tablet) |
 | `Ctrl+,` | Einstellungen öffnen |
+| `F1` | Hilfe: wichtigste Funktionen und Tastenkürzel |
 | `Enter` | Nachricht senden (aktivierbar) |
 | `Ctrl+Enter` | Nachricht senden (immer) |
 | `Shift+Enter` | Zeilenumbruch |

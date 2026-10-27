@@ -157,6 +157,7 @@ def build_qss(theme_name: str) -> str:
     QListWidget#settingsNav::item {{ padding: 8px 10px; margin: 1px 6px; }}
     QListWidget#settingsNav::item:selected {{ background: {hover}; color: {text}; font-weight: 600; }}
     QLabel#pageTitle {{ font-size: 18px; font-weight: 700; }}
+    QLabel#helpTitle {{ font-weight: 700; margin-top: 8px; }}
     /* intestazioni dei gruppi per data: niente evidenziazione */
     QListWidget::item:disabled {{ background: transparent; color: {dim}; padding: 10px 8px 2px 8px; }}
 

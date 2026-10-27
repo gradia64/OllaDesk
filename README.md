@@ -234,7 +234,7 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   stata installata (.deb, AUR, AppImage, pip o sorgenti). Solo un avviso: nessun
   download né installazione automatica. Si può saltare una versione, verificare
   a mano o disattivare il controllo in Impostazioni → Aggiornamenti.
-- **Impostazioni** (pagine Generale, Aspetto, Ricerca web e Aggiornamenti, scelte dal menu a sinistra): URL del server Ollama, tema
+- **Impostazioni** (pagine Generale, Aspetto, Ricerca web, Aggiornamenti, Aiuto e Info, scelte dal menu a sinistra; F1 apre l'Aiuto, con le funzioni principali e le scorciatoie; Info ha versioni, licenza, collegamenti e «Copia informazioni di sistema» per le segnalazioni): URL del server Ollama, tema
   scuro/chiaro/**sistema** (segue KDE Plasma, anche a caldo quando lo cambi),
   dimensione del carattere, streaming on/off, invio con Invio, orario nei
   messaggi, icona nella tray, quantità di contesto
@@ -445,6 +445,7 @@ li avevi copiati a mano, cancellali per non avere OllaDesk due volte nel menu.
 | `Ctrl+M`    | Gestione modelli (download/rimozione) |
 | `Ctrl+D`    | Companion web (telefono e tablet) |
 | `Ctrl+,`    | Apri le impostazioni            |
+| `F1`        | Aiuto: funzioni principali e scorciatoie |
 | `Invio`     | Invia il messaggio (attivabile) |
 | `Ctrl+Invio` | Invia il messaggio (sempre)    |
 | `Shift+Invio` | A capo                        |
