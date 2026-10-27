@@ -59,8 +59,21 @@ DEFAULT_SETTINGS: dict[str, Any] = {
 }
 
 
+def _is_real_config(base: Path) -> bool:
+    """True se `base` è la cartella di configurazione vera dell'utente."""
+    try:
+        return base.expanduser().resolve() == (Path.home() / ".config").resolve()
+    except OSError:
+        return False
+
+
 def config_dir() -> Path:
     base = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
+    if os.environ.get("OLLADESK_TEST") and _is_real_config(Path(base)):
+        # i test impostano OLLADESK_TEST e una configurazione temporanea: se
+        # qualcosa arriva qui con quella vera, il test fallisce invece di
+        # sovrascrivere le impostazioni di chi lo lancia
+        raise RuntimeError(f"test senza configurazione isolata: {base}")
     d = Path(base) / APP_NAME
     if not d.exists():
         legacy = Path(base) / LEGACY_APP_NAME

@@ -11,9 +11,14 @@ Gli altri script hanno il loro runner e si eseguono con python3, come in CI:
 I gui_*.py e gli altri script non seguono i nomi test_*/_test.
 """
 import os
+import tempfile
 
 # i test confrontano i testi in italiano, la lingua sorgente dell'interfaccia
 os.environ["OLLADESK_LANG"] = "it"
+# mai la configurazione vera di chi lancia i test: cartella temporanea per
+# tutta la sessione, e config.py rifiuta ~/.config se qualcosa sfugge
+os.environ["XDG_CONFIG_HOME"] = tempfile.mkdtemp(prefix="olladesk_pytest_config_")
+os.environ["OLLADESK_TEST"] = "1"
 
 collect_ignore = [
     "release_tools_test.py",

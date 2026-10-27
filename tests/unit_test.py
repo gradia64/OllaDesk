@@ -12,6 +12,13 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # i test confrontano i testi in italiano (la lingua sorgente), qualunque
 # sia la lingua del sistema
 os.environ["OLLADESK_LANG"] = "it"
+# configurazione isolata per TUTTO il modulo, non solo dentro _isolated_config:
+# un timer o un thread di una finestra di test che salva dopo l'uscita dal
+# blocco isolato scriveva le impostazioni predefinite nella configurazione
+# vera di chi lancia i test (con pytest XDG_CONFIG_HOME di solito non c'è)
+os.environ["XDG_CONFIG_HOME"] = tempfile.mkdtemp(prefix="olladesk_unit_config_")
+# e se qualcosa sfugge lo stesso, config.py rifiuta ~/.config (vedi config_dir)
+os.environ["OLLADESK_TEST"] = "1"
 
 from olladesk.context import build_api_content, classify, extract_text
 from olladesk.md import md_to_html
@@ -552,6 +559,30 @@ def test_settings_roundtrip_and_permissions():
             os.environ.pop("XDG_CONFIG_HOME", None)
         else:
             os.environ["XDG_CONFIG_HOME"] = old
+
+
+def test_tests_never_touch_real_config():
+    # un timer di una finestra di test (_explain_share_removed) scattava in un
+    # test successivo, fuori da _isolated_config, e scriveva le impostazioni
+    # della finestra nella ~/.config/olladesk di chi lanciava i test (il
+    # «Server Ollama» sulla porta 11435 del 19 ottobre, i ripristini ai
+    # predefiniti del 25 e 27 ottobre)
+    from olladesk import config
+    real = str(Path.home() / ".config")
+    assert os.environ.get("OLLADESK_TEST") == "1"
+    assert os.environ["XDG_CONFIG_HOME"] != real
+    old = os.environ["XDG_CONFIG_HOME"]
+    try:
+        for value in (real, real + "/", ""):
+            os.environ["XDG_CONFIG_HOME"] = value
+            try:
+                config.config_dir()
+            except RuntimeError as e:
+                assert "configurazione isolata" in str(e)
+            else:
+                raise AssertionError(f"config_dir accettato con XDG_CONFIG_HOME={value!r}")
+    finally:
+        os.environ["XDG_CONFIG_HOME"] = old
 
 
 def test_unreadable_settings_kept_as_backup():
