@@ -97,7 +97,7 @@ dlg.show()
 wait_ms(400)
 dlg.grab().save(f"{SHOTS}/5_settings_gui.png")
 
-dlg.tabs.setCurrentWidget(dlg.params_tab)
+dlg.show_page(dlg.params_tab)
 wait_ms(400)
 dlg.grab().save(f"{SHOTS}/6_settings_params.png")
 

@@ -1,10 +1,9 @@
-"""Finestra impostazioni con due schede: «Interfaccia» e «Parametri modelli».
+"""Finestra impostazioni: un menu a sinistra e cinque pagine (Generale,
+Aspetto, Ricerca web, Parametri modelli, Aggiornamenti).
 
-La scheda interfaccia include anche «Aggiornamenti OllaDesk» (solo controllo
-e avviso, vedi app_update.py) e la sezione «Aggiornamenti Ollama»:
-controllo dell'ultima release su GitHub e aggiornamento tramite lo script
-ufficiale, scaricato in memoria e passato a sh via stdin (pkexec chiede la
-password di amministratore).
+La pagina «Aggiornamenti» contiene «Aggiornamenti OllaDesk» (solo controllo
+e avviso, vedi app_update.py) e il riquadro di aggiornamento di Ollama
+(ollama_update.py). «Salva» salva tutte le pagine insieme.
 """
 from __future__ import annotations
 
@@ -21,16 +20,18 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QListWidget,
+    QListWidgetItem,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
-    QTabWidget,
+    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
 
-from .. import __version__, app_update, config, secrets_store
+from .. import __version__, app_update, config, icons, secrets_store, theme
 from .. import i18n
 from ..i18n import _
 from ..ollama_client import shutdown_workers
@@ -58,7 +59,7 @@ class SettingsDialog(QDialog):
         self.setWindowTitle(_("Impostazioni — OllaDesk"))
         # la scroll area della scheda interfaccia rende sicure anche le
         # dimensioni piccole: le schermate scorrono invece di sovrapporsi
-        self.setMinimumSize(720, 480)
+        self.setMinimumSize(820, 540)
         self._theme_name = theme_name
         self._installed_version = version
         self._app_check_worker: app_update.AppUpdateCheckWorker | None = None
@@ -69,19 +70,41 @@ class SettingsDialog(QDialog):
         lay = QVBoxLayout(self)
         lay.setContentsMargins(12, 10, 12, 10)
 
-        self.tabs = QTabWidget(self)
-        lay.addWidget(self.tabs, 1)
+        # menu a sinistra e pagine a destra (prima: due schede, una lunghissima)
+        body = QHBoxLayout()
+        body.setSpacing(12)
+        self.nav = QListWidget(self)
+        self.nav.setObjectName("settingsNav")
+        self.nav.setFixedWidth(200)
+        self.nav.setFrameShape(QFrame.Shape.NoFrame)
+        self.pages = QStackedWidget(self)
+        body.addWidget(self.nav)
+        body.addWidget(self.pages, 1)
+        lay.addLayout(body, 1)
 
-        self.tabs.addTab(self._build_gui_tab(settings), _("🖥  Interfaccia"))
         self.params_tab = ModelParamsTab(models_provider, self)
-        self.tabs.addTab(self.params_tab, _("⚙  Parametri modelli"))
+        for icon_name, title, widget in (
+            ("settings", _("Generale"), self._build_general_page(settings)),
+            ("palette", _("Aspetto"), self._build_look_page(settings)),
+            ("globe", _("Ricerca web"), self._build_web_page(settings)),
+            ("sliders-horizontal", _("Parametri modelli"), self._titled(_("Parametri modelli"), self.params_tab)),
+            ("circle-arrow-up", _("Aggiornamenti"), self._build_updates_page(settings)),
+        ):
+            item = QListWidgetItem(title)
+            ic = icons.icon(icon_name, theme.palette_for(theme_name)["text"], 16)
+            if ic is not None:
+                item.setIcon(ic)
+            self.nav.addItem(item)
+            self.pages.addWidget(widget)
+        self.nav.currentRowChanged.connect(self.pages.setCurrentIndex)
+        self.nav.setCurrentRow(0)
 
         btns = QHBoxLayout()
         btns.addStretch(1)
         cancel = QPushButton(_("Annulla"), self)
         cancel.clicked.connect(self.reject)
         btns.addWidget(cancel)
-        save = QPushButton(_("💾  Salva"), self)
+        save = QPushButton(_("Salva"), self)
         save.setObjectName("primaryBtn")
         save.clicked.connect(self._on_save)
         btns.addWidget(save)
@@ -89,42 +112,72 @@ class SettingsDialog(QDialog):
 
     # ---------------------------------------------------- scheda interfaccia
 
-    def _build_gui_tab(self, s: dict) -> QWidget:
-        # tutto il contenuto viaggia in una scroll area: se la finestra è più
-        # piccola dei contenuti compare la barra di scorrimento invece delle
-        # sovrapposizioni
-        page = QWidget()
-        outer = QVBoxLayout(page)
-        outer.setContentsMargins(0, 0, 0, 0)
-        outer.setSpacing(0)
-        scroll = QScrollArea(page)
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.Shape.NoFrame)
-        outer.addWidget(scroll)
+    def show_page(self, widget: QWidget) -> None:
+        """Apre la pagina che contiene `widget` (una pagina o un suo figlio)."""
+        for i in range(self.pages.count()):
+            page = self.pages.widget(i)
+            if page is widget or page.isAncestorOf(widget):
+                self.nav.setCurrentRow(i)
+                return
 
+    # ----------------------------------------------------------- pagine
+
+    def _page(self, title: str, description: str) -> tuple[QWidget, QVBoxLayout]:
+        """Pagina con titolo e descrizione, in una scroll area: con la finestra
+        più piccola dei contenuti compare la barra invece delle sovrapposizioni."""
+        page = QScrollArea()
+        page.setWidgetResizable(True)
+        page.setFrameShape(QFrame.Shape.NoFrame)
         w = QWidget()
-        scroll.setWidget(w)
+        page.setWidget(w)
         lay = QVBoxLayout(w)
-        lay.setContentsMargins(16, 12, 16, 12)
+        lay.setContentsMargins(20, 14, 20, 14)
         lay.setSpacing(12)
+        head = QLabel(title, w)
+        head.setObjectName("pageTitle")
+        lay.addWidget(head)
+        desc = QLabel(description, w)
+        desc.setObjectName("metaLabel")
+        desc.setWordWrap(True)
+        lay.addWidget(desc)
+        lay.addSpacing(4)
+        return page, lay
 
+    @staticmethod
+    def _titled(title: str, content: QWidget) -> QWidget:
+        """Titolo di pagina sopra un widget che scorre già da solo (i parametri)."""
+        page = QWidget()
+        lay = QVBoxLayout(page)
+        lay.setContentsMargins(20, 14, 20, 0)
+        lay.setSpacing(8)
+        head = QLabel(title, page)
+        head.setObjectName("pageTitle")
+        lay.addWidget(head)
+        lay.addWidget(content, 1)
+        return page
+
+    @staticmethod
+    def _form() -> QFormLayout:
         form = QFormLayout()
         form.setSpacing(10)
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
-        self._gui_form = form
+        return form
 
+    @staticmethod
+    def _compact(stepper: IntStepper) -> IntStepper:
+        # i campi numerici non si allargano a tutta la finestra
+        stepper.setMaximumWidth(240)
+        return stepper
+
+    def _build_general_page(self, s: dict) -> QWidget:
+        page, lay = self._page(_("Generale"), _("Server Ollama, lingua, invio dei messaggi e "
+                                                 "comportamento della finestra."))
+        w = lay.parentWidget()
+        form = self._form()
         self.host_edit = QLineEdit(s.get("host", ""), w)
         self.host_edit.setPlaceholderText("http://localhost:11434")
         self.host_edit.setToolTip(_("URL del server Ollama (API locale)"))
         form.addRow(_("Server Ollama:"), self.host_edit)
-
-        self.theme_combo = QComboBox(w)
-        self.theme_combo.addItem(_("🖥  Sistema (come KDE Plasma)"), "system")
-        self.theme_combo.addItem(_("🌙  Scuro"), "dark")
-        self.theme_combo.addItem(_("☀  Chiaro"), "light")
-        idx = self.theme_combo.findData(s.get("theme", "dark"))
-        self.theme_combo.setCurrentIndex(max(0, idx))
-        form.addRow(_("Tema:"), self.theme_combo)
 
         self.lang_combo = QComboBox(w)
         self.lang_combo.addItem(_("Automatica (lingua del sistema)"), "auto")
@@ -136,23 +189,45 @@ class SettingsDialog(QDialog):
         self.lang_combo.setToolTip(_("La nuova lingua vale dal prossimo avvio di OllaDesk"))
         form.addRow(_("Lingua:"), self.lang_combo)
 
-        self.font_spin = IntStepper(w)
-        self.font_spin.setRange(8, 16)
-        self.font_spin.setValue(int(s.get("font_size", 10)))
-        self.font_spin.setSuffix(" pt")
-        form.addRow(_("Dimensione carattere:"), self.font_spin)
+        self.enter_chk = QCheckBox(_("Invia il messaggio con il tasto Invio"), w)
+        self.enter_chk.setChecked(bool(s.get("send_on_enter", True)))
+        form.addRow(_("Invio rapido:"), self.enter_chk)
 
         self.stream_chk = QCheckBox(_("Mostra la risposta token per token"), w)
         self.stream_chk.setChecked(bool(s.get("stream", True)))
         form.addRow(_("Streaming:"), self.stream_chk)
 
-        self.enter_chk = QCheckBox(_("Invia il messaggio con il tasto Invio"), w)
-        self.enter_chk.setChecked(bool(s.get("send_on_enter", True)))
-        form.addRow(_("Invio rapido:"), self.enter_chk)
+        self.hist_spin = IntStepper(w)
+        self.hist_spin.setRange(0, 200)
+        self.hist_spin.setValue(int(s.get("history_limit", 20)))
+        self.hist_spin.setSuffix(_(" messaggi"))
+        self.hist_spin.setToolTip(_("Quanti messaggi precedenti vengono inviati al modello come contesto"))
+        form.addRow(_("Contesto inviato al modello:"), self.hist_spin)
 
-        self.ts_chk = QCheckBox(_("Mostra l'orario accanto ai messaggi"), w)
-        self.ts_chk.setChecked(bool(s.get("show_timestamps", False)))
-        form.addRow(_("Orario:"), self.ts_chk)
+        self._compact(self.hist_spin)
+        self.archive_spin = IntStepper(w)
+        self.archive_spin.setRange(0, 3650)
+        try:
+            self.archive_spin.setValue(int(s.get("archive_after_days") or 0))
+        except (TypeError, ValueError):
+            self.archive_spin.setValue(0)
+        self.archive_spin.setSuffix(_(" giorni"))
+        self.archive_spin.setSpecialValueText(_("mai"))
+        self.archive_spin.setToolTip(
+            _("Le conversazioni senza messaggi da questo numero di giorni vanno\n"
+            "nell'archivio (in fondo alla colonna di sinistra), all'avvio.\n"
+            "Non vengono eliminate. «mai»: si archivia solo a mano (tasto destro).")
+        )
+        form.addRow(_("Archivia le chat inattive dopo:"), self.archive_spin)
+
+        self._compact(self.archive_spin)
+        self.sys_prompt = QPlainTextEdit(s.get("system_prompt", ""), w)
+        self.sys_prompt.setPlaceholderText(_("(vuoto = nessun prompt di sistema)"))
+        self.sys_prompt.setFixedHeight(64)
+        self.sys_prompt.setToolTip(
+            _("Prompt di sistema inviato a Ollama con ogni richiesta (vale per tutte le conversazioni)")
+        )
+        form.addRow(_("Prompt di sistema:"), self.sys_prompt)
 
         self.tray_chk = QCheckBox(
             _("Mostra l'icona di OllaDesk nell'area di notifica (tray)"), w
@@ -177,28 +252,50 @@ class SettingsDialog(QDialog):
         self.tray_chk.toggled.connect(self.close_tray_chk.setEnabled)
         self.close_tray_chk.setEnabled(self.tray_chk.isChecked())
 
-        self.hist_spin = IntStepper(w)
-        self.hist_spin.setRange(0, 200)
-        self.hist_spin.setValue(int(s.get("history_limit", 20)))
-        self.hist_spin.setSuffix(_(" messaggi"))
-        self.hist_spin.setToolTip(_("Quanti messaggi precedenti vengono inviati al modello come contesto"))
-        form.addRow(_("Contesto inviato al modello:"), self.hist_spin)
-
-        self.archive_spin = IntStepper(w)
-        self.archive_spin.setRange(0, 3650)
-        try:
-            self.archive_spin.setValue(int(s.get("archive_after_days") or 0))
-        except (TypeError, ValueError):
-            self.archive_spin.setValue(0)
-        self.archive_spin.setSuffix(_(" giorni"))
-        self.archive_spin.setSpecialValueText(_("mai"))
-        self.archive_spin.setToolTip(
-            _("Le conversazioni senza messaggi da questo numero di giorni vanno\n"
-            "nell'archivio (in fondo alla colonna di sinistra), all'avvio.\n"
-            "Non vengono eliminate. «mai»: si archivia solo a mano (tasto destro).")
+        lay.addLayout(form)
+        info = QLabel(
+            _('Impostazioni, parametri e conversazioni sono salvati in:\n{path}').format(path=config.config_dir()),
+            w,
         )
-        form.addRow(_("Archivia le chat inattive dopo:"), self.archive_spin)
+        info.setObjectName("metaLabel")
+        info.setWordWrap(True)
+        lay.addWidget(info)
+        lay.addStretch(1)
+        return page
 
+    def _build_look_page(self, s: dict) -> QWidget:
+        page, lay = self._page(_("Aspetto"), _("Tema, dimensione del carattere e orario dei messaggi."))
+        w = lay.parentWidget()
+        form = self._form()
+        self.theme_combo = QComboBox(w)
+        self.theme_combo.addItem(_("Sistema (come KDE Plasma)"), "system")
+        self.theme_combo.addItem(_("Scuro"), "dark")
+        self.theme_combo.addItem(_("Chiaro"), "light")
+        idx = self.theme_combo.findData(s.get("theme", "dark"))
+        self.theme_combo.setCurrentIndex(max(0, idx))
+        form.addRow(_("Tema:"), self.theme_combo)
+
+        self.font_spin = IntStepper(w)
+        self.font_spin.setRange(8, 16)
+        self.font_spin.setValue(int(s.get("font_size", 10)))
+        self.font_spin.setSuffix(" pt")
+        form.addRow(_("Dimensione carattere:"), self.font_spin)
+
+        self._compact(self.font_spin)
+        self.ts_chk = QCheckBox(_("Mostra l'orario accanto ai messaggi"), w)
+        self.ts_chk.setChecked(bool(s.get("show_timestamps", False)))
+        form.addRow(_("Orario:"), self.ts_chk)
+
+        lay.addLayout(form)
+        lay.addStretch(1)
+        return page
+
+    def _build_web_page(self, s: dict) -> QWidget:
+        page, lay = self._page(_("Ricerca web"), _("Servizio usato quando la ricerca web è attiva "
+                                                    "nell'input, riserva e numero di risultati."))
+        w = lay.parentWidget()
+        form = self._form()
+        self._web_form = form
         self.web_spin = IntStepper(w)
         self.web_spin.setRange(3, 10)
         self.web_spin.setValue(int(s.get("web_results", 5)))
@@ -280,27 +377,15 @@ class SettingsDialog(QDialog):
         )
         form.addRow(_("SearXNG — URL:"), self.searxng_edit)
 
-        self.sys_prompt = QPlainTextEdit(s.get("system_prompt", ""), w)
-        self.sys_prompt.setPlaceholderText(_("(vuoto = nessun prompt di sistema)"))
-        self.sys_prompt.setFixedHeight(64)
-        self.sys_prompt.setToolTip(
-            _("Prompt di sistema inviato a Ollama con ogni richiesta (vale per tutte le conversazioni)")
-        )
-        form.addRow(_("Prompt di sistema:"), self.sys_prompt)
-
+        self._compact(self.web_spin)
         lay.addLayout(form)
-
-
-        info = QLabel(
-            _('Impostazioni, parametri e conversazioni sono salvati in:\n{path}').format(path=config.config_dir()),
-            w,
-        )
-        info.setObjectName("metaLabel")
-        info.setWordWrap(True)
-        lay.addWidget(info)
         lay.addStretch(1)
-
         self._update_provider_fields()
+        return page
+
+    def _build_updates_page(self, s: dict) -> QWidget:
+        page, lay = self._page(_("Aggiornamenti"), _("Nuove versioni di OllaDesk e di Ollama."))
+        w = lay.parentWidget()
         lay.addWidget(self._build_app_update_group(w, s))
         self.ollama_update = OllamaUpdateBox(lambda: self.host_edit.text().strip(),
                                              self._installed_version, w)
@@ -314,6 +399,7 @@ class SettingsDialog(QDialog):
         )
         self.ollama_update.layout().insertWidget(0, self.ollama_update_chk)
         lay.addWidget(self.ollama_update)
+        lay.addStretch(1)
         return page
 
     def _sync_fallback_choices(self) -> None:
@@ -342,7 +428,7 @@ class SettingsDialog(QDialog):
         fallback = getattr(self, "web_fallback_combo", None)
         if fallback is not None:
             used.add(fallback.currentData())
-        form = getattr(self, "_gui_form", None)
+        form = getattr(self, "_web_form", None)
         if form is None:
             return
         # campi del principale E della riserva (es. SearXNG con riserva Ollama)
@@ -376,7 +462,7 @@ class SettingsDialog(QDialog):
         row = QHBoxLayout()
         row.addWidget(QLabel(_('Versione in uso: <b>{version}</b> ({method_label})').format(version=__version__, method_label=method_label), box))
         row.addStretch(1)
-        self.app_check_btn = QPushButton(_("🔍  Verifica ora"), box)
+        self.app_check_btn = QPushButton(_("Verifica ora"), box)
         self.app_check_btn.clicked.connect(self._check_app_update)
         row.addWidget(self.app_check_btn)
         lay.addLayout(row)

@@ -152,6 +152,11 @@ def build_qss(theme_name: str) -> str:
     QListWidget::item {{ color: {text}; padding: 7px 8px; border-radius: 8px; margin: 1px 6px; }}
     QListWidget::item:hover {{ background: {hover}; }}
     QListWidget::item:selected {{ background: {hover}; color: {text}; }}
+    /* impostazioni: menu delle pagine a sinistra e titolo della pagina */
+    QListWidget#settingsNav {{ background: {sidebar}; border-radius: 10px; padding: 6px 0; }}
+    QListWidget#settingsNav::item {{ padding: 8px 10px; margin: 1px 6px; }}
+    QListWidget#settingsNav::item:selected {{ background: {hover}; color: {text}; font-weight: 600; }}
+    QLabel#pageTitle {{ font-size: 18px; font-weight: 700; }}
     /* intestazioni dei gruppi per data: niente evidenziazione */
     QListWidget::item:disabled {{ background: transparent; color: {dim}; padding: 10px 8px 2px 8px; }}
 

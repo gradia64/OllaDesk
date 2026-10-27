@@ -55,7 +55,7 @@ class OllamaUpdateBox(QGroupBox):
         )
         row1.addWidget(self.ver_installed_label)
         row1.addStretch(1)
-        self.check_btn = QPushButton(_("🔍  Verifica aggiornamenti"), box)
+        self.check_btn = QPushButton(_("Verifica aggiornamenti"), box)
         self.check_btn.clicked.connect(self._check_updates)
         row1.addWidget(self.check_btn)
         lay.addLayout(row1)
@@ -64,7 +64,7 @@ class OllamaUpdateBox(QGroupBox):
         self.ver_latest_label = QLabel(_("Ultima versione disponibile: —"), box)
         self.ver_latest_label.setObjectName("metaLabel")
         row2.addWidget(self.ver_latest_label, 1)
-        self.update_btn = QPushButton(_("⬆  Aggiorna ora"), box)
+        self.update_btn = QPushButton(_("Aggiorna ora"), box)
         self.update_btn.setObjectName("primaryBtn")
         self.update_btn.setEnabled(False)
         self.update_btn.setToolTip(
@@ -101,7 +101,7 @@ class OllamaUpdateBox(QGroupBox):
 
     def _set_check_busy(self, busy: bool) -> None:
         self.check_btn.setEnabled(not busy)
-        self.check_btn.setText(_("⏳ Verifica…") if busy else _("🔍  Verifica aggiornamenti"))
+        self.check_btn.setText(_("Verifica…") if busy else _("Verifica aggiornamenti"))
 
     def check_updates(self) -> None:
         """Ricontrolla la versione installata e l'ultima rilasciata."""

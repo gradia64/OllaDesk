@@ -44,7 +44,7 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
 - **Interfaccia multilingue**: italiano, inglese, francese, tedesco e
   spagnolo, anche nella companion web. Segue la lingua del sistema (per le
   lingue non ancora tradotte usa l'inglese) oppure si sceglie in
-  Impostazioni → Interfaccia → «Lingua»; vale dal riavvio. I cataloghi sono
+  Impostazioni → Generale → «Lingua»; vale dal riavvio. I cataloghi sono
   in `olladesk/locale/*.po` e si aggiornano con `python3 scripts/i18n.py update`.
 - **Cronologia conversazioni** nella barra laterale (con la versione di
   OllaDesk nell'intestazione): nuova chat (anche con «＋» nella barra superiore,
@@ -59,7 +59,7 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   chat», in cima alla barra laterale, da cui si apre o si ripristina. Scrivere un
   nuovo messaggio in una chat archiviata la riporta nell'elenco. Facoltativa
   l'archiviazione automatica all'avvio delle chat senza messaggi da un certo
-  numero di giorni (Impostazioni → Interfaccia, spenta di default).
+  numero di giorni (Impostazioni → Generale, spenta di default).
 - **Allegati come contesto** (📎 nell'input): file di testo e codice (inlinati
   nel messaggio), PDF (richiede il pacchetto opzionale `pypdf`), documenti
   Word, Excel e OpenDocument (`.docx`, `.doc`, `.xlsx`, `.xls`, `.odt`, `.ods`:
@@ -226,21 +226,21 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   sull'indicatore apre il menu con l'**aggiornamento in un clic** tramite lo
   script ufficiale (eseguito con `pkexec`, quindi con la password di
   amministratore di KDE), i modelli e l'indirizzo del server. La stessa
-  verifica è in Impostazioni → Interfaccia, dove si disattiva il controllo
+  verifica è in Impostazioni → Aggiornamenti, dove si disattiva il controllo
   all'avvio. Solo con un server Ollama su questo computer.
 - **Aggiornamenti di OllaDesk**: all'avvio, al massimo una volta al giorno,
   l'app controlla su GitHub se è uscita una nuova versione e, in quel caso,
   mostra un avviso nella barra superiore con le istruzioni adatte a come è
   stata installata (.deb, AUR, AppImage, pip o sorgenti). Solo un avviso: nessun
   download né installazione automatica. Si può saltare una versione, verificare
-  a mano o disattivare il controllo in Impostazioni → Interfaccia.
-- **Impostazioni → scheda «Interfaccia»**: URL del server Ollama, tema
+  a mano o disattivare il controllo in Impostazioni → Aggiornamenti.
+- **Impostazioni** (pagine Generale, Aspetto, Ricerca web e Aggiornamenti, scelte dal menu a sinistra): URL del server Ollama, tema
   scuro/chiaro/**sistema** (segue KDE Plasma, anche a caldo quando lo cambi),
   dimensione del carattere, streaming on/off, invio con Invio, orario nei
   messaggi, icona nella tray, quantità di contesto
   inviata al modello, archiviazione automatica delle chat inattive, prompt di
   sistema predefinito, risultati ricerca web.
-- **Impostazioni → scheda «Parametri modelli»**: profilo di parametri separato
+- **Impostazioni → «Parametri modelli»**: profilo di parametri separato
   per ogni modello (temperatura, top_k, top_p, min_p, num_ctx, num_predict,
   penalità di ripetizione/presenza/frequenza, seed, sequenze di stop, mirostat,
   num_gpu, num_thread…). Solo i parametri spuntati vengono inviati a Ollama:
@@ -327,7 +327,7 @@ rm -r squashfs-root
 ```
 
 **Aggiornamenti.** L'AppImage non si aggiorna da sola: quando esce una
-versione nuova, OllaDesk lo segnala (Impostazioni → Interfaccia) e indica
+versione nuova, OllaDesk lo segnala (Impostazioni → Aggiornamenti) e indica
 il file da scaricare. Basta sostituire il vecchio `.AppImage` con il nuovo
 (con Gear Lever o AppImageLauncher, aprendo il file nuovo). Con
 l'integrazione a mano il nome del file è scritto nel `.desktop`: dopo

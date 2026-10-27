@@ -1934,6 +1934,41 @@ def test_header_new_chat_archive_and_ollama_badge():
             win.close()
 
 
+def test_settings_dialog_pages():
+    # fase 4: menu a sinistra e cinque pagine; «Salva» restituisce le stesse
+    # impostazioni di prima, i campi dei provider si mostrano come prima
+    from olladesk import config
+    with _isolated_config():
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from PySide6.QtWidgets import QApplication
+        QApplication.instance() or QApplication([])
+        from olladesk.widgets.settings_dialog import SettingsDialog
+        s = config.load_settings()
+        dlg = SettingsDialog(s, lambda: [], "dark", "0.40.2")
+        try:
+            assert [dlg.nav.item(i).text() for i in range(dlg.nav.count())] == [
+                "Generale", "Aspetto", "Ricerca web", "Parametri modelli", "Aggiornamenti"]
+            assert dlg.pages.count() == 5 and dlg.pages.currentIndex() == 0
+            got = dlg.collect_settings()
+            assert {k: got[k] for k in s if k in got and got[k] != s[k]} == {}
+            dlg.show_page(dlg.params_tab)
+            assert dlg.nav.currentRow() == 3 and dlg.pages.currentIndex() == 3
+            dlg.show_page(dlg.ollama_update.check_btn)          # anche da un figlio della pagina
+            assert dlg.pages.currentIndex() == 4
+            dlg.nav.setCurrentRow(1)
+            assert dlg.pages.currentIndex() == 1
+            combo = dlg.web_provider_combo
+            combo.setCurrentIndex(combo.findData("searxng"))
+            assert dlg._web_form.isRowVisible(dlg.searxng_edit)
+            assert not dlg._web_form.isRowVisible(dlg._key_row)
+            combo.setCurrentIndex(combo.findData("ollama"))
+            assert dlg._web_form.isRowVisible(dlg._key_row)
+            assert dlg.collect_settings()["web_provider"] == "ollama"
+        finally:
+            dlg.done(0)
+            dlg.deleteLater()
+
+
 def _thinking_texts(win) -> list[str]:
     from olladesk.widgets.message import MessageWidget
 

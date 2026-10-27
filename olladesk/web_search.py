@@ -284,7 +284,7 @@ def search_ollama(query: str, api_key: str, n_results: int = 5,
     except urllib.error.HTTPError as e:
         if e.code in (401, 403):
             raise WebSearchError(
-                _("chiave API non valida o mancante (Impostazioni → Interfaccia)")
+                _("chiave API non valida o mancante (Impostazioni → Ricerca web)")
             ) from e
         raise WebSearchError(_('errore HTTP {code} dal servizio Ollama').format(code=e.code)) from e
     except urllib.error.URLError as e:
@@ -420,13 +420,13 @@ class WebSearchWorker(QThread):
             if provider == "ollama":
                 if not self._api_key:
                     raise WebSearchError(
-                        _("chiave API non configurata (Impostazioni → Interfaccia → Provider ricerca web)")
+                        _("chiave API non configurata (Impostazioni → Ricerca web)")
                     )
                 results = search_ollama(self._query, self._api_key, self._n, conn_store=conns)
             elif provider == "searxng":
                 if not self._searxng_url.strip():
                     raise WebSearchError(
-                        _("URL dell'istanza SearXNG non configurato (Impostazioni → Interfaccia)")
+                        _("URL dell'istanza SearXNG non configurato (Impostazioni → Ricerca web)")
                     )
                 results = search_searxng(self._searxng_url.strip(), self._query, self._n,
                                          conn_store=conns, should_stop=lambda: self._stopped)

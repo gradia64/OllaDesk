@@ -314,10 +314,10 @@ dlg2 = SettingsDialog(win.settings, win.model_names, win.settings["theme"], win.
 dlg2.show()
 wait_ms(400)
 assert dlg2.theme_combo.findData("system") >= 0
-dlg2.tabs.setCurrentWidget(dlg2.params_tab)
+dlg2.show_page(dlg2.params_tab)
 wait_ms(200)
 dlg2.grab().save(f"{SHOTS}/16_settings.png")
-dlg2.tabs.setCurrentIndex(0)
+dlg2.show_page(dlg2.ollama_update)
 dlg2.ollama_update.check_updates()
 t0 = time.time()
 while time.time() - t0 < 20:

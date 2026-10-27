@@ -42,7 +42,7 @@ License: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
 - **Multilingual interface**: Italian, English, French, German and Spanish,
   in the web companion too. It follows the system language (languages not
   yet translated fall back to English) or can be chosen in Settings →
-  Interface → «Language»; it applies after a restart. The catalogs are in
+  General → «Language»; it applies after a restart. The catalogs are in
   `olladesk/locale/*.po` and are updated with `python3 scripts/i18n.py update`.
 - **Conversation history** in the sidebar (with the OllaDesk version in the
   header): new chat (also with "＋" in the top bar, visible with the sidebar
@@ -56,7 +56,7 @@ License: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   chat", at the top of the sidebar, from which it can be opened or restored. Writing a
   new message in an archived chat brings it back into the list. Optional
   automatic archiving on startup of chats with no messages for a given number
-  of days (Settings → Interface, off by default).
+  of days (Settings → General, off by default).
 - **Attachments as context** (📎 in the input): text and code files (inlined
   in the message), PDFs (requires the optional `pypdf` package), Word, Excel
   and OpenDocument documents (`.docx`, `.doc`, `.xlsx`, `.xls`, `.odt`, `.ods`:
@@ -213,19 +213,19 @@ License: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   indicator at the top right shows "⬆ version". Clicking the indicator opens a
   menu with the **one-click update** via the official script (run with
   `pkexec`, so with the KDE administrator password), the models and the server
-  address. The same check is in Settings → Interface, where the startup check
+  address. The same check is in Settings → Updates, where the startup check
   can be turned off. Only with an Ollama server on this computer.
 - **OllaDesk updates**: on startup, at most once a day, the app checks GitHub
   for a new version and, if so, shows a notice in the top bar with instructions
   suited to how it was installed (.deb, AUR, AppImage, pip or sources). Just a
   notice: no automatic download or install. You can skip a version, check
-  manually or disable the check in Settings → Interface.
-- **Settings → "Interface" tab**: Ollama server URL, dark/light/**system**
+  manually or disable the check in Settings → Updates.
+- **Settings** (General, Appearance, Web search and Updates pages, chosen from the menu on the left): Ollama server URL, dark/light/**system**
   theme (follows KDE Plasma, even hot when you change it), font size,
   streaming on/off, send with Enter, timestamps in messages, tray icon, amount
   of context sent to the model, automatic archiving of inactive chats, default
   system prompt, web search results.
-- **Settings → "Model parameters" tab**: separate parameter profile for each
+- **Settings → "Model parameters"**: separate parameter profile for each
   model (temperature, top_k, top_p, min_p, num_ctx, num_predict, repetition/
   presence/frequency penalties, seed, stop sequences, mirostat, num_gpu,
   num_thread…). Only checked parameters are sent to Ollama: the others keep
@@ -313,7 +313,7 @@ rm -r squashfs-root
 ```
 
 **Updates.** The AppImage doesn't update itself: when a new version is out,
-OllaDesk reports it (Settings → Interface) and indicates the file to download.
+OllaDesk reports it (Settings → Updates) and indicates the file to download.
 Just replace the old `.AppImage` with the new one (with Gear Lever or
 AppImageLauncher, by opening the new file). With hand integration the file
 name is written in the `.desktop`: after updating, repeat the commands above.
