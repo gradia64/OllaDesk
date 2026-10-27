@@ -318,11 +318,11 @@ dlg2.tabs.setCurrentWidget(dlg2.params_tab)
 wait_ms(200)
 dlg2.grab().save(f"{SHOTS}/16_settings.png")
 dlg2.tabs.setCurrentIndex(0)
-dlg2._check_updates()
+dlg2.ollama_update.check_updates()
 t0 = time.time()
 while time.time() - t0 < 20:
     try:
-        running = dlg2._release_worker is not None and dlg2._release_worker.isRunning()
+        running = dlg2.ollama_update._release_worker is not None and dlg2.ollama_update._release_worker.isRunning()
     except RuntimeError:  # worker già eliminato (deleteLater)
         running = False
     if not running:
@@ -330,8 +330,8 @@ while time.time() - t0 < 20:
     wait_ms(200)
 wait_ms(500)
 app.processEvents()
-print("7b. verifica aggiornamenti:", dlg2.update_status.text())
-print("    installata:", dlg2._installed_version, "| più recente:", dlg2._latest_version)
+print("7b. verifica aggiornamenti:", dlg2.ollama_update.update_status.text())
+print("    installata:", dlg2.ollama_update._installed_version, "| più recente:", dlg2.ollama_update._latest_version)
 dlg2.close()
 
 # --- 8. thinking (🧠) ----------------------------------------------------------

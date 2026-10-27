@@ -258,6 +258,10 @@ def build_qss(theme_name: str) -> str:
         border-radius: 10px; padding: 2px 10px; font-weight: 600;
     }}
     QToolButton#appUpdateBtn:hover {{ background: {accent}; color: #ffffff; }}
+    QToolButton#newChatBtn {{ font-size: 17px; font-weight: 600; padding: 2px 8px; }}
+    /* archivio accanto a «Nuova chat»: evidenziato mentre lo si guarda */
+    QPushButton#archiveBtn {{ padding: 6px 10px; }}
+    QPushButton#archiveBtn:checked {{ background: {hover}; border-color: {accent}; color: {text}; }}
 
     /* ---- bolle messaggi ---- */
     QFrame[bubble="user"] {{
@@ -276,6 +280,12 @@ def build_qss(theme_name: str) -> str:
     /* ---- barra superiore ---- */
     QFrame#topBar {{ background: {window}; border: none; }}
     QLabel#statusLabel {{ color: {dim}; }}
+    QFrame#statusBox {{ border-radius: 8px; }}
+    QFrame#statusBox:hover {{ background: {hover}; }}
+    QLabel#ollamaBadge {{
+        color: {accent}; border: 1px solid {accent};
+        border-radius: 9px; padding: 0 7px; font-weight: 600;
+    }}
     QLabel[status="online"] {{ color: {online}; font-size: 13px; }}
     QLabel[status="offline"] {{ color: {offline}; font-size: 13px; }}
 

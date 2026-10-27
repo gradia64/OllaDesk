@@ -1841,6 +1841,63 @@ def _make_window():
     return MainWindow()
 
 
+def test_welcome_suggestions_change_and_cover_categories():
+    import random
+    from olladesk.widgets import chat_area
+    picks = chat_area.pick_suggestions(random.Random(1))
+    assert len(picks) == chat_area.WELCOME_SUGGESTIONS == 4
+    cats = {c for p in picks for c, items in chat_area.SUGGESTIONS.items() if p in items}
+    assert len(cats) == 4                                   # categorie tutte diverse
+    seen = {tuple(chat_area.pick_suggestions(random.Random(seed))) for seed in range(20)}
+    assert len(seen) > 10                                   # cambiano davvero
+
+
+def test_ollama_update_check_is_daily_and_separate():
+    from olladesk.app_update import CHECK_INTERVAL, due_for_check
+    now = 2_000_000_000.0
+    s = {"app_update_last_check": now, "ollama_update_last_check": now - CHECK_INTERVAL}
+    assert not due_for_check(s, now)                        # OllaDesk: appena controllato
+    assert due_for_check(s, now, prefix="ollama_update")    # Ollama: è ora
+    assert not due_for_check({"ollama_update_check": False}, now, prefix="ollama_update")
+
+
+def test_header_new_chat_archive_and_ollama_badge():
+    from olladesk import config
+    with _isolated_config():
+        win = _make_window()
+        try:
+            # «＋» nell'intestazione: nuova chat anche con la barra laterale chiusa
+            called = []
+            win._new_chat = lambda: called.append(True)
+            win.new_chat_btn.clicked.disconnect()
+            win.new_chat_btn.clicked.connect(win._new_chat)
+            win.new_chat_btn.click()
+            assert called
+            # l'archivio sta sulla riga di «Nuova chat», compatto e nascosto se vuoto
+            sb = win.sidebar
+            assert sb.archive_btn.parentWidget() is sb.new_btn.parentWidget()
+            sb.set_chats([{"id": "a", "title": "A", "archived": True}], None)
+            assert not sb.archive_btn.isHidden() and sb.archive_btn.text().endswith("1")
+            sb.archive_btn.click()
+            assert sb.showing_archive() and sb.archive_btn.isChecked()
+            # badge: solo con una versione più recente e un server locale
+            win.settings["ollama_latest"] = "0.41.0"
+            win.settings["ollama_update_check"] = False   # niente controllo di rete
+            win._on_status_changed(True, "0.40.2")
+            assert not win.ollama_badge.isHidden() and "0.41.0" in win.ollama_badge.text()
+            win._on_status_changed(True, "0.41.0")
+            assert win.ollama_badge.isHidden()
+            win.settings["host"] = "http://192.168.1.5:11434"
+            win._on_status_changed(True, "0.40.2")
+            assert win.ollama_badge.isHidden()                # remoto: non si aggiorna da qui
+            win._on_status_changed(False, "")
+            assert win.ollama_badge.isHidden()
+            assert config.DEFAULT_SETTINGS["ollama_update_check"] is True
+        finally:
+            win._really_quit = True
+            win.close()
+
+
 def _thinking_texts(win) -> list[str]:
     from olladesk.widgets.message import MessageWidget
 

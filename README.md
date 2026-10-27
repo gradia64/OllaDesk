@@ -46,12 +46,13 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   Impostazioni → Interfaccia → «Lingua»; vale dal riavvio. I cataloghi sono
   in `olladesk/locale/*.po` e si aggiornano con `python3 scripts/i18n.py update`.
 - **Cronologia conversazioni** nella barra laterale (con la versione di
-  OllaDesk nell'intestazione): nuova chat, selezione, rinomina (tasto destro)
+  OllaDesk nell'intestazione): nuova chat (anche con «＋» nella barra superiore,
+  visibile a barra laterale chiusa), selezione, rinomina (tasto destro)
   ed eliminazione; persistenza su disco. I titoli lunghi nella barra laterale
   si accorciano con «…» alla larghezza reale della colonna.
 - **Archivio delle conversazioni** (tasto destro → «Archivia»): la chat esce
-  dall'elenco senza essere eliminata e si ritrova con «🗄 Archivio (N)» in
-  fondo alla barra laterale, da cui si apre o si ripristina. Scrivere un
+  dall'elenco senza essere eliminata e si ritrova con «🗄 N» accanto a «Nuova
+  chat», in cima alla barra laterale, da cui si apre o si ripristina. Scrivere un
   nuovo messaggio in una chat archiviata la riporta nell'elenco. Facoltativa
   l'archiviazione automatica all'avvio delle chat senza messaggi da un certo
   numero di giorni (Impostazioni → Interfaccia, spenta di default).
@@ -215,10 +216,14 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   Come query viene usata solo la prima riga del messaggio (massimo 200
   caratteri), non l'intero testo. Il numero di risultati è configurabile. I modelli non chiamano il tool da
   soli: i risultati vengono iniettati nel prompt dalla GUI (verificato e2e).
-- **Aggiornamenti Ollama** (Impostazioni → Interfaccia): confronto tra la
-  versione del server e l'ultima release su GitHub, con **aggiornamento in
-  un clic** tramite lo script ufficiale (eseguito con `pkexec`, quindi con la
-  password di amministratore di KDE).
+- **Aggiornamenti Ollama**: all'avvio, al massimo una volta al giorno, l'app
+  controlla l'ultima release su GitHub; se è più recente del server in uso,
+  l'indicatore di stato in alto a destra mostra «⬆ versione». Un clic
+  sull'indicatore apre il menu con l'**aggiornamento in un clic** tramite lo
+  script ufficiale (eseguito con `pkexec`, quindi con la password di
+  amministratore di KDE), i modelli e l'indirizzo del server. La stessa
+  verifica è in Impostazioni → Interfaccia, dove si disattiva il controllo
+  all'avvio. Solo con un server Ollama su questo computer.
 - **Aggiornamenti di OllaDesk**: all'avvio, al massimo una volta al giorno,
   l'app controlla su GitHub se è uscita una nuova versione e, in quel caso,
   mostra un avviso nella barra superiore con le istruzioni adatte a come è
@@ -542,6 +547,7 @@ olladesk/
     model_params.py         definizioni ed editor dei parametri
     steppers.py             campi numerici con pulsanti tondi −/+
     model_manager.py        dialog scaricamento/eliminazione modelli
+    ollama_update.py        aggiornamento di Ollama (impostazioni e indicatore di stato)
     settings_dialog.py      finestra impostazioni (2 schede + aggiornamenti)
     companion_dialog.py     finestra della companion: servizio, abbinamento, dispositivi
 tests/gui_smoke.py          collaudo automatico offscreen (base)

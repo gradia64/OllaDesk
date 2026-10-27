@@ -130,13 +130,17 @@ def newer_release(release: dict | None, current: str = __version__) -> dict | No
     return None
 
 
-def due_for_check(settings: dict, now: float | None = None) -> bool:
-    """True se il controllo automatico è attivo e sono passate 24 ore."""
-    if not settings.get("app_update_check", True):
+def due_for_check(settings: dict, now: float | None = None, prefix: str = "app_update") -> bool:
+    """True se il controllo automatico è attivo e sono passate 24 ore.
+
+    `prefix` sceglie le chiavi: «app_update» per OllaDesk, «ollama_update»
+    per Ollama (<prefix>_check, <prefix>_last_check).
+    """
+    if not settings.get(f"{prefix}_check", True):
         return False
     now = time.time() if now is None else now
     try:
-        last = float(settings.get("app_update_last_check") or 0)
+        last = float(settings.get(f"{prefix}_last_check") or 0)
     except (TypeError, ValueError):
         last = 0.0
     # orologio spostato indietro: ricontrolla invece di aspettare anni

@@ -6,6 +6,7 @@ attivare la ricerca web; gli allegati compaiono come chip sopra l'input.
 """
 from __future__ import annotations
 
+import random
 import uuid
 from pathlib import Path
 
@@ -60,6 +61,56 @@ def unreadable_note(names: list[str]) -> str:
                 + ", ".join(names)
                 + _(". Allegali con 📎, che passa dal selettore file del sistema."))
     return _("⚠ File non trovati: ") + ", ".join(names)
+
+
+# esempi della schermata di benvenuto, per categoria: all'avvio e a ogni
+# nuova chat se ne mostrano WELCOME_SUGGESTIONS, da categorie diverse
+SUGGESTIONS = {
+    "code": (
+        N_("Scrivi uno script Python che ordina un elenco di file per data"),
+        N_("Spiegami cosa fa questa espressione regolare e come semplificarla"),
+        N_("Trasforma questo ciclo for in una list comprehension, se conviene"),
+        N_("Scrivi una funzione Bash che fa il backup di una cartella con la data nel nome"),
+    ),
+    "learn": (
+        N_("Spiegami in modo semplice come funziona un LLM"),
+        N_("Qual è la differenza tra un processo e un thread?"),
+        N_("Spiegami la fotosintesi come se avessi dieci anni"),
+        N_("Come funziona la crittografia a chiave pubblica?"),
+    ),
+    "write": (
+        N_("Scrivi un'email cortese per rimandare una riunione a settimana prossima"),
+        N_("Correggi e rendi più scorrevole questo testo"),
+        N_("Riassumi in cinque punti il testo che incollo qui sotto"),
+        N_("Traduci in inglese mantenendo un tono professionale"),
+    ),
+    "plan": (
+        N_("Aiutami a organizzare una settimana di studio per un esame"),
+        N_("Proponimi un menù vegetariano per tre giorni con la lista della spesa"),
+        N_("Dammi cinque idee per un regalo a chi ama la montagna"),
+        N_("Preparami una scaletta per una presentazione di dieci minuti"),
+    ),
+    "linux": (
+        N_("Riassumi le caratteristiche principali di Debian"),
+        N_("Come trovo quali processi occupano più memoria su Linux?"),
+        N_("Spiegami come funzionano i servizi di systemd"),
+        N_("Come libero spazio su disco in modo sicuro su Linux?"),
+    ),
+    "think": (
+        N_("Un mattone pesa un chilo più mezzo mattone: quanto pesa un mattone?"),
+        N_("Quali sono i pro e i contro di lavorare da casa?"),
+        N_("Confronta SQLite e PostgreSQL per una piccola applicazione"),
+        N_("Stima quante parole si leggono in un anno leggendo mezz'ora al giorno"),
+    ),
+}
+WELCOME_SUGGESTIONS = 4
+
+
+def pick_suggestions(rng: random.Random | None = None, n: int = WELCOME_SUGGESTIONS) -> list[str]:
+    """`n` esempi a caso, ciascuno da una categoria diversa (testi da tradurre)."""
+    rng = rng or random
+    cats = rng.sample(sorted(SUGGESTIONS), min(n, len(SUGGESTIONS)))
+    return [rng.choice(SUGGESTIONS[c]) for c in cats]
 
 
 ASSISTANT_MAX_W = 860
@@ -373,19 +424,27 @@ class ChatArea(QWidget):
         lay.addWidget(sub)
         lay.addSpacing(22)
 
-        for prompt in (
-            _("Spiegami in modo semplice come funziona un LLM"),
-            _("Scrivi uno script Python che ordina un elenco di file"),
-            _("Riassumi le caratteristiche principali di Debian"),
-        ):
-            btn = QPushButton("✦  " + prompt, w)
+        # pulsanti degli esempi: il testo cambia (refresh_suggestions), i
+        # pulsanti restano
+        self._suggestion_btns: list[QPushButton] = []
+        for _i in range(WELCOME_SUGGESTIONS):
+            btn = QPushButton(w)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.setMinimumHeight(36)
             btn.setMaximumWidth(560)
-            btn.clicked.connect(lambda _=False, p=prompt: self._use_suggestion(p))
+            btn.clicked.connect(lambda _=False, b=btn: self._use_suggestion(b.property("prompt")))
             lay.addWidget(btn, 0, Qt.AlignmentFlag.AlignHCenter)
+            self._suggestion_btns.append(btn)
+        self.refresh_suggestions()
         lay.addStretch(3)
         return w
+
+    def refresh_suggestions(self) -> None:
+        """Nuovi esempi a caso: all'avvio e a ogni nuova chat."""
+        for btn, prompt in zip(self._suggestion_btns, pick_suggestions()):
+            text = _(prompt)
+            btn.setText("✦  " + text)
+            btn.setProperty("prompt", text)
 
     def _use_suggestion(self, text: str) -> None:
         self.input.setPlainText(text)
@@ -507,6 +566,8 @@ class ChatArea(QWidget):
             item = self.msgs.takeAt(self.msgs.count() - 1)
             if item.widget():
                 item.widget().deleteLater()
+        if self.stack.currentWidget() is not self.welcome:
+            self.refresh_suggestions()   # si torna al benvenuto: esempi nuovi
         self.stack.setCurrentWidget(self.welcome)
 
     @staticmethod

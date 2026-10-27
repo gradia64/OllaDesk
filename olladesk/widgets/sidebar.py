@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMenu,
     QPushButton,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -52,10 +53,29 @@ class ChatSidebar(QWidget):
         header.addWidget(version)
         lay.addLayout(header)
 
+        # «Nuova chat» e, accanto, l'archivio: entrambi decidono cosa mostra
+        # l'elenco qui sotto, quindi stanno in cima e insieme
+        top_row = QHBoxLayout()
+        top_row.setSpacing(6)
         self.new_btn = QPushButton(_("＋  Nuova chat"), self)
         self.new_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.new_btn.setToolTip(_("Nuova conversazione (Ctrl+N)"))
         self.new_btn.clicked.connect(self.newChatRequested.emit)
-        lay.addWidget(self.new_btn)
+        top_row.addWidget(self.new_btn, 1)
+        # passa dall'elenco principale all'archivio e ritorno; nascosto finché
+        # non c'è nulla di archiviato
+        self.archive_btn = QPushButton(self)
+        self.archive_btn.setObjectName("archiveBtn")
+        self.archive_btn.setCheckable(True)
+        self.archive_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.archive_btn.clicked.connect(self._toggle_archive)
+        # compatto: lo spazio della riga resta a «Nuova chat»
+        self.archive_btn.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Preferred)
+        self.archive_btn.setMaximumWidth(64)
+        top_row.addWidget(self.archive_btn)
+        lay.addLayout(top_row)
+        # stessa altezza di «Nuova chat»: l'emoji alzerebbe il pulsante
+        self.archive_btn.setFixedHeight(self.new_btn.sizeHint().height())
 
         # intestazione della vista «Archivio»: senza, l'elenco sembra quello solito
         self.archive_label = QLabel(_("🗄  Archivio: conversazioni archiviate"), self)
@@ -75,15 +95,6 @@ class ChatSidebar(QWidget):
         self.list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.list.customContextMenuRequested.connect(self._on_menu)
         lay.addWidget(self.list, 1)
-
-        # passa dall'elenco principale all'archivio e ritorno; nascosto finché
-        # non c'è nulla di archiviato
-        self.archive_btn = QPushButton(self)
-        self.archive_btn.setObjectName("archiveBtn")
-        self.archive_btn.setFlat(True)
-        self.archive_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.archive_btn.clicked.connect(self._toggle_archive)
-        lay.addWidget(self.archive_btn)
 
         self.models_btn = QPushButton(_("🧩  Modelli"), self)
         self.models_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -137,11 +148,14 @@ class ChatSidebar(QWidget):
 
     def _sync_archive_btn(self, n_archived: int) -> None:
         if self._show_archived:
-            self.archive_btn.setText(_("←  Conversazioni"))
+            self.archive_btn.setText("←")
             self.archive_btn.setToolTip(_("Torna all'elenco delle conversazioni"))
         else:
-            self.archive_btn.setText(_('🗄  Archivio ({n_archived})').format(n_archived=n_archived))
-            self.archive_btn.setToolTip(_("Conversazioni archiviate: fuori dall'elenco, non eliminate"))
+            self.archive_btn.setText(f"🗄 {n_archived}")
+            self.archive_btn.setToolTip(
+                _('Archivio: {n_archived} conversazioni archiviate, fuori dall\'elenco ma non '
+                  'eliminate').format(n_archived=n_archived))
+        self.archive_btn.setChecked(self._show_archived)
         self.archive_btn.setVisible(self._show_archived or n_archived > 0)
         self.archive_label.setVisible(self._show_archived)
 

@@ -96,10 +96,10 @@ settings = config.load_settings()
 settings["host"] = host
 sdlg = SettingsDialog(settings, lambda: [], "dark", "?")
 sdlg.show()
-sdlg._check_updates()
+sdlg.ollama_update.check_updates()
 wait_ms(200)
-release = sdlg._release_worker
-close_destroy_and_check(sdlg, sdlg._check_worker, "impostazioni")
+release = sdlg.ollama_update._release_worker
+close_destroy_and_check(sdlg, sdlg.ollama_update._check_worker, "impostazioni")
 assert release.wait(15000)
 
 wait_ms(200)

@@ -48,6 +48,11 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "app_update_check": True,       # controllo automatico all'avvio (max 1 volta al giorno)
     "app_update_last_check": 0.0,   # epoch dell'ultimo controllo riuscito
     "app_update_skip": "",          # versione per cui l'utente ha scelto «Salta»
+    # aggiornamenti di Ollama: controllo all'avvio (max 1 volta al giorno) e
+    # ultima versione trovata, per il badge nella barra superiore
+    "ollama_update_check": True,
+    "ollama_update_last_check": 0.0,
+    "ollama_latest": "",
     # archivio: le chat senza messaggi da N giorni vanno nell'archivio
     # all'avvio (0 = mai, solo a mano)
     "archive_after_days": 0,

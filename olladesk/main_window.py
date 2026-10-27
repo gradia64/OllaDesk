@@ -9,7 +9,7 @@ from __future__ import annotations
 import html
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer, QUrl
+from PySide6.QtCore import Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import QAction, QDesktopServices, QGuiApplication, QIcon, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
@@ -26,16 +26,28 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from . import __version__, app_update, companion, config, theme, web_search
+from . import __version__, app_update, companion, config, theme, updater, web_search
 from .i18n import _
 from .engine import ChatEngine
 from .ollama_client import shutdown_workers
 from .widgets.chat_area import ChatArea
 from .widgets.model_manager import ModelManagerDialog
+from .widgets.ollama_update import OllamaUpdateDialog
 from .widgets.companion_dialog import CompanionDialog
 from .widgets.settings_dialog import SettingsDialog
 from .widgets.sidebar import ChatSidebar
 from .workers import WorkerRegistry
+
+
+class _ClickableFrame(QFrame):
+    """Riquadro che si comporta come un pulsante (indicatore di stato)."""
+
+    clicked = Signal()
+
+    def mouseReleaseEvent(self, ev) -> None:  # noqa: N802 (API Qt)
+        if ev.button() == Qt.MouseButton.LeftButton and self.rect().contains(ev.position().toPoint()):
+            self.clicked.emit()
+        super().mouseReleaseEvent(ev)
 
 
 class MainWindow(QMainWindow):
@@ -59,6 +71,8 @@ class MainWindow(QMainWindow):
         # ancora salvato è una conversazione nuova (nasce al primo messaggio)
         self._view_id: str | None = None
         self._app_update_worker: app_update.AppUpdateCheckWorker | None = None
+        self._ollama_update_worker: updater.UpdateCheckWorker | None = None
+        self._ollama_version = ""   # versione del server, se raggiungibile
         self._app_update: dict | None = None   # release più recente trovata
         self._preferred_model: str | None = None
         self._workers = WorkerRegistry()
@@ -136,6 +150,13 @@ class MainWindow(QMainWindow):
         self.burger.setText("☰")
         self.burger.setToolTip(_("Mostra/nascondi la barra laterale (Ctrl+B)"))
         top_lay.addWidget(self.burger)
+        # sempre a portata di mano, anche con la barra laterale chiusa
+        self.new_chat_btn = QToolButton(top)
+        self.new_chat_btn.setObjectName("newChatBtn")
+        self.new_chat_btn.setText("＋")
+        self.new_chat_btn.setToolTip(_("Nuova conversazione (Ctrl+N)"))
+        self.new_chat_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        top_lay.addWidget(self.new_chat_btn)
 
         self.model_combo = QComboBox(top)
         self.model_combo.setMinimumWidth(260)
@@ -159,12 +180,27 @@ class MainWindow(QMainWindow):
         self.app_update_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.app_update_btn.hide()
         top_lay.addWidget(self.app_update_btn)
-        self.status_dot = QLabel("●", top)
+        # stato di Ollama: cliccabile, apre il menu con versione, aggiornamento,
+        # modelli e indirizzo del server
+        self.status_box = _ClickableFrame(top)
+        self.status_box.setObjectName("statusBox")
+        self.status_box.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.status_box.setToolTip(_("Stato di Ollama: clic per aggiornamenti, modelli e server"))
+        status_lay = QHBoxLayout(self.status_box)
+        status_lay.setContentsMargins(8, 3, 8, 3)
+        status_lay.setSpacing(6)
+        self.status_dot = QLabel("●", self.status_box)
         self.status_dot.setProperty("status", "offline")
-        self.status_label = QLabel(_("connessione…"), top)
+        self.status_label = QLabel(_("connessione…"), self.status_box)
         self.status_label.setObjectName("statusLabel")
-        top_lay.addWidget(self.status_dot)
-        top_lay.addWidget(self.status_label)
+        # compare quando c'è una versione di Ollama più recente di quella in uso
+        self.ollama_badge = QLabel(self.status_box)
+        self.ollama_badge.setObjectName("ollamaBadge")
+        self.ollama_badge.hide()
+        status_lay.addWidget(self.status_dot)
+        status_lay.addWidget(self.status_label)
+        status_lay.addWidget(self.ollama_badge)
+        top_lay.addWidget(self.status_box)
 
         pane_lay.addWidget(top)
         pane_lay.addWidget(self._sep(top))
@@ -199,6 +235,8 @@ class MainWindow(QMainWindow):
         self.chat_area.thinkingToggled.connect(self._on_thinking_toggled)
 
         self.burger.clicked.connect(self._toggle_sidebar)
+        self.new_chat_btn.clicked.connect(self._new_chat)
+        self.status_box.clicked.connect(self._show_status_menu)
         self.reload_models_btn.clicked.connect(self._refresh_models)
         self.app_update_btn.clicked.connect(self._show_app_update)
         self.companion_btn.clicked.connect(self._open_companion)
@@ -275,6 +313,82 @@ class MainWindow(QMainWindow):
             self.status_dot.setProperty("status", "offline")
             self.status_label.setText(_("offline"))
         self._repolish(self.status_dot)
+        self._ollama_version = version if online else ""
+        self._sync_ollama_badge()
+        if online:
+            self._maybe_check_ollama_update()
+
+    # ------------------------------------------------- aggiornamento di Ollama
+
+    def _ollama_update_available(self) -> str:
+        """Versione più recente di Ollama da proporre, o "".
+
+        Solo con un server su questa macchina: l'aggiornamento installa Ollama
+        qui, non sull'host remoto.
+        """
+        latest = str(self.settings.get("ollama_latest") or "")
+        if (not latest or not self._ollama_version
+                or not updater.is_local_host(self.settings.get("host", ""))):
+            return ""
+        try:
+            return latest if updater.is_newer(latest, self._ollama_version) else ""
+        except ValueError:
+            return ""
+
+    def _sync_ollama_badge(self) -> None:
+        latest = self._ollama_update_available()
+        if latest:
+            self.ollama_badge.setText(f"⬆ {latest}")
+            self.ollama_badge.setToolTip(
+                _('È disponibile Ollama {latest} (in uso: {current}): clic per aggiornare').format(
+                    latest=latest, current=self._ollama_version))
+        self.ollama_badge.setVisible(bool(latest))
+
+    def _maybe_check_ollama_update(self) -> None:
+        if (self._ollama_update_worker is not None
+                or not updater.is_local_host(self.settings.get("host", ""))
+                or not app_update.due_for_check(self.settings, prefix="ollama_update")):
+            return
+        w = updater.UpdateCheckWorker(self)
+        w.ready.connect(self._on_ollama_release)
+        w.failed.connect(lambda _e: None)   # controllo silenzioso: si riprova al prossimo avvio
+        w.finished.connect(w.deleteLater)
+        w.finished.connect(self._workers.clear_ref(self, "_ollama_update_worker", w))
+        self._ollama_update_worker = w
+        self._workers.track(w)
+        w.start()
+
+    def _on_ollama_release(self, tag: str) -> None:
+        self.settings["ollama_latest"] = tag
+        self.settings["ollama_update_last_check"] = config.now()
+        config.save_settings(self.settings)
+        self._sync_ollama_badge()
+
+    def _show_status_menu(self) -> None:
+        menu = QMenu(self)
+        host = self.settings.get("host", "")
+        if self._ollama_version:
+            head = _('Ollama {version} · {host}').format(version=self._ollama_version, host=host)
+        else:
+            head = _('Ollama non raggiungibile · {host}').format(host=host)
+        title = menu.addAction(head)
+        title.setEnabled(False)
+        menu.addSeparator()
+        latest = self._ollama_update_available()
+        if updater.is_local_host(host):
+            label = (_('⬆  Aggiorna Ollama a {latest}…').format(latest=latest) if latest
+                     else _("Verifica aggiornamenti di Ollama…"))
+            menu.addAction(label, self._open_ollama_update)
+        menu.addAction(_("Modelli…"), self._open_models)
+        menu.addAction(_("Indirizzo del server…"), self.open_settings)
+        menu.exec(self.status_box.mapToGlobal(self.status_box.rect().bottomLeft()))
+        menu.deleteLater()
+
+    def _open_ollama_update(self) -> None:
+        dlg = OllamaUpdateDialog(self.settings.get("host", ""), self._ollama_version or "?", self)
+        dlg.box.latestFound.connect(self._on_ollama_release)
+        dlg.exec()
+        dlg.deleteLater()
 
     @staticmethod
     def _repolish(w: QWidget) -> None:

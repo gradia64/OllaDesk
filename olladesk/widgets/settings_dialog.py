@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import html
 
-from PySide6.QtCore import QProcess, Qt, Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -30,11 +30,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .. import __version__, app_update, config, secrets_store, updater
+from .. import __version__, app_update, config, secrets_store
 from .. import i18n
 from ..i18n import _
-from ..ollama_client import ApiWorker, shutdown_workers
+from ..ollama_client import shutdown_workers
 from .model_params import ModelParamsTab
+from .ollama_update import OllamaUpdateBox
 from .steppers import IntStepper
 
 
@@ -60,11 +61,6 @@ class SettingsDialog(QDialog):
         self.setMinimumSize(720, 480)
         self._theme_name = theme_name
         self._installed_version = version
-        self._latest_version: str | None = None
-        self._check_worker: ApiWorker | None = None
-        self._update_proc: QProcess | None = None
-        self._download_worker = None
-        self._release_worker = None
         self._app_check_worker: app_update.AppUpdateCheckWorker | None = None
         # impostazioni non modificabili qui (es. data dell'ultimo controllo
         # aggiornamenti): «Salva» deve conservarle, non riportarle ai default
@@ -306,7 +302,18 @@ class SettingsDialog(QDialog):
 
         self._update_provider_fields()
         lay.addWidget(self._build_app_update_group(w, s))
-        lay.addWidget(self._build_update_group(w))
+        self.ollama_update = OllamaUpdateBox(lambda: self.host_edit.text().strip(),
+                                             self._installed_version, w)
+        self.ollama_update_chk = QCheckBox(
+            _("Controlla automaticamente all'avvio (al massimo una volta al giorno)"), self.ollama_update
+        )
+        self.ollama_update_chk.setChecked(bool(s.get("ollama_update_check", True)))
+        self.ollama_update_chk.setToolTip(
+            _("Contatta solo api.github.com per leggere l'ultima versione di Ollama: se è più "
+              "recente, l'indicatore in alto a destra lo segnala. Nessuna installazione automatica.")
+        )
+        self.ollama_update.layout().insertWidget(0, self.ollama_update_chk)
+        lay.addWidget(self.ollama_update)
         return page
 
     def _sync_fallback_choices(self) -> None:
@@ -434,225 +441,13 @@ class SettingsDialog(QDialog):
 
     # ------------------------------------------------ aggiornamenti Ollama
 
-    def _build_update_group(self, parent: QWidget) -> QGroupBox:
-        box = QGroupBox(_("Aggiornamenti Ollama"), parent)
-        lay = QVBoxLayout(box)
-        lay.setSpacing(8)
-
-        row1 = QHBoxLayout()
-        self.ver_installed_label = QLabel(
-            _('Versione installata: <b>{installed}</b>').format(installed=html.escape(self._installed_version)), box
-        )
-        row1.addWidget(self.ver_installed_label)
-        row1.addStretch(1)
-        self.check_btn = QPushButton(_("🔍  Verifica aggiornamenti"), box)
-        self.check_btn.clicked.connect(self._check_updates)
-        row1.addWidget(self.check_btn)
-        lay.addLayout(row1)
-
-        row2 = QHBoxLayout()
-        self.ver_latest_label = QLabel(_("Ultima versione disponibile: —"), box)
-        self.ver_latest_label.setObjectName("metaLabel")
-        row2.addWidget(self.ver_latest_label, 1)
-        self.update_btn = QPushButton(_("⬆  Aggiorna ora"), box)
-        self.update_btn.setObjectName("primaryBtn")
-        self.update_btn.setEnabled(False)
-        self.update_btn.setToolTip(
-            _("Esegue lo script ufficiale di installazione (richiede la password "
-            "di amministratore tramite pkexec)")
-        )
-        self.update_btn.clicked.connect(self._run_update)
-        row2.addWidget(self.update_btn)
-        lay.addLayout(row2)
-
-        self.update_status = QLabel("", box)
-        self.update_status.setObjectName("metaLabel")
-        self.update_status.setWordWrap(True)
-        lay.addWidget(self.update_status)
-
-        self.update_log = QPlainTextEdit(box)
-        self.update_log.setReadOnly(True)
-        self.update_log.setMaximumHeight(140)
-        self.update_log.setPlaceholderText(_("…output dell'aggiornamento…"))
-        self.update_log.hide()
-        lay.addWidget(self.update_log)
-
-        if self._installed_version in ("", "?"):
-            self.update_status.setText(
-                _("Versione attuale non nota: avvia Ollama o premi «Verifica aggiornamenti».")
-            )
-        return box
-
-    def _clear_ref(self, attr: str, w):
-        """Slot per `finished`: azzera `attr` solo se punta ancora a `w`."""
-        def clear() -> None:
-            if getattr(self, attr, None) is w:
-                setattr(self, attr, None)
-        return clear
-
-    def _set_check_busy(self, busy: bool) -> None:
-        self.check_btn.setEnabled(not busy)
-        self.check_btn.setText(_("⏳ Verifica…") if busy else _("🔍  Verifica aggiornamenti"))
-
-    def _check_updates(self) -> None:
-        if self._check_worker is not None or self._update_proc is not None:
-            return
-        self._set_check_busy(True)
-        self.update_status.setText(_("Ricontatto il server Ollama e GitHub…"))
-        self._check_pending = 2
-
-        # ricontrolla anche la versione installata
-        self._check_worker = ApiWorker(self.host_edit.text().strip(), "/api/version", self)
-        self._check_worker.ready.connect(self._on_installed_version)
-        self._check_worker.failed.connect(lambda _e: self._check_step())
-        self._check_worker.finished.connect(self._check_worker.deleteLater)
-        self._check_worker.finished.connect(self._clear_ref("_check_worker", self._check_worker))
-        self._check_worker.start()
-
-        self._release_worker = updater.UpdateCheckWorker(self)
-        self._release_worker.ready.connect(self._on_latest_version)
-        self._release_worker.failed.connect(self._on_latest_failed)
-        self._release_worker.finished.connect(self._release_worker.deleteLater)
-        self._release_worker.finished.connect(self._clear_ref("_release_worker", self._release_worker))
-        self._release_worker.start()
-
-    def _on_installed_version(self, data: object) -> None:
-        v = (data or {}).get("version") if isinstance(data, dict) else None
-        if v:
-            self._installed_version = v
-            self.ver_installed_label.setText(_('Versione installata: <b>{version}</b>').format(version=html.escape(v)))
-        self._check_step()
-
-    def _on_latest_version(self, tag: str) -> None:
-        self._latest_version = tag
-        self.ver_latest_label.setText(_('Ultima versione disponibile: <b>{tag}</b>').format(tag=html.escape(tag)))
-        self._check_step()
-
-    def _on_latest_failed(self, _err: str) -> None:
-        self._latest_version = None
-        self.ver_latest_label.setText(_("Ultima versione disponibile: —"))
-        self._check_step()
-
-    def _check_step(self) -> None:
-        self._check_pending = getattr(self, "_check_pending", 1) - 1
-        if self._check_pending > 0:
-            return
-        self._set_check_busy(False)
-        if self._latest_version and self._installed_version not in ("", "?"):
-            if not updater.is_newer(self._latest_version, self._installed_version):
-                self.update_status.setText(_("✓ Ollama è aggiornato."))
-                self.update_btn.setEnabled(False)
-            elif not updater.is_local_host(self.host_edit.text().strip()):
-                # il pulsante aggiorna la macchina LOCALE: con un server remoto
-                # sarebbe un aggiornamento sull'host sbagliato
-                self.update_status.setText(
-                    _('✦ Aggiornamento disponibile ({installed} → {latest}), '
-                      'ma il server configurato non è su questa macchina: aggiorna Ollama '
-                      "sull'host remoto.").format(installed=self._installed_version, latest=self._latest_version)
-                )
-                self.update_btn.setEnabled(False)
-            else:
-                self.update_status.setText(
-                    _('✦ Aggiornamento disponibile: {installed} → {latest}. '
-                      'Premi «Aggiorna ora» (serve la password di amministratore).').format(installed=self._installed_version, latest=self._latest_version)
-                )
-                self.update_btn.setEnabled(True)
-        else:
-            self.update_status.setText(
-                _("⚠ Verifica non riuscita: controlla la connessione a internet o il server Ollama.")
-            )
-
-    def _run_update(self) -> None:
-        if not updater.pkexec_available():
-            self.update_status.setText(
-                _('⚠ `pkexec` non disponibile. Aggiorna manualmente da terminale:\n    '
-                  '{command}').format(command=updater.INSTALL_CMD)
-            )
-            return
-        self.update_btn.setEnabled(False)
-        self.check_btn.setEnabled(False)
-        self.update_status.setText(_("Scarico lo script ufficiale di installazione…"))
-        self._download_worker = updater.UpdateDownloadWorker(self)
-        self._download_worker.ready.connect(self._on_update_script_ready)
-        self._download_worker.failed.connect(self._on_update_script_failed)
-        self._download_worker.finished.connect(self._download_worker.deleteLater)
-        # senza azzeramento, _update_running() chiamerebbe isRunning() su un
-        # oggetto già distrutto da deleteLater (RuntimeError alla chiusura)
-        self._download_worker.finished.connect(
-            self._clear_ref("_download_worker", self._download_worker)
-        )
-        self._download_worker.start()
-
-    def _on_update_script_ready(self, script: bytes) -> None:
-        # lo script resta in memoria e passa a `sh -s` via stdin
-        size = len(script)
-        cmd = updater.update_command_stdin()
-        if cmd is None:
-            self.update_status.setText(_("⚠ `pkexec` non disponibile sul sistema."))
-            self.check_btn.setEnabled(True)
-            return
-        self.update_log.clear()
-        self.update_log.show()
-        self.update_status.setText(
-            _('Script ufficiale scaricato ({size} byte): passa a sh via stdin, '
-              'esecuzione con privilegi di amministratore — inserisci la password '
-              'quando richiesto…').format(size=size)
-        )
-        proc = QProcess(self)
-        proc.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
-        proc.readyReadStandardOutput.connect(self._on_update_output)
-        proc.finished.connect(self._on_update_finished)
-        proc.errorOccurred.connect(self._on_update_error)
-        self._update_proc = proc
-        proc.start(cmd[0], cmd[1:])
-        # scritto nel buffer di QProcess: viene consegnato all'avvio del
-        # processo, senza bloccare la UI con waitForStarted
-        proc.write(script)
-        proc.closeWriteChannel()
-
-    def _on_update_error(self, err) -> None:
-        if err != QProcess.ProcessError.FailedToStart:
-            return   # gli altri casi arrivano anche da finished
-        self._update_proc = None
-        self.update_status.setText(
-            _('⚠ Impossibile avviare `pkexec`. Aggiorna manualmente da terminale:\n  '
-              '  {command}').format(command=updater.INSTALL_CMD)
-        )
-        self.check_btn.setEnabled(True)
-
-    def _on_update_script_failed(self, err: str) -> None:
-        self.update_status.setText(
-            _('⚠ Impossibile scaricare lo script ({err}). Aggiorna manualmente da '
-              'terminale:\n    {command}').format(err=err, command=updater.INSTALL_CMD)
-        )
-        self.check_btn.setEnabled(True)
-
-    def _on_update_output(self) -> None:
-        proc = self._update_proc
-        if proc is None:
-            return
-        text = bytes(proc.readAllStandardOutput()).decode("utf-8", "replace")
-        self.update_log.appendPlainText(text.rstrip())
-
-    def _on_update_finished(self, code: int, _status) -> None:
-        self._update_proc = None
-        if code == 0:
-            self.update_status.setText(
-                _("✓ Aggiornamento completato. Riavvia il server Ollama per usare la nuova versione.")
-            )
-            self._check_updates()
-        else:
-            self.update_status.setText(
-                _("⚠ Aggiornamento non riuscito (codice {code}). Vedi l'output qui sopra.").format(code=code)
-            )
-            self.check_btn.setEnabled(True)
-
     # ------------------------------------------------------------------ azioni
 
     def collect_settings(self) -> dict:
         return {
             **self._base_settings,
             "app_update_check": self.app_update_chk.isChecked(),
+            "ollama_update_check": self.ollama_update_chk.isChecked(),
             "host": self._normalized_host(),
             "theme": self.theme_combo.currentData() or "dark",
             "language": self.lang_combo.currentData() or "auto",
@@ -686,10 +481,15 @@ class SettingsDialog(QDialog):
             host = "http://" + host
         return host
 
+    def _clear_ref(self, attr: str, w):
+        """Slot per `finished`: azzera `attr` solo se punta ancora a `w`."""
+        def clear() -> None:
+            if getattr(self, attr, None) is w:
+                setattr(self, attr, None)
+        return clear
+
     def _update_running(self) -> bool:
-        if self._update_proc is not None and self._update_proc.state() != QProcess.ProcessState.NotRunning:
-            return True
-        return self._download_worker is not None and self._download_worker.isRunning()
+        return self.ollama_update.is_running()
 
     def _on_save(self) -> None:
         # come reject(): chiudere il dialogo ora distruggerebbe il QProcess
@@ -735,10 +535,7 @@ class SettingsDialog(QDialog):
     def done(self, r: int) -> None:
         # il dialogo viene distrutto dal chiamante: nessun worker deve restarvi
         # legato (un QThread distrutto in esecuzione fa abortire il processo)
-        shutdown_workers([
-            self._check_worker, self._release_worker, self._download_worker,
-            self._app_check_worker,
-        ])
+        shutdown_workers([*self.ollama_update.workers(), self._app_check_worker])
         super().done(r)
 
     # chiusura gestita: parametri non salvati o aggiornamento in corso

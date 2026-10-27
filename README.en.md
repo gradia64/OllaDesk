@@ -45,12 +45,13 @@ License: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   Interface → «Language»; it applies after a restart. The catalogs are in
   `olladesk/locale/*.po` and are updated with `python3 scripts/i18n.py update`.
 - **Conversation history** in the sidebar (with the OllaDesk version in the
-  header): new chat, selection, rename (right-click) and deletion; persisted
+  header): new chat (also with "＋" in the top bar, visible with the sidebar
+  closed), selection, rename (right-click) and deletion; persisted
   to disk. Long titles in the sidebar are shortened with «…» to the actual
   column width.
 - **Conversation archive** (right-click → "Archive"): the chat leaves the
-  list without being deleted and is found again via "🗄 Archive (N)" at the
-  bottom of the sidebar, from which it can be opened or restored. Writing a
+  list without being deleted and is found again via "🗄 N" next to "New
+  chat", at the top of the sidebar, from which it can be opened or restored. Writing a
   new message in an archived chat brings it back into the list. Optional
   automatic archiving on startup of chats with no messages for a given number
   of days (Settings → Interface, off by default).
@@ -205,9 +206,13 @@ License: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   characters), not the whole text. The number of results is configurable. Models
   don't call the tool themselves: results are injected into the prompt by the
   GUI (verified e2e).
-- **Ollama updates** (Settings → Interface): compares the server version with
-  the latest release on GitHub, with **one-click update** via the official
-  script (run with `pkexec`, so with the KDE administrator password).
+- **Ollama updates**: on startup, at most once a day, the app checks the
+  latest release on GitHub; if it is newer than the server in use, the status
+  indicator at the top right shows "⬆ version". Clicking the indicator opens a
+  menu with the **one-click update** via the official script (run with
+  `pkexec`, so with the KDE administrator password), the models and the server
+  address. The same check is in Settings → Interface, where the startup check
+  can be turned off. Only with an Ollama server on this computer.
 - **OllaDesk updates**: on startup, at most once a day, the app checks GitHub
   for a new version and, if so, shows a notice in the top bar with instructions
   suited to how it was installed (.deb, AUR, AppImage, pip or sources). Just a
@@ -528,6 +533,7 @@ olladesk/
     model_params.py         parameter definitions and editor
     steppers.py             numeric fields with round −/+ buttons
     model_manager.py        model download/deletion dialog
+    ollama_update.py        Ollama update (settings and status indicator)
     settings_dialog.py      settings window (2 tabs + updates)
     companion_dialog.py     companion window: service, pairing, devices
 tests/gui_smoke.py          offscreen automated check (base)
