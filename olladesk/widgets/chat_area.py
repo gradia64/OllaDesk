@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .. import config, context, portal, theme
+from .. import config, context, icons, portal, theme
 from .. import __version__
 from ..i18n import N_, _
 from .message import MessageWidget, SystemNoteWidget
@@ -326,6 +326,7 @@ class ChatArea(QWidget):
         fl.addWidget(self.input, 1)
 
         self.send_btn = QPushButton("➤", self.input_frame)
+        self.send_btn.setProperty("mode", "send")
         self.send_btn.setObjectName("sendBtn")
         self.send_btn.setFixedSize(28, 28)
         self.send_btn.setToolTip(_("Invia messaggio"))
@@ -343,6 +344,7 @@ class ChatArea(QWidget):
         root.addSpacing(6)
 
         self._stream_timer = QTimer(self)
+        self._apply_icons()
         self._stream_timer.setSingleShot(True)
         self._stream_timer.setInterval(70)
         self._stream_timer.timeout.connect(self._flush_stream)
@@ -443,7 +445,7 @@ class ChatArea(QWidget):
         """Nuovi esempi a caso: all'avvio e a ogni nuova chat."""
         for btn, prompt in zip(self._suggestion_btns, pick_suggestions()):
             text = _(prompt)
-            btn.setText("✦  " + text)
+            btn.setText(("  " if not btn.icon().isNull() else "✦  ") + text)
             btn.setProperty("prompt", text)
 
     def _use_suggestion(self, text: str) -> None:
@@ -589,8 +591,7 @@ class ChatArea(QWidget):
     def refresh_theme(self, theme_name: str, show_ts: bool) -> None:
         self.theme_name = theme_name
         self.show_ts = show_ts
-        self._update_web_icon()
-        self._update_think_icon()
+        self._apply_icons()
         for i in range(self.msgs.count()):
             row = self.msgs.itemAt(i).widget()
             if row is None:
@@ -723,7 +724,7 @@ class ChatArea(QWidget):
         """Globo grigio da spento, blu da acceso (nessun sfondo colorato)."""
         t = theme.palette_for(self.theme_name)
         color = theme.WEB_ACTIVE_COLOR if self.web_btn.isChecked() else t["dim"]
-        self.web_btn.setIcon(theme.globe_icon(color))
+        icons.set_icon(self.web_btn, "globe", color, 18, fallback="🌐")
 
     def web_search_active(self) -> bool:
         return self.web_btn.isChecked()
@@ -741,7 +742,24 @@ class ChatArea(QWidget):
         """Cervello grigio da spento, blu da acceso (come il globo del web)."""
         t = theme.palette_for(self.theme_name)
         color = theme.WEB_ACTIVE_COLOR if self.think_btn.isChecked() else t["dim"]
-        self.think_btn.setIcon(theme.brain_icon(color))
+        icons.set_icon(self.think_btn, "brain", color, 18, fallback="🧠")
+
+    def _apply_icons(self) -> None:
+        """Icone dell'input e degli esempi nel tema in uso."""
+        t = theme.palette_for(self.theme_name)
+        icons.set_icon(self.clip_btn, "paperclip", t["dim"], 18, fallback="📎")
+        self._update_web_icon()
+        self._update_think_icon()
+        self._update_send_icon()
+        for btn in self._suggestion_btns:
+            icons.set_icon(btn, "sparkles", t["dim"], 15)
+            prompt = btn.property("prompt") or ""
+            btn.setText(("  " if not btn.icon().isNull() else "✦  ") + prompt)
+
+    def _update_send_icon(self) -> None:
+        stop = self.send_btn.property("mode") == "stop"
+        icons.set_icon(self.send_btn, "square" if stop else "arrow-up", "#ffffff",
+                       14 if stop else 18, fallback="■" if stop else "➤")
 
     def set_thinking(self, on: bool) -> None:
         # senza blocco dei segnali, il setChecked all'avvio (o al cambio
@@ -759,12 +777,10 @@ class ChatArea(QWidget):
     # ----------------------------------------------------------------- input
 
     def set_streaming(self, busy: bool) -> None:
-        if busy:
-            self.send_btn.setText("■")
-            self.send_btn.setToolTip(_("Interrompi"))
-        else:
-            self.send_btn.setText("➤")
-            self.send_btn.setToolTip(_("Invia messaggio"))
+        # «mode» dice cosa fa il pulsante, qualunque cosa mostri (icona o simbolo)
+        self.send_btn.setProperty("mode", "stop" if busy else "send")
+        self.send_btn.setToolTip(_("Interrompi") if busy else _("Invia messaggio"))
+        self._update_send_icon()
 
     def set_send_on_enter(self, enabled: bool) -> None:
         self.input.set_send_on_enter(enabled)

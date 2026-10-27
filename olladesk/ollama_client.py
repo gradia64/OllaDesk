@@ -125,15 +125,17 @@ def _open(host: str, path: str, payload: dict | None = None, timeout: float = 10
 # --------------------------------------------------------------------- worker
 
 class ApiWorker(QThread):
-    """Richiesta GET generica (/api/tags, /api/version) in background."""
+    """Richiesta generica in background: GET (/api/tags, /api/version) o,
+    con `payload`, POST JSON (/api/show)."""
 
     ready = Signal(object)   # dict JSON
     failed = Signal(str)
 
-    def __init__(self, host: str, path: str, parent=None):
+    def __init__(self, host: str, path: str, parent=None, payload: dict | None = None):
         super().__init__(parent)
         self._host = host
         self._path = path
+        self._payload = payload
         self._resp = None
         self._stopped = False
 
@@ -143,7 +145,7 @@ class ApiWorker(QThread):
 
     def run(self) -> None:
         try:
-            self._resp = _open(self._host, self._path, timeout=8)
+            self._resp = _open(self._host, self._path, self._payload, timeout=8)
             if self._stopped:
                 return
             data = json.loads(self._resp.read().decode("utf-8"))

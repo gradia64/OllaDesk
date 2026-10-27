@@ -2078,35 +2078,40 @@ print("NOTE DISMISS OK", flush=True)
     assert r.returncode == 0, f"figlio uscito con {r.returncode}:\n{r.stderr}"
 
 
-def test_brain_icon_tinted_and_sized():
-    # il toggle thinking usa un'icona disegnata (grigia/blu) come il globo:
-    # tratto visibile, del colore richiesto, e ingombro simile al globo
+def test_icons_tinted_sized_and_fallback():
+    # icone Lucide (assets/icons) tinte con il colore richiesto; senza il
+    # plugin SVG di Qt i pulsanti tengono il simbolo di testo
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     from PySide6.QtGui import QColor
-    from PySide6.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication, QToolButton
 
     QApplication.instance() or QApplication([])
-    from olladesk import theme
+    from olladesk import icons, theme
 
-    def opaque_box(icon):
-        img = icon.pixmap(18, 18).toImage()
-        pts = [(x, y) for x in range(18) for y in range(18)
-               if img.pixelColor(x, y).alpha() > 8]
-        xs, ys = [p[0] for p in pts], [p[1] for p in pts]
-        return img, pts, max(xs) - min(xs) + 1, max(ys) - min(ys) + 1
-
+    names = sorted(p.stem for p in icons.ICON_DIR.glob("*.svg"))
+    assert (icons.ICON_DIR / "LICENSE").read_text().startswith("ISC License")
+    for name in names:
+        svg = (icons.ICON_DIR / f"{name}.svg").read_text()
+        assert "currentColor" in svg and "<script" not in svg, name
     for color in ("#9b9b9b", theme.WEB_ACTIVE_COLOR):
-        img, pts, w, h = opaque_box(theme.brain_icon(color))
-        assert len(pts) > 18 * 18 * 0.2, (color, len(pts))   # tratto presente
+        img = icons.icon("brain", color, 18).pixmap(18, 18).toImage()
+        pts = [(x, y) for x in range(img.width()) for y in range(img.height())
+               if img.pixelColor(x, y).alpha() > 200]
+        assert len(pts) > 20, (color, len(pts))
         want = QColor(color)
-        assert any(
-            img.pixelColor(x, y).alpha() > 200
-            and abs(img.pixelColor(x, y).blue() - want.blue()) < 8
-            and abs(img.pixelColor(x, y).red() - want.red()) < 8
-            for x, y in pts
-        ), color
-        _, _, gw, gh = opaque_box(theme.globe_icon(color))
-        assert abs(w - gw) <= 2 and abs(h - gh) <= 3, (w, h, gw, gh)
+        assert all(abs(img.pixelColor(x, y).blue() - want.blue()) < 8 for x, y in pts), color
+    assert icons.icon("non-esiste", "#000000") is None
+    btn = QToolButton()
+    icons.set_icon(btn, "plus", "#ffffff", 16, fallback="＋")
+    assert btn.text() == "" and not btn.icon().isNull()
+    original = icons.icon
+    try:
+        icons.icon = lambda *a, **k: None   # come senza plugin SVG
+        icons.set_icon(btn, "plus", "#ffffff", 16, fallback="＋")
+        assert btn.text() == "＋" and btn.icon().isNull()
+    finally:
+        icons.icon = original
+    btn.deleteLater()
 
 
 def test_think_icon_matches_state_at_startup():

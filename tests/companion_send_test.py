@@ -450,7 +450,7 @@ assert st == 200, res
 assert wait_until(lambda: not win.engine.busy() and win.chat_area.msgs.count() == before + 2)
 assert win.current_chat["messages"][-2]["display"] == "dal telefono"
 assert win.chat_area.input.toPlainText() == "bozza sul PC", "la bozza del PC è stata cancellata"
-assert win.chat_area.send_btn.text() == "➤"
+assert win.chat_area.send_btn.property("mode") == "send"
 win._really_quit = True
 win.close()
 wait_until(lambda: False, 200)

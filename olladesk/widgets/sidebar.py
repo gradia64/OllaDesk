@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .. import __version__
+from .. import __version__, icons, theme
 from ..i18n import _
 
 
@@ -57,7 +57,7 @@ class ChatSidebar(QWidget):
         # l'elenco qui sotto, quindi stanno in cima e insieme
         top_row = QHBoxLayout()
         top_row.setSpacing(6)
-        self.new_btn = QPushButton(_("＋  Nuova chat"), self)
+        self.new_btn = QPushButton(_("Nuova chat"), self)
         self.new_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.new_btn.setToolTip(_("Nuova conversazione (Ctrl+N)"))
         self.new_btn.clicked.connect(self.newChatRequested.emit)
@@ -96,19 +96,19 @@ class ChatSidebar(QWidget):
         self.list.customContextMenuRequested.connect(self._on_menu)
         lay.addWidget(self.list, 1)
 
-        self.models_btn = QPushButton(_("🧩  Modelli"), self)
+        self.models_btn = QPushButton(_("Modelli"), self)
         self.models_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.models_btn.setToolTip(_("Scarica o rimuovi modelli Ollama"))
         self.models_btn.clicked.connect(self.modelsRequested.emit)
         lay.addWidget(self.models_btn)
 
-        self.companion_btn = QPushButton(_("📱  Companion"), self)
+        self.companion_btn = QPushButton(_("Companion"), self)
         self.companion_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.companion_btn.setToolTip(_("OllaDesk dal telefono: attivazione, abbinamento, dispositivi (Ctrl+D)"))
         self.companion_btn.clicked.connect(self.companionRequested.emit)
         lay.addWidget(self.companion_btn)
 
-        self.settings_btn = QPushButton(_("⚙  Impostazioni"), self)
+        self.settings_btn = QPushButton(_("Impostazioni"), self)
         self.settings_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.settings_btn.clicked.connect(self.settingsRequested.emit)
         lay.addWidget(self.settings_btn)
@@ -116,7 +116,22 @@ class ChatSidebar(QWidget):
         self._chats: list[dict] = []
         self._show_archived = False   # vista «Archivio» al posto dell'elenco
         self._current_id: str | None = None
-        self._sync_archive_btn(0)
+        self._n_archived = 0
+        self._palette = theme.palette_for("dark")
+        self.apply_icons("dark")
+
+    def apply_icons(self, theme_name: str) -> None:
+        """Icone dei pulsanti nei colori del tema (anche al cambio di tema)."""
+        self._palette = theme.palette_for(theme_name)
+        fg = self._palette["text"]
+        for btn, name in ((self.new_btn, "plus"), (self.models_btn, "boxes"),
+                          (self.companion_btn, "smartphone"), (self.settings_btn, "settings")):
+            icons.set_icon(btn, name, fg, 16)
+            # QPushButton non ha uno spazio tra icona e testo: lo dà uno spazio
+            # in testa all'etichetta, solo se l'icona c'è
+            label = btn.text().strip()
+            btn.setText(("  " if not btn.icon().isNull() else "") + label)
+        self._sync_archive_btn(self._n_archived)
 
     # ------------------------------------------------------------------ API
 
@@ -147,11 +162,17 @@ class ChatSidebar(QWidget):
         return self._show_archived
 
     def _sync_archive_btn(self, n_archived: int) -> None:
+        self._n_archived = n_archived
+        fg = self._palette["text"]
         if self._show_archived:
-            self.archive_btn.setText("←")
+            icons.set_icon(self.archive_btn, "arrow-left", fg, 16, fallback="←")
             self.archive_btn.setToolTip(_("Torna all'elenco delle conversazioni"))
         else:
-            self.archive_btn.setText(f"🗄 {n_archived}")
+            if icons.icon("archive", fg, 16) is None:
+                self.archive_btn.setText(f"🗄 {n_archived}")
+            else:
+                icons.set_icon(self.archive_btn, "archive", fg, 16)
+                self.archive_btn.setText(f" {n_archived}")
             self.archive_btn.setToolTip(
                 _('Archivio: {n_archived} conversazioni archiviate, fuori dall\'elenco ma non '
                   'eliminate').format(n_archived=n_archived))

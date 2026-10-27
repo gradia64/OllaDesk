@@ -20,16 +20,17 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMenu,
     QMessageBox,
+    QSizePolicy,
     QSystemTrayIcon,
     QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
-from . import __version__, app_update, companion, config, theme, updater, web_search
+from . import __version__, app_update, companion, config, icons, theme, updater, web_search
 from .i18n import _
 from .engine import ChatEngine
-from .ollama_client import shutdown_workers
+from .ollama_client import ApiWorker, shutdown_workers
 from .widgets.chat_area import ChatArea
 from .widgets.model_manager import ModelManagerDialog
 from .widgets.ollama_update import OllamaUpdateDialog
@@ -73,6 +74,8 @@ class MainWindow(QMainWindow):
         self._app_update_worker: app_update.AppUpdateCheckWorker | None = None
         self._ollama_update_worker: updater.UpdateCheckWorker | None = None
         self._ollama_version = ""   # versione del server, se raggiungibile
+        self._model_caps: dict[str, list[str]] = {}   # capacità per modello (/api/show)
+        self._caps_worker: ApiWorker | None = None
         self._app_update: dict | None = None   # release più recente trovata
         self._preferred_model: str | None = None
         self._workers = WorkerRegistry()
@@ -87,6 +90,7 @@ class MainWindow(QMainWindow):
         self._companion.state_changed.connect(self._on_companion_state)
 
         self._build_ui()
+        self._apply_icons()
         self._connect_signals()
         self._shortcuts()
 
@@ -167,6 +171,22 @@ class MainWindow(QMainWindow):
         self.reload_models_btn.setText("↻")
         self.reload_models_btn.setToolTip(_("Ricarica l'elenco dei modelli installati"))
         top_lay.addWidget(self.reload_models_btn)
+        # capacità del modello scelto (da /api/show): immagini, ragionamento,
+        # strumenti. Nascoste finché Ollama non le ha dette
+        self.cap_badges: dict[str, QLabel] = {}
+        for cap, tip in (
+            ("vision", _("Legge le immagini allegate")),
+            ("thinking", _("Ragiona prima di rispondere (pulsante del ragionamento nell'input)")),
+            ("tools", _("Supporta gli strumenti (tool calling)")),
+        ):
+            badge = QLabel(top)
+            badge.setObjectName("capBadge")
+            badge.setToolTip(tip)
+            badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            badge.setFixedHeight(22)
+            badge.hide()
+            top_lay.addWidget(badge, 0, Qt.AlignmentFlag.AlignVCenter)
+            self.cap_badges[cap] = badge
 
         top_lay.addStretch(1)
         # companion web attiva: clic per abbinare un telefono
@@ -200,6 +220,7 @@ class MainWindow(QMainWindow):
         status_lay.addWidget(self.status_dot)
         status_lay.addWidget(self.status_label)
         status_lay.addWidget(self.ollama_badge)
+        self.status_box.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Preferred)
         top_lay.addWidget(self.status_box)
 
         pane_lay.addWidget(top)
@@ -281,7 +302,21 @@ class MainWindow(QMainWindow):
         )
         # aggiorna tema/orario/icone dell'area chat PRIMA di ricreare i messaggi
         self.chat_area.refresh_theme(self._resolved_theme, self.settings["show_timestamps"])
+        self._apply_icons()
         self._rerender_messages()
+
+    def _apply_icons(self) -> None:
+        """Icone della barra superiore e della barra laterale nel tema in uso."""
+        t = theme.palette_for(self._resolved_theme)
+        dim = t["dim"]
+        icons.set_icon(self.burger, "panel-left", dim, 18, fallback="☰")
+        icons.set_icon(self.new_chat_btn, "plus", dim, 20, fallback="＋")
+        icons.set_icon(self.reload_models_btn, "refresh-cw", dim, 16, fallback="↻")
+        icons.set_icon(self.companion_btn, "smartphone", dim, 18, fallback="📱")
+        icons.set_icon(self.app_update_btn, "circle-arrow-up", t["accent"], 16)
+        self.sidebar.apply_icons(self._resolved_theme)
+        name = self.model_combo.currentData()
+        self._render_caps(self._model_caps.get(name, []) if name else [])
 
     def _rerender_messages(self) -> None:
         # la risposta in corso non è ancora in current_chat: dopo i messaggi
@@ -401,6 +436,7 @@ class MainWindow(QMainWindow):
         return self.engine.model_names()
 
     def _refresh_models(self) -> None:
+        self._model_caps.clear()   # un modello aggiornato può cambiare capacità
         self.engine.refresh_models()
 
     def _on_models_loading(self, loading: bool) -> None:
@@ -430,11 +466,51 @@ class MainWindow(QMainWindow):
                     self.model_combo.setCurrentIndex(idx)
             self._preferred_model = self.model_combo.currentData()
         self.model_combo.blockSignals(False)
+        self._show_model_caps()   # con i segnali bloccati _on_model_changed non scatta
 
     def _on_model_changed(self, _idx: int) -> None:
         name = self.model_combo.currentData()
         if name:
             self._preferred_model = name
+        self._show_model_caps()
+
+    # capacità del modello: i badge accanto al selettore
+    _CAP_ICONS = {"vision": ("eye", "👁"), "thinking": ("brain", "🧠"), "tools": ("wrench", "🔧")}
+
+    def _show_model_caps(self) -> None:
+        name = self.model_combo.currentData()
+        caps = self._model_caps.get(name) if name else None
+        self._render_caps(caps or [])
+        if name and caps is None and self._caps_worker is None:
+            w = ApiWorker(self.settings["host"], "/api/show", self, payload={"model": name})
+            w.ready.connect(lambda data, n=name: self._on_model_caps(n, data))
+            # errore (server spento…): niente badge, si riprova al prossimo
+            # cambio di modello o ricaricamento dell'elenco
+            w.failed.connect(lambda _e: None)
+            w.finished.connect(w.deleteLater)
+            w.finished.connect(self._workers.clear_ref(self, "_caps_worker", w))
+            self._caps_worker = w
+            self._workers.track(w)
+            w.start()
+
+    def _on_model_caps(self, name: str, data: object) -> None:
+        caps = data.get("capabilities") if isinstance(data, dict) else None
+        # versioni di Ollama senza il campo: nessun badge, e non si richiede più
+        self._model_caps[name] = [c for c in caps if isinstance(c, str)] if isinstance(caps, list) else []
+        # il modello può essere cambiato mentre si aspettava: si ricomincia
+        # da quello scelto ora (dalla cache, o con una nuova richiesta)
+        QTimer.singleShot(0, self._show_model_caps)
+
+    def _render_caps(self, caps: list[str]) -> None:
+        t = theme.palette_for(self._resolved_theme)
+        for cap, badge in self.cap_badges.items():
+            name, emoji = self._CAP_ICONS[cap]
+            ic = icons.icon(name, t["dim"], 14)
+            if ic is None:
+                badge.setText(emoji)
+            else:
+                badge.setPixmap(ic.pixmap(14, 14))
+            badge.setVisible(cap in caps)
 
     def current_model(self) -> str | None:
         return self.model_combo.currentData() if self.model_combo.isEnabled() else None
@@ -831,7 +907,9 @@ class MainWindow(QMainWindow):
             release = None
         self._app_update = release
         if release:
-            self.app_update_btn.setText(f"⬆ OllaDesk {release['version']}")
+            # con le icone la freccia è l'icona; senza, resta nel testo
+            arrow = "" if icons.available() else "⬆ "
+            self.app_update_btn.setText(f"{arrow}OllaDesk {release['version']}")
             self.app_update_btn.setToolTip(
                 _('È disponibile OllaDesk {new} (in uso: {current})').format(new=release['version'], current=__version__)
             )

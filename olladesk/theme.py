@@ -3,17 +3,11 @@ from __future__ import annotations
 
 import subprocess
 
-from PySide6.QtCore import QPointF, Qt
+from PySide6.QtCore import Qt
 from PySide6.QtGui import (
     QColor,
     QGuiApplication,
-    QIcon,
-    QPainter,
-    QPainterPath,
     QPalette,
-    QPen,
-    QPixmap,
-    QTransform,
 )
 from PySide6.QtWidgets import QApplication
 
@@ -98,75 +92,6 @@ COLORS: dict[str, dict[str, str]] = {
         "offline": "#dc2626",
     },
 }
-
-
-def globe_icon(color: str, size: int = 18) -> QIcon:
-    """Globo disegnato con QPainter: grigio da spento, blu quando attivo.
-
-    Usato al posto dell'emoji 🌐 (che ha colori propri non controllabili).
-    """
-    dpr = 2
-    s = size * dpr
-    pm = QPixmap(s, s)
-    pm.fill(Qt.GlobalColor.transparent)
-    p = QPainter(pm)
-    p.setRenderHint(QPainter.RenderHint.Antialiasing)
-    pen = QPen(QColor(color), 1.5 * dpr)
-    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-    p.setPen(pen)
-    r = s / 2 - 2 * dpr
-    c = QPointF(s / 2, s / 2)
-    p.drawEllipse(c, r, r)                    # contorno
-    p.drawEllipse(c, r * 0.45, r)             # meridiano
-    p.drawLine(QPointF(c.x() - r, c.y()), QPointF(c.x() + r, c.y()))          # equatore
-    p.drawLine(QPointF(c.x() - r * 0.90, c.y() - r * 0.5), QPointF(c.x() + r * 0.90, c.y() - r * 0.5))
-    p.drawLine(QPointF(c.x() - r * 0.90, c.y() + r * 0.5), QPointF(c.x() + r * 0.90, c.y() + r * 0.5))
-    p.end()
-    pm.setDevicePixelRatio(dpr)
-    return QIcon(pm)
-
-
-def brain_icon(color: str, size: int = 18) -> QIcon:
-    """Cervello del toggle thinking: grigio da spento, blu quando attivo.
-
-    Disegnato con QPainter nello stesso stile a linee del globo (stesso tratto
-    e stesso ingombro), al posto dell'emoji 🧠: l'emoji ha colori propri, la
-    sua sagoma tinta a 18 px non si leggeva e senza font emoji diventava un
-    riquadro «tofu». Vista dall'alto: due emisferi speculari, la scissura
-    centrale e tre solchi per lato, in una griglia 24×24 scalata all'icona.
-    """
-    dpr = 2
-    s = size * dpr
-    pm = QPixmap(s, s)
-    pm.fill(Qt.GlobalColor.transparent)
-    p = QPainter(pm)
-    p.setRenderHint(QPainter.RenderHint.Antialiasing)
-    k = s / 24
-    p.scale(k, k)
-    pen = QPen(QColor(color), 1.5 * dpr / k)   # tratto uguale al globo
-    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-    pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
-    p.setPen(pen)
-
-    half = QPainterPath(QPointF(12, 4))         # emisfero sinistro
-    half.cubicTo(9, 2.6, 5.6, 3.4, 5.2, 6.4)
-    half.cubicTo(2.6, 7.2, 2.2, 10.8, 3.6, 12.2)
-    half.cubicTo(2.2, 14.2, 3.2, 17.4, 5.8, 17.6)
-    half.cubicTo(6.4, 20.6, 10.4, 21.2, 12, 19.4)
-    sulci = QPainterPath(QPointF(5.2, 6.4))     # solchi
-    sulci.cubicTo(6.4, 6.4, 7.6, 7.4, 7.8, 8.8)
-    sulci.moveTo(3.6, 12.2)
-    sulci.cubicTo(5, 11.2, 7, 11.6, 8, 12.8)
-    sulci.moveTo(5.8, 17.6)
-    sulci.cubicTo(5.8, 16, 7, 15, 8.6, 15.2)
-    mirror = QTransform(-1, 0, 0, 1, 24, 0)     # emisfero destro
-    for path in (half, sulci):
-        p.drawPath(path)
-        p.drawPath(mirror.map(path))
-    p.drawLine(QPointF(12, 4), QPointF(12, 19.4))   # scissura
-    p.end()
-    pm.setDevicePixelRatio(dpr)
-    return QIcon(pm)
 
 
 def palette_for(name: str) -> dict[str, str]:
@@ -281,6 +206,7 @@ def build_qss(theme_name: str) -> str:
     QFrame#topBar {{ background: {window}; border: none; }}
     QLabel#statusLabel {{ color: {dim}; }}
     QFrame#statusBox {{ border-radius: 8px; }}
+    QLabel#capBadge {{ border: 1px solid {border}; border-radius: 11px; padding: 0 6px; }}
     QFrame#statusBox:hover {{ background: {hover}; }}
     QLabel#ollamaBadge {{
         color: {accent}; border: 1px solid {accent};

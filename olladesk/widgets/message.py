@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..md import md_to_html
-from .. import theme
+from .. import icons, theme
 from ..i18n import _
 
 _ANIM_FRAMES = ["·", "··", "···"]
@@ -150,6 +150,7 @@ class MessageWidget(QFrame):
         # pulsante di copia su TUTTI i messaggi, non solo dell'assistente
         self.copy_btn = QToolButton(self)
         self.copy_btn.setText("⧉")
+        icons.set_icon(self.copy_btn, "copy", theme.palette_for(theme_name)["dim"], 14, fallback="⧉")
         self.copy_btn.setToolTip(_("Copia messaggio"))
         self.copy_btn.clicked.connect(self._copy)
         meta_row.addWidget(self.copy_btn)
@@ -281,6 +282,7 @@ class MessageWidget(QFrame):
     def refresh_theme(self, theme_name: str, show_ts: bool) -> None:
         self.theme_name = theme_name
         self._think_color = theme.palette_for(theme_name)["dim"]
+        icons.set_icon(self.copy_btn, "copy", self._think_color, 14, fallback="⧉")
         self.think_btn.setStyleSheet(
             "QToolButton { border: none; background: transparent; "
             f"color: {self._think_color}; padding: 0; }}"

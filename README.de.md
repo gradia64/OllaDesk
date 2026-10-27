@@ -178,7 +178,7 @@ scripts/build-deb.sh        # erzeugt dist/olladesk_<version>_all.deb
 Mit den Debian-Paketen:
 
 ```bash
-sudo apt install python3-pyside6
+sudo apt install python3-pyside6 qt6-svg-plugins
 ```
 
 oder via pip (virtuelle Umgebung):

@@ -68,8 +68,8 @@ Version: $VERSION
 Section: net
 Priority: optional
 Architecture: all
-Depends: python3 (>= 3.10), python3-pyside6.qtcore, python3-pyside6.qtgui, python3-pyside6.qtwidgets, python3-pyside6.qtnetwork
-Recommends: python3-pypdf, python3-keyring, python3-qrcode, qt6-svg-plugins
+Depends: python3 (>= 3.10), python3-pyside6.qtcore, python3-pyside6.qtgui, python3-pyside6.qtwidgets, python3-pyside6.qtnetwork, qt6-svg-plugins
+Recommends: python3-pypdf, python3-keyring, python3-qrcode
 Installed-Size: @INSTALLED_SIZE@
 Maintainer: gradia <gradia@disroot.org>
 Homepage: https://github.com/gradia64/OllaDesk
@@ -102,6 +102,12 @@ License: GPL-3.0-or-later
  .
  Il testo completo della licenza è disponibile in /usr/share/common-licenses/GPL-3
  oppure su https://www.gnu.org/licenses/gpl-3.0.html
+
+Files: usr/share/olladesk/olladesk/assets/icons/*
+Copyright: 2026 Lucide Icons and Contributors
+License: ISC
+ Icone di Lucide (lucide-static 1.56.0). Il testo completo della licenza è in
+ /usr/share/olladesk/olladesk/assets/icons/LICENSE
 EOF
 
 # changelog e manpage compressi (policy Debian)

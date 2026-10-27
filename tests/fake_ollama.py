@@ -26,6 +26,8 @@ class FakeOllama:
         self.tags_release = threading.Event()   # trattiene /api/tags (elenco già letto)
         self.tags_release.set()
         self.deleted: list[str] = []
+        self.capabilities = ["completion", "vision", "thinking"]   # risposta di /api/show
+        self.shows: list[str] = []         # modelli chiesti a /api/show
         fake = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -69,6 +71,11 @@ class FakeOllama:
 
             def do_POST(self):  # noqa: N802
                 body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                if self.path == "/api/show":
+                    # capacità del modello (badge accanto al selettore)
+                    fake.shows.append(body.get("model"))
+                    self._json({"capabilities": list(fake.capabilities)})
+                    return
                 if self.path == "/api/pull":
                     self.send_response(200)
                     self.send_header("Content-Type", "application/x-ndjson")

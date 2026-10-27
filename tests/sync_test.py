@@ -75,6 +75,10 @@ win = MainWindow()
 win._sync_companion()
 assert win._companion.state() == "running"
 assert wait_until(lambda: win.engine.model_names() == MODELS)
+# capacità del modello scelto da /api/show: badge accanto al selettore
+assert wait_until(lambda: not win.cap_badges["vision"].isHidden())
+assert not win.cap_badges["thinking"].isHidden() and win.cap_badges["tools"].isHidden()
+assert fake.shows and fake.shows[-1] == win.model_combo.currentData()
 h.setup(PORT, wait_until)
 TOKEN = h.pair(win._companion.auth)
 engine = win.engine
@@ -130,7 +134,7 @@ assert data["active"] == "chat_b"
 
 # A è ancora aperta: ➤, elenco attivo, invio rifiutato con un avviso
 assert win._view_id == "chat_a"
-assert win.chat_area.send_btn.text() == "➤"
+assert win.chat_area.send_btn.property("mode") == "send"
 assert win.sidebar.list.isEnabled() and win.sidebar.new_btn.isEnabled()
 n = bubbles()
 win.chat_area.input.setPlainText("non deve partire")
@@ -141,11 +145,11 @@ assert engine.active_chat_id() == "chat_b"
 
 # nuova chat durante la generazione: consentito
 win._new_chat()
-assert win._view_id is None and win.chat_area.send_btn.text() == "➤"
+assert win._view_id is None and win.chat_area.send_btn.property("mode") == "send"
 
 # riaprendo B la risposta in corso riappare con il testo già ricevuto
 win._open_chat("chat_b")
-assert win.chat_area.send_btn.text() == "■"
+assert win.chat_area.send_btn.property("mode") == "stop"
 assert wait_until(lambda: win.chat_area._stream_widget is not None
                   and "parziale" in win.chat_area._stream_widget.raw)
 # il cambio tema la ricostruisce (prima si saltava durante la generazione)
@@ -157,7 +161,7 @@ assert wait_until(lambda: win.chat_area._stream_widget is not None
 win.chat_area._on_button()
 assert not engine.busy()
 assert config.load_chat("chat_b")["messages"][-1]["content"] == "parziale "
-assert win.chat_area.send_btn.text() == "➤"
+assert win.chat_area.send_btn.property("mode") == "send"
 fake.release.set()
 print("3. PC libero di navigare durante la risposta del telefono OK")
 
@@ -169,13 +173,13 @@ win.chat_area.input.setPlainText("rispondi lento")
 win.chat_area._emit_send()
 assert wait_until(lambda: engine.partial()[0] == "parziale ")
 win._open_chat("chat_b")
-assert win.chat_area.send_btn.text() == "➤"
+assert win.chat_area.send_btn.property("mode") == "send"
 fake.release.set()
 assert wait_until(lambda: not engine.busy())
 assert config.load_chat("chat_a")["messages"][-1]["content"] == "parziale e finale"
 win._open_chat("chat_a")
 assert win.current_chat["messages"][-1]["content"] == "parziale e finale"
-assert win.chat_area._stream_widget is None and win.chat_area.send_btn.text() == "➤"
+assert win.chat_area._stream_widget is None and win.chat_area.send_btn.property("mode") == "send"
 print("4. risposta del PC completata in background OK")
 
 # ------------------------------- 5. rinomina ed elimina dal telefono
@@ -203,7 +207,7 @@ st, _d = h.post_json("/api/delete", {"chat_id": "chat_b"}, TOKEN)
 assert st == 200
 assert not engine.busy() and config.load_chat("chat_b") is None
 assert win._view_id is None and win.current_chat is None
-assert win.chat_area.send_btn.text() == "➤"
+assert win.chat_area.send_btn.property("mode") == "send"
 assert "chat_b" not in [c["id"] for c in engine.chats()]
 assert h.post_json("/api/delete", {"chat_id": "chat_b"}, TOKEN)[0] == 404
 fake.release.set()
