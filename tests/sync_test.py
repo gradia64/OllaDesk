@@ -222,7 +222,7 @@ for body, status in (({"chat_id": "chat_a"}, 400),
 
 
 def sidebar_ids():
-    return [win.sidebar.list.item(i).data(256) for i in range(win.sidebar.list.count())]
+    return [d for i in range(win.sidebar.list.count()) if (d := win.sidebar.list.item(i).data(256))]
 
 
 assert "chat_a" in sidebar_ids() and win.sidebar.archive_btn.isHidden()

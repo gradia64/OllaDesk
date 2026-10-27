@@ -34,7 +34,8 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
 - **Chat in stile ChatGPT**: bolle utente/assistente, risposta in *streaming*
   token per token, pulsante per interrompere la generazione, statistiche
   (token, tok/s, durata), rendering Markdown (blocchi di codice, elenchi,
-  grassetti, link…), pulsante di copia per ogni risposta. La colonna dei
+  grassetti, link…). Ogni blocco di codice ha una riga con il linguaggio e
+  «Copia»; il pulsante di copia del messaggio compare al passaggio del mouse. La colonna dei
   messaggi ha larghezza massima fissa e resta centrata anche quando la
   sidebar è nascosta (Ctrl+B): il contenuto non si stira a tutta finestra.
   Durante la risposta del modello la vista resta dove la lasci (si può
@@ -48,8 +49,11 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
 - **Cronologia conversazioni** nella barra laterale (con la versione di
   OllaDesk nell'intestazione): nuova chat (anche con «＋» nella barra superiore,
   visibile a barra laterale chiusa), selezione, rinomina (tasto destro)
-  ed eliminazione; persistenza su disco. I titoli lunghi nella barra laterale
-  si accorciano con «…» alla larghezza reale della colonna.
+  ed eliminazione; persistenza su disco. L'elenco è diviso per data (Oggi,
+  Ieri, Ultimi 7 giorni, Ultimi 30 giorni, Più vecchie) e un campo di ricerca
+  (Ctrl+K) filtra i titoli, senza distinguere maiuscole e accenti, anche
+  nell'archivio. I titoli lunghi si accorciano con «…» alla larghezza reale
+  della colonna.
 - **Archivio delle conversazioni** (tasto destro → «Archivia»): la chat esce
   dall'elenco senza essere eliminata e si ritrova con «🗄 N» accanto a «Nuova
   chat», in cima alla barra laterale, da cui si apre o si ripristina. Scrivere un
@@ -437,6 +441,7 @@ li avevi copiati a mano, cancellali per non avere OllaDesk due volte nel menu.
 |-------------|---------------------------------|
 | `Ctrl+N`    | Nuova conversazione             |
 | `Ctrl+B`    | Mostra/nascondi la sidebar      |
+| `Ctrl+K`    | Cerca tra le conversazioni      |
 | `Ctrl+M`    | Gestione modelli (download/rimozione) |
 | `Ctrl+D`    | Companion web (telefono e tablet) |
 | `Ctrl+,`    | Apri le impostazioni            |

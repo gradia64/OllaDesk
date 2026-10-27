@@ -283,6 +283,7 @@ class MainWindow(QMainWindow):
         for seq, fn in (
             ("Ctrl+N", self._new_chat),
             ("Ctrl+B", self._toggle_sidebar),
+            ("Ctrl+K", self._focus_chat_search),
             ("Ctrl+,", self.open_settings),
             ("Ctrl+M", self._open_models),
             ("Ctrl+D", self._open_companion),
@@ -609,6 +610,11 @@ class MainWindow(QMainWindow):
             self._view_id = None
             self.chat_area.clear_messages()
         self.sidebar.set_chats(self.engine.chats(), None)
+
+    def _focus_chat_search(self) -> None:
+        if not self.sidebar.isVisible():
+            self._toggle_sidebar()
+        self.sidebar.focus_search()
 
     def _toggle_sidebar(self) -> None:
         self.sidebar.setVisible(not self.sidebar.isVisible())

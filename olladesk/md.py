@@ -38,11 +38,29 @@ def _wrap_code(code: str) -> str:
     return "\n".join(out_lines)
 
 
-def _code_block_html(code: str, code_bg: str, code_fg: str) -> str:
+# indirizzo dei link «Copia» dei blocchi di codice: lo gestisce il messaggio
+# (MessageWidget), non il browser. Il testo del modello non può produrlo:
+# l'HTML è sempre escapato e i link Markdown accettano solo http/https
+COPY_LINK = "olladesk-copy:"
+
+
+def _code_block_html(code: str, code_bg: str, code_fg: str, lang: str = "",
+                     header: tuple[int, str, str] | None = None) -> str:
+    """Blocco di codice; con `header` = (indice, etichetta del linguaggio,
+    testo del link) una riga in alto con il linguaggio e «Copia»."""
     # Qt rich text supporta bgcolor su <table>/<td>: usato per lo sfondo dei blocchi.
+    head = ""
+    if header is not None:
+        idx, lang_label, copy_text = header
+        head = (
+            f'<tr><td><font color="{code_fg}" size="-1"><i>{html.escape(lang or lang_label)}</i></font></td>'
+            f'<td align="right"><a href="{COPY_LINK}{idx}"><font size="-1" color="{code_fg}">{html.escape(copy_text)}</font></a></td></tr>'
+        )
+    span = ' colspan="2"' if header is not None else ""
     return (
         f'<table width="100%" cellspacing="0" cellpadding="8" bgcolor="{code_bg}">'
-        f"<tr><td><font color=\"{code_fg}\"><pre>{html.escape(_wrap_code(code))}</pre></font></td></tr>"
+        f"{head}"
+        f"<tr><td{span}><font color=\"{code_fg}\"><pre>{html.escape(_wrap_code(code))}</pre></font></td></tr>"
         "</table>"
     )
 
@@ -222,29 +240,52 @@ def _render_segment(seg: str, inline_code_color: str, header_bg: str) -> str:
     return joined
 
 
+def _close_fence(text: str) -> str:
+    # streaming: se le righe di APERTURA fence sono dispari, chiudo l'ultimo
+    # blocco (i ``` scritti in mezzo al testo non generano più fence spurie)
+    openers = len(re.findall(r"^[^\S\n]*```", text, re.M))
+    return text + "\n```" if openers % 2 == 1 else text
+
+
+def code_blocks(text: str) -> list[str]:
+    """Contenuto dei blocchi di codice, nell'ordine dei link «Copia»."""
+    return [m.group(2).rstrip("\n") for m in _FENCE_SPLIT_RE.finditer(_close_fence(text or ""))]
+
+
+def _segment(seg: str) -> str:
+    """Testo tra due blocchi: senza righe vuote in testa e in coda (il blocco
+    ha già il suo spazio) e con al massimo una riga vuota di fila."""
+    return re.sub(r"\n{3,}", "\n\n", seg.strip("\n"))
+
+
 def md_to_html(
     text: str,
     code_bg: str = "#1a1d21",
     code_fg: str = "#e8eaed",
     inline_code_color: str = "#79b8ff",
+    copy_labels: tuple[str, str, str] | None = None,
+    copied: int | None = None,
 ) -> str:
+    """HTML per una QLabel. Con `copy_labels` = (linguaggio predefinito,
+    «Copia», «Copiato») ogni blocco di codice ha la riga con il linguaggio e
+    il link per copiarlo; `copied` è l'indice del blocco appena copiato."""
     if not text:
         return ""
-    # streaming: se le righe di APERTURA fence sono dispari, chiudo l'ultimo
-    # blocco (i ``` scritti in mezzo al testo non generano più fence spurie)
-    openers = len(re.findall(r"^[^\S\n]*```", text, re.M))
-    if openers % 2 == 1:
-        text = text + "\n```"
+    text = _close_fence(text)
 
     parts: list[str] = []
     pos = 0
-    for m in _FENCE_SPLIT_RE.finditer(text):
+    for idx, m in enumerate(_FENCE_SPLIT_RE.finditer(text)):
         before = text[pos:m.start()]
         if before.strip():
-            parts.append(_render_segment(before, inline_code_color, code_bg))
-        parts.append(_code_block_html(m.group(2).rstrip("\n"), code_bg, code_fg))
+            parts.append(_render_segment(_segment(before), inline_code_color, code_bg))
+        header = None
+        if copy_labels is not None:
+            lang_label, copy_text, copied_text = copy_labels
+            header = (idx, lang_label, copied_text if idx == copied else copy_text)
+        parts.append(_code_block_html(m.group(2).rstrip("\n"), code_bg, code_fg, m.group(1), header))
         pos = m.end()
     tail = text[pos:]
     if tail.strip():
-        parts.append(_render_segment(tail, inline_code_color, code_bg))
+        parts.append(_render_segment(_segment(tail), inline_code_color, code_bg))
     return "".join(parts)

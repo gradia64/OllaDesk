@@ -27,6 +27,42 @@ def test_md_bold_italic_heading():
     assert "<i>corsivo</i>" in html
 
 
+def test_md_code_block_header_copy_and_spacing():
+    from olladesk.md import COPY_LINK, code_blocks
+    text = "Ecco:\n\n\n```python\nprint(1)\n```\n\nPoi:\n```\nls\n```"
+    plain = md_to_html(text)
+    assert COPY_LINK not in plain                       # senza etichette: com'era
+    html = md_to_html(text, copy_labels=("codice", "Copia", "Copiato"), copied=1)
+    assert f'href="{COPY_LINK}0"' in html and f'href="{COPY_LINK}1"' in html
+    assert "<i>python</i>" in html and "<i>codice</i>" in html   # linguaggio, o «codice»
+    assert ">Copia<" in html and ">Copiato<" in html
+    assert "<br><table" not in html and "Ecco:<br>" not in html   # niente righe vuote attorno
+    assert code_blocks(text) == ["print(1)", "ls"]
+    assert code_blocks("streaming:\n```py\nx = 1") == ["x = 1"]   # blocco non ancora chiuso
+    # il testo del modello non può creare il link «Copia»
+    evil = md_to_html(f"[x]({COPY_LINK}0) <a href='{COPY_LINK}0'>y</a>")
+    assert 'href="' not in evil and "<a " not in evil, evil   # resta testo escapato
+
+
+def test_message_copy_code_block_link():
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtGui import QGuiApplication
+    from PySide6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    from olladesk.md import COPY_LINK
+    from olladesk.widgets.message import MessageWidget
+    w = MessageWidget("assistant", "Uno:\n```sh\necho uno\n```\nDue:\n```py\nprint(2)\n```")
+    w._on_link(f"{COPY_LINK}1")
+    assert QGuiApplication.clipboard().text() == "print(2)"
+    assert "Copiato" in w.label.text()
+    w._clear_copied()
+    assert "Copiato" not in w.label.text()
+    w._on_link(f"{COPY_LINK}9")                         # indice fuori: ignorato
+    w._on_link("file:///etc/passwd")                    # schema non http: ignorato
+    assert QGuiApplication.clipboard().text() == "print(2)"
+    w.deleteLater()
+
+
 def test_md_code_block_escaped():
     html = md_to_html("Testo\n```python\nprint('<b>&</b>')\n```\nfine")
     assert "print(&#x27;&lt;b&gt;&amp;&lt;/b&gt;&#x27;)" in html
@@ -2281,6 +2317,44 @@ def test_folder_includes_js_modules_and_names_unsupported():
     assert any("non supportati: dati.bin" in w for w in warnings), warnings
 
 
+def test_sidebar_date_groups_and_search():
+    import datetime
+    import time
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QApplication
+    from olladesk.widgets import sidebar
+    QApplication.instance() or QApplication([])
+    now = datetime.datetime(2026, 10, 27, 10, 0)
+    day = 86400
+    noon = datetime.datetime(2026, 10, 27, 12, 0).timestamp()
+    assert sidebar.date_group(noon, now) == "today"            # anche nel futuro
+    assert sidebar.date_group(noon - day, now) == "yesterday"
+    assert sidebar.date_group(noon - 3 * day, now) == "week"
+    assert sidebar.date_group(noon - 20 * day, now) == "month"
+    assert sidebar.date_group(noon - 90 * day, now) == "older"
+    assert sidebar.date_group("rotto", now) == "older"
+    sb = sidebar.ChatSidebar()
+    t = time.time()
+    sb.set_chats([{"id": "a", "title": "Ricetta della pizza", "updated": t},
+                  {"id": "b", "title": "Città d'arte", "updated": t - 40 * day},
+                  {"id": "c", "title": "Pizza al taglio", "updated": t - 40 * day}], "a")
+    texts = [sb.list.item(i).text() for i in range(sb.list.count())]
+    assert texts[0] == "Oggi" and "Più vecchie" in texts, texts
+    assert sb.chat_ids() == ["a", "b", "c"]
+    header = sb.list.item(0)
+    assert not header.flags() & Qt.ItemFlag.ItemIsSelectable   # le intestazioni non si scelgono
+    sb.search.setText("PIZZA")
+    assert sb.chat_ids() == ["a", "c"]
+    sb.search.setText("citta")                                 # senza accenti né maiuscole
+    assert sb.chat_ids() == ["b"]
+    sb.search.setText("nessuna")
+    assert sb.chat_ids() == [] and sb.list.item(0).text() == "Nessun risultato"
+    sb.search.clear()
+    assert sb.chat_ids() == ["a", "b", "c"]
+    sb.deleteLater()
+
+
 def test_sidebar_titles_fit_without_horizontal_scroll():
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     from PySide6.QtWidgets import QApplication
@@ -2294,11 +2368,12 @@ def test_sidebar_titles_fit_without_horizontal_scroll():
                   {"id": "b", "title": "Breve", "updated": 1}], "a")
     for _i in range(5):
         app.processEvents()
-    item = sb.list.item(0)
+    items = [sb.list.item(i) for i in range(sb.list.count()) if sb.list.item(i).data(256)]
+    item = items[0]
     assert item.text().endswith("…") and item.toolTip() == long_title, item.text()
     assert sb.list.fontMetrics().horizontalAdvance(item.text()) <= sb.list.viewport().width()
     assert sb.list.horizontalScrollBar().maximum() == 0
-    assert sb.list.item(1).text() == "Breve"
+    assert items[1].text() == "Breve"
     sb.deleteLater()
 
 

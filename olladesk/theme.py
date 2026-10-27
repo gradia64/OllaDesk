@@ -152,6 +152,8 @@ def build_qss(theme_name: str) -> str:
     QListWidget::item {{ color: {text}; padding: 7px 8px; border-radius: 8px; margin: 1px 6px; }}
     QListWidget::item:hover {{ background: {hover}; }}
     QListWidget::item:selected {{ background: {hover}; color: {text}; }}
+    /* intestazioni dei gruppi per data: niente evidenziazione */
+    QListWidget::item:disabled {{ background: transparent; color: {dim}; padding: 10px 8px 2px 8px; }}
 
     /* ---- pulsanti ---- */
     QPushButton {{

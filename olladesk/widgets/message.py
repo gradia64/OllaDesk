@@ -4,10 +4,11 @@ from __future__ import annotations
 import html
 import time
 
-from PySide6.QtCore import QEvent, Qt, QTimer
-from PySide6.QtGui import QGuiApplication
+from PySide6.QtCore import QEvent, Qt, QTimer, QUrl
+from PySide6.QtGui import QDesktopServices, QGuiApplication
 from PySide6.QtWidgets import (
     QFrame,
+    QGraphicsOpacityEffect,
     QHBoxLayout,
     QLabel,
     QMenu,
@@ -16,7 +17,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from ..md import md_to_html
+from ..md import COPY_LINK, code_blocks, md_to_html
 from .. import icons, theme
 from ..i18n import _
 
@@ -105,12 +106,15 @@ class MessageWidget(QFrame):
         self.label = QLabel(self)
         self.label.setTextFormat(Qt.TextFormat.RichText)
         self.label.setWordWrap(True)
-        self.label.setOpenExternalLinks(True)
+        # i link li apre _on_link: «Copia» dei blocchi di codice resta qui,
+        # nel browser vanno solo http/https
+        self.label.setOpenExternalLinks(False)
         self.label.setTextInteractionFlags(
             Qt.TextInteractionFlag.TextSelectableByMouse
             | Qt.TextInteractionFlag.LinksAccessibleByMouse
         )
-        self.label.linkActivated.connect(lambda _u: None)
+        self.label.linkActivated.connect(self._on_link)
+        self._copied_block: int | None = None   # blocco appena copiato («Copiato ✓»)
         # menu contestuale dedicato (tasto destro): «Copia messaggio» sempre
         # disponibile, senza dover prima selezionare il testo
         self.label.installEventFilter(self)
@@ -153,6 +157,11 @@ class MessageWidget(QFrame):
         icons.set_icon(self.copy_btn, "copy", theme.palette_for(theme_name)["dim"], 14, fallback="⧉")
         self.copy_btn.setToolTip(_("Copia messaggio"))
         self.copy_btn.clicked.connect(self._copy)
+        # visibile al passaggio del mouse: trasparente invece che nascosto,
+        # così la bolla non cambia altezza
+        self._copy_fx = QGraphicsOpacityEffect(self.copy_btn)
+        self._copy_fx.setOpacity(0.0)
+        self.copy_btn.setGraphicsEffect(self._copy_fx)
         meta_row.addWidget(self.copy_btn)
         inner.addLayout(meta_row)
 
@@ -160,6 +169,40 @@ class MessageWidget(QFrame):
         self.set_text(text)
 
     # ------------------------------------------------------------------ API
+
+    def enterEvent(self, ev) -> None:  # noqa: N802 (API Qt)
+        self._copy_fx.setOpacity(1.0)
+        super().enterEvent(ev)
+
+    def leaveEvent(self, ev) -> None:  # noqa: N802 (API Qt)
+        self._copy_fx.setOpacity(0.0)
+        super().leaveEvent(ev)
+
+    def _render(self) -> str:
+        bg, fg, inline = theme.code_colors(self.theme_name)
+        return md_to_html(self.raw, bg, fg, inline,
+                          copy_labels=(_("codice"), _("Copia"), _("Copiato ✓")),
+                          copied=self._copied_block)
+
+    def _on_link(self, url: str) -> None:
+        if url.startswith(COPY_LINK):
+            try:
+                idx = int(url[len(COPY_LINK):])
+                code = code_blocks(self.raw)[idx]
+            except (ValueError, IndexError):
+                return
+            QGuiApplication.clipboard().setText(code)
+            self._copied_block = idx
+            self.label.setText(self._render())
+            QTimer.singleShot(1500, self._clear_copied)
+        elif url.startswith(("http://", "https://")):
+            QDesktopServices.openUrl(QUrl(url))
+
+    def _clear_copied(self) -> None:
+        if self._copied_block is not None:
+            self._copied_block = None
+            if self.raw:
+                self.label.setText(self._render())
 
     def eventFilter(self, obj, ev) -> bool:
         if obj is self.label and ev.type() == QEvent.Type.ContextMenu:
@@ -185,9 +228,8 @@ class MessageWidget(QFrame):
                 self._think_streaming = False
                 self._auto_collapse_think()
         self.copy_btn.setVisible(bool(raw))
-        bg, fg, inline = theme.code_colors(self.theme_name)
         if raw:
-            self.label.setText(md_to_html(raw, bg, fg, inline))
+            self.label.setText(self._render())
         elif self.role == "assistant":
             self.label.setText(self._anim_frames_text())
         else:
@@ -301,8 +343,7 @@ class MessageWidget(QFrame):
             self._sync_sources_widgets()
         self._update_meta(show_ts, self._stats)
         if self.raw:
-            bg, fg, inline = theme.code_colors(theme_name)
-            self.label.setText(md_to_html(self.raw, bg, fg, inline))
+            self.label.setText(self._render())
 
     # -------------------------------------------------------------- interni
 

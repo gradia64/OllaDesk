@@ -1,10 +1,15 @@
 """Barra laterale in stile ChatGPT: elenco conversazioni + azioni."""
 from __future__ import annotations
 
+import datetime
+import unicodedata
+
 from PySide6.QtCore import QEvent, Qt, Signal
+from PySide6.QtGui import QAction, QColor, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QListWidget,
     QListWidgetItem,
     QMenu,
@@ -15,12 +20,47 @@ from PySide6.QtWidgets import (
 )
 
 from .. import __version__, icons, theme
-from ..i18n import _
+from ..i18n import N_, _
 
 
 # spazio orizzontale di una voce oltre al testo: margini (6 + 6) e padding
 # (8 + 8) di QListWidget::item nel QSS di theme.py, più un po' di respiro
 ITEM_CHROME_W = 34
+
+# gruppi dell'elenco, dal più recente: (chiave, etichetta da tradurre)
+DATE_GROUPS = (
+    ("today", N_("Oggi")),
+    ("yesterday", N_("Ieri")),
+    ("week", N_("Ultimi 7 giorni")),
+    ("month", N_("Ultimi 30 giorni")),
+    ("older", N_("Più vecchie")),
+)
+
+
+def date_group(ts: float, now: datetime.datetime | None = None) -> str:
+    """Gruppo di una conversazione dall'ultima modifica (giorni del calendario
+    locale, non intervalli di 24 ore)."""
+    now = now or datetime.datetime.now()
+    try:
+        day = datetime.datetime.fromtimestamp(float(ts or 0)).date()
+    except (OverflowError, OSError, ValueError):
+        return "older"
+    days = (now.date() - day).days
+    if days <= 0:
+        return "today"   # anche date nel futuro (orologio spostato)
+    if days == 1:
+        return "yesterday"
+    if days < 7:
+        return "week"
+    if days < 30:
+        return "month"
+    return "older"
+
+
+def _fold(text: str) -> str:
+    """Testo per la ricerca: senza maiuscole né accenti («Città» trova «citta»)."""
+    decomposed = unicodedata.normalize("NFKD", text.casefold())
+    return "".join(ch for ch in decomposed if not unicodedata.combining(ch))
 
 
 class ChatSidebar(QWidget):
@@ -77,6 +117,19 @@ class ChatSidebar(QWidget):
         # stessa altezza di «Nuova chat»: l'emoji alzerebbe il pulsante
         self.archive_btn.setFixedHeight(self.new_btn.sizeHint().height())
 
+        # ricerca nei titoli: vale per l'elenco mostrato (conversazioni o archivio)
+        self.search = QLineEdit(self)
+        self.search.setObjectName("chatSearch")
+        self.search.setPlaceholderText(_("Cerca conversazioni"))
+        self.search.setToolTip(_("Filtra le conversazioni per titolo (Ctrl+K)"))
+        self.search.setClearButtonEnabled(True)
+        self._search_action = QAction(self.search)
+        self.search.addAction(self._search_action, QLineEdit.ActionPosition.LeadingPosition)
+        self.search.textChanged.connect(lambda _t: self.set_chats(self._chats, self._current_id))
+        QShortcut(QKeySequence("Escape"), self.search, self.search.clear,
+                  context=Qt.ShortcutContext.WidgetShortcut)
+        lay.addWidget(self.search)
+
         # intestazione della vista «Archivio»: senza, l'elenco sembra quello solito
         self.archive_label = QLabel(_("🗄  Archivio: conversazioni archiviate"), self)
         self.archive_label.setObjectName("metaLabel")
@@ -131,7 +184,16 @@ class ChatSidebar(QWidget):
             # in testa all'etichetta, solo se l'icona c'è
             label = btn.text().strip()
             btn.setText(("  " if not btn.icon().isNull() else "") + label)
+        search_icon = icons.icon("search", self._palette["dim"], 14)
+        if search_icon is not None:
+            self._search_action.setIcon(search_icon)
         self._sync_archive_btn(self._n_archived)
+        if self._chats:
+            self.set_chats(self._chats, self._current_id)   # colore delle intestazioni
+
+    def focus_search(self) -> None:
+        self.search.setFocus()
+        self.search.selectAll()
 
     # ------------------------------------------------------------------ API
 
@@ -143,18 +205,47 @@ class ChatSidebar(QWidget):
             self._show_archived = False   # archivio svuotato: torna all'elenco
         shown = archived if self._show_archived else [
             c for c in self._chats if not c.get("archived")]
+        query = _fold(self.search.text().strip())
+        if query:
+            shown = [c for c in shown if query in _fold(c.get("title") or "")]
         self._sync_archive_btn(len(archived))
         self.list.blockSignals(True)
         self.list.clear()
+        if query and not shown:
+            self._add_header(_("Nessun risultato"))
+        now = datetime.datetime.now()
+        groups: dict[str, list[dict]] = {}
         for c in shown:
-            title = c.get("title") or _("Conversazione")
-            item = QListWidgetItem(self._elide(title))
-            item.setData(Qt.ItemDataRole.UserRole, c["id"])
-            item.setToolTip(title)
-            self.list.addItem(item)
-            if c["id"] == current_id:
-                self.list.setCurrentItem(item)
+            groups.setdefault(date_group(c.get("updated", 0), now), []).append(c)
+        for key, label in DATE_GROUPS:
+            if key not in groups:
+                continue
+            self._add_header(_(label))
+            for c in groups[key]:
+                title = c.get("title") or _("Conversazione")
+                item = QListWidgetItem(self._elide(title))
+                item.setData(Qt.ItemDataRole.UserRole, c["id"])
+                item.setToolTip(title)
+                self.list.addItem(item)
+                if c["id"] == current_id:
+                    self.list.setCurrentItem(item)
         self.list.blockSignals(False)
+
+    def _add_header(self, text: str) -> None:
+        """Intestazione di gruppo: non selezionabile, piccola e grigia."""
+        item = QListWidgetItem(text)
+        item.setFlags(Qt.ItemFlag.NoItemFlags)
+        font = item.font()
+        font.setPointSizeF(max(7.0, self.font().pointSizeF() - 1))
+        font.setBold(True)
+        item.setFont(font)
+        item.setForeground(QColor(self._palette["dim"]))
+        self.list.addItem(item)
+
+    def chat_ids(self) -> list[str]:
+        """Id delle conversazioni mostrate, nell'ordine dell'elenco."""
+        return [d for i in range(self.list.count())
+                if (d := self.list.item(i).data(Qt.ItemDataRole.UserRole))]
 
     # -------------------------------------------------------------- interni
 
@@ -197,6 +288,8 @@ class ChatSidebar(QWidget):
     def _reelide(self) -> None:
         for i in range(self.list.count()):
             item = self.list.item(i)
+            if item.data(Qt.ItemDataRole.UserRole) is None:
+                continue   # intestazione di gruppo
             item.setText(self._elide(item.toolTip()))   # il tooltip ha il titolo intero
 
     def eventFilter(self, obj, ev) -> bool:
@@ -205,11 +298,13 @@ class ChatSidebar(QWidget):
         return super().eventFilter(obj, ev)
 
     def _on_clicked(self, item: QListWidgetItem) -> None:
-        self.chatSelected.emit(item.data(Qt.ItemDataRole.UserRole))
+        chat_id = item.data(Qt.ItemDataRole.UserRole)
+        if chat_id:
+            self.chatSelected.emit(chat_id)
 
     def _on_menu(self, pos) -> None:
         item = self.list.itemAt(pos)
-        if item is None:
+        if item is None or not item.data(Qt.ItemDataRole.UserRole):
             return
         chat_id = item.data(Qt.ItemDataRole.UserRole)
         menu = QMenu(self)

@@ -33,8 +33,8 @@ License: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
 
 - **ChatGPT-style chat**: user/assistant bubbles, token-by-token *streaming*
   response, button to stop generation, statistics (tokens, tok/s, duration),
-  Markdown rendering (code blocks, lists, bold, links…), copy button for each
-  reply. The message column has a fixed maximum width and stays centered even
+  Markdown rendering (code blocks, lists, bold, links…). Each code block has a
+  bar with its language and "Copy"; the message copy button appears on hover. The message column has a fixed maximum width and stays centered even
   when the sidebar is hidden (Ctrl+B): the content does not stretch to the
   full window. While the model is replying, the view stays where you leave it
   (you can scroll up with the wheel) and resumes following the reply when you
@@ -47,8 +47,10 @@ License: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
 - **Conversation history** in the sidebar (with the OllaDesk version in the
   header): new chat (also with "＋" in the top bar, visible with the sidebar
   closed), selection, rename (right-click) and deletion; persisted
-  to disk. Long titles in the sidebar are shortened with «…» to the actual
-  column width.
+  to disk. The list is grouped by date (Today, Yesterday, Last 7 days, Last 30
+  days, Older) and a search field (Ctrl+K) filters the titles, ignoring case
+  and accents, in the archive too. Long titles are shortened with «…» to the
+  actual column width.
 - **Conversation archive** (right-click → "Archive"): the chat leaves the
   list without being deleted and is found again via "🗄 N" next to "New
   chat", at the top of the sidebar, from which it can be opened or restored. Writing a
@@ -425,6 +427,7 @@ menu.
 |----------|--------|
 | `Ctrl+N` | New conversation |
 | `Ctrl+B` | Show/hide sidebar |
+| `Ctrl+K` | Search conversations |
 | `Ctrl+M` | Model management (download/removal) |
 | `Ctrl+D` | Web companion (phone and tablet) |
 | `Ctrl+,` | Open settings |
