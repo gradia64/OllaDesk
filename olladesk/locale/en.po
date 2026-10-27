@@ -2046,7 +2046,7 @@ msgstr "System prompt:"
 
 #: olladesk/widgets/settings_dialog.py:220
 msgid "Mostra l'icona di OllaDesk nell'area di notifica (tray)"
-msgstr "Show the OllaDesk icon in the notification area (system tray)"
+msgstr "Show the OllaDesk icon in the system tray"
 
 #: olladesk/widgets/settings_dialog.py:224
 msgid "L'icona nella tray permette di mostrare/nascondere la finestra con un clic."

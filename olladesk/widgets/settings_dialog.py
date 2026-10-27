@@ -75,8 +75,11 @@ class SettingsDialog(QDialog):
         body.setSpacing(12)
         self.nav = QListWidget(self)
         self.nav.setObjectName("settingsNav")
-        self.nav.setFixedWidth(200)
+        self.nav.setFixedWidth(220)
         self.nav.setFrameShape(QFrame.Shape.NoFrame)
+        # una voce troppo lunga si accorcia con «…» invece di far scorrere il menu
+        self.nav.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.nav.setTextElideMode(Qt.TextElideMode.ElideRight)
         self.pages = QStackedWidget(self)
         body.addWidget(self.nav)
         body.addWidget(self.pages, 1)
@@ -161,6 +164,9 @@ class SettingsDialog(QDialog):
         form = QFormLayout()
         form.setSpacing(10)
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+        # con le etichette lunghe (inglese, tedesco) e la finestra stretta
+        # l'etichetta va sopra il campo invece di far scorrere la pagina di lato
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
         return form
 
     @staticmethod

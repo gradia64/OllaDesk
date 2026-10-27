@@ -40,7 +40,7 @@ OUT = os.path.join(ROOT, OUT_REL)
 sys.path.insert(0, ROOT)
 
 from PySide6.QtCore import QEventLoop, QTimer  # noqa: E402
-from PySide6.QtWidgets import QApplication, QScrollArea, QToolButton  # noqa: E402
+from PySide6.QtWidgets import QApplication, QLabel, QScrollArea, QToolButton  # noqa: E402
 
 from olladesk import config, web_search  # noqa: E402
 
@@ -72,6 +72,26 @@ class _Ollama(BaseHTTPRequestHandler):
             self.send_error(404)
             return
         data = json.dumps(body).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+
+    def do_POST(self):  # noqa: N802 (API http.server)
+        # /api/show: capacità del modello (badge accanto al selettore)
+        length = int(self.headers.get("Content-Length") or 0)
+        name = json.loads(self.rfile.read(length) or b"{}").get("model", "")
+        if self.path != "/api/show":
+            self.send_error(404)
+            return
+        caps = ["completion"]
+        if name.startswith(("qwen3", "deepseek-r1")):
+            caps += ["thinking", "tools"]
+        if name.startswith("gemma3"):
+            caps.append("vision")
+        data = json.dumps({"capabilities": caps}).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(data)))
@@ -352,7 +372,7 @@ def main() -> int:
     s = config.load_settings()
     s.update(host=f"http://127.0.0.1:{srv.server_address[1]}", theme="dark",
              tray_icon=False, close_to_tray=False, companion=False,
-             app_update_check=False)
+             app_update_check=False, ollama_update_check=False)
     config.save_settings(s)
     code_id, web_id = write_chats()
 
@@ -402,6 +422,21 @@ def main() -> int:
     wait(1200)
     save(dlg, "models.png")
     dlg.close()
+
+    # impostazioni: pagina «Generale», stessa dimensione della galleria dei README
+    from olladesk.widgets.settings_dialog import SettingsDialog
+    # indirizzo e cartella predefiniti al posto di quelli temporanei della prova
+    sdlg = SettingsDialog({**win.settings, "host": "http://localhost:11434"},
+                          win.model_names, "dark", "0.40.2", win)
+    real_dir = str(config.config_dir())
+    for label in sdlg.findChildren(QLabel):
+        if real_dir in label.text():
+            label.setText(label.text().replace(real_dir, "~/.config/olladesk"))
+    sdlg.resize(820, 620)
+    sdlg.show()
+    wait(500)
+    save(sdlg, "settings.png")
+    sdlg.done(0)
 
     # companion: solo 127.0.0.1, porta libera (mai la 8765 dell'app installata)
     from olladesk import companion
