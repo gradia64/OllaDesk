@@ -59,4 +59,7 @@ package() {
       -e "s/@DATE@/$(date -u -d "@${SOURCE_DATE_EPOCH:-$(date +%s)}" +%Y-%m-%d)/" \
       packaging/common/olladesk.1.in > "$pkgdir/usr/share/man/man1/olladesk.1"
   install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+  # ISC non è tra le licenze comuni di Arch: namcap vuole il testo qui
+  install -Dm644 olladesk/assets/icons/LICENSE \
+    "$pkgdir/usr/share/licenses/$pkgname/LICENSE-lucide"
 }
