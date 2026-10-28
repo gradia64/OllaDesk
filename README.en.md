@@ -44,6 +44,7 @@ License: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   yet translated fall back to English) or can be chosen in Settings →
   General → «Language»; it applies after a restart. The catalogs are in
   `olladesk/locale/*.po` and are updated with `python3 scripts/i18n.py update`.
+- **Renewed interface**: line icons (Lucide) instead of emoji and symbols, following the theme color.
 - **Conversation history** in the sidebar (with the OllaDesk version in the
   header): new chat (also with "＋" in the top bar, visible with the sidebar
   closed), selection, rename (right-click) and deletion; persisted
@@ -148,6 +149,7 @@ License: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   with a click on the icon (menu: Show/hide, Quit); optionally closing (X)
   minimizes to the tray instead of quitting, so the web companion and ongoing
   generations stay active.
+- **Model capabilities**: next to the selector, badges show whether the chosen model accepts images, reasons, or uses tools.
 - **Model management** ("Models" button in the sidebar, Ctrl+M): list of
   installed models with size/parameters/quantization, **downloading** new
   models with progress bar and cancel, and **deletion**. The model selected
@@ -517,6 +519,7 @@ olladesk/
   theme.py                  dark/light/system themes (Fusion + QSS)
   md.py                     Markdown → HTML (Qt rich text subset)
   i18n.py                   interface translations (catalogs in locale/*.po)
+  icons.py                  Lucide icons (SVG in assets/icons, ISC license)
   context.py                attachments: text/PDF/images as context
   office.py                 text of .docx/.doc/.xlsx/.xls/.odt/.ods
   portal.py                 FileTransfer portal for drag & drop in Flatpak
@@ -529,8 +532,10 @@ olladesk/
   workers.py                registry of active and stopping QThread workers
   companion.py              web companion: HTTP server on LAN and pairing
   web/                      mobile companion page (HTML, CSS, JS, manifest and icons)
+  assets/icons/             Lucide icons (SVG, ISC license)
   main_window.py            main window, chat engine client
   widgets/
+    about.py                Info page (versions, license, copy system info)
     chat_area.py            message area + input (attachments, web search)
     message.py              message bubbles
     sidebar.py              conversation list

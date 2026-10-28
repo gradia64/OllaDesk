@@ -30,6 +30,7 @@ Licencia: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
 
 - **Chat estilo ChatGPT**: burbujas usuario/asistente, respuesta en *streaming* token a token, botón para interrumpir la generación, estadísticas (token, tok/s, duración), renderizado Markdown (bloques de código, listas, negritas, enlaces…). Cada bloque de código tiene una línea con su lenguaje y «Copiar»; el botón de copia del mensaje aparece al pasar el ratón. La columna de mensajes tiene ancho máximo fijo y permanece centrada incluso cuando la barra lateral está oculta (Ctrl+B): el contenido no se estira a toda la ventana. Mientras el modelo responde, la vista se queda donde la dejas (se puede subir con la rueda) y vuelve a seguir la respuesta cuando bajas de nuevo al final; lo mismo vale en el companion web.
 - **Interfaz multilingüe**: italiano, inglés, francés, alemán y español, también en el companion web. Sigue el idioma del sistema (los idiomas aún no traducidos usan el inglés) o se elige en Configuración → General → «Idioma»; se aplica tras reiniciar. Los catálogos están en `olladesk/locale/*.po` y se actualizan con `python3 scripts/i18n.py update`.
+- **Interfaz renovada**: iconos de línea (Lucide) en lugar de emojis y símbolos, que siguen el color del tema.
 - **Historial de conversaciones** en la barra lateral (con la versión de OllaDesk en el encabezado): nueva chat, selección, renombrar (clic derecho) y eliminación; persistencia en disco; lista agrupada por fecha (Hoy, Ayer, Últimos 7 días, Últimos 30 días, Más antiguas) y campo de búsqueda (Ctrl+K) en los títulos, sin distinguir mayúsculas ni acentos, también en el archivo. Los títulos largos en la barra lateral se acortan con «…» al ancho real de la columna.
 - **Archivo de conversaciones** (clic derecho → «Archivar»): la chat sale de la lista sin eliminarse y se encuentra con «🗄 N» junto a «Nuevo chat», arriba en la barra lateral, desde donde se abre o se restaura. Escribir un nuevo mensaje en una chat archivada la devuelve a la lista. Opcional el archivado automático al iniciar las chats sin mensajes desde cierto número de días (Configuración → General, desactivado por defecto).
 - **Adjuntos como contexto** (📎 en el input): archivos de texto y código (insertados en el mensaje), PDF (requiere el paquete opcional `pypdf`), documentos Word, Excel y OpenDocument (`.docx`, `.doc`, `.xlsx`, `.xls`, `.odt`, `.ods`: el texto, y las hojas de cálculo fila por fila, sin dependencias adicionales) e imágenes (enviadas en base64 a los modelos de visión: llava, llama3.2-vision, gemma3…). Los adjuntos aparecen como chips sobre el input y en la burbuja del mensaje.
@@ -44,6 +45,7 @@ Licencia: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   - **Límite conocido:** el enlace es HTTP en claro, así que quien esté en la misma Wi-Fi puede interceptar la cookie. Está bien en una red doméstica protegida (WPA2/WPA3); no abras el puerto en el router. Sin recursos externos: la página funciona también sin internet.
 - **Cliente Ollama de terceros** (apps para smartphone que hablan con la API de Ollama): el compartido de la API de las versiones 0.2.x se eliminó en la 0.3, porque la API de Ollama no tiene autenticación y la companion web sí. Al actualizar desde una 0.2.x con el compartido activo, desde la 0.3.6 el campo «Servidor Ollama» que apuntaba a su puerto vuelve solo a `http://localhost:11434`. Quien quiera exponer Ollama en red lo configura en el servicio del sistema, **bajo su propia responsabilidad**: `sudo systemctl edit ollama`, luego en la sección `[Service]` la línea `Environment="OLLAMA_HOST=0.0.0.0"` y `sudo systemctl restart ollama` (con la misma regla del firewall para el puerto 11434). Quien alcance el puerto puede usar los modelos y la GPU: para el acceso desde fuera de casa mejor una VPN (ej. Tailscale) o un túnel SSH.
 - **Icono en la bandeja**: la ventana se reduce al área de notificación y se restaura con un clic en el icono (menú: Mostrar/ocultar, Salir); opcionalmente el cierre (X) reduce en la bandeja en lugar de salir, así la companion web y las generaciones en curso permanecen activas.
+- **Capacidades del modelo**: junto al selector, unas insignias muestran si el modelo elegido acepta imágenes, razona o usa herramientas.
 - **Gestión de modelos** (botón «Modelos» en la barra lateral, Ctrl+M): lista de los modelos instalados con tamaño/parámetros/cuantización, **descarga** de nuevos modelos con barra de progreso y cancelación, y **eliminación**. El modelo seleccionado para la conversación está marcado con «●». PC y teléfono comparten la misma operación: se hace una a la vez, se ve y se cancela desde ambos, un modelo no se elimina mientras el PC responde y no se usa mientras se elimina. Al cerrar la ventana la descarga continúa; al reabrirla se ve el progreso. Con Ollama 0.40.0, tras la conversión de los modelos al nuevo motor, la lista de Ollama reporta el mismo nombre dos veces más una entrada interna `llamacpp:<sha>` ([ollama/ollama#18830](https://github.com/ollama/ollama/issues/18830)): OllaDesk muestra cada modelo una sola vez y oculta la entrada interna (en disco no cambia nada; `ollama list` sigue mostrándolas).
 - **Búsqueda web** (🌐 en el input, gris apagada y azul activa): antes de responder, la app busca en la web y adjunta los resultados al contexto. Bajo la respuesta el bloque plegable **«🌐 Fuentes»** lista los resultados usados, con la misma numeración [1], [2]… que ve el modelo (también en el teléfono y en las conversaciones guardadas anteriormente). **Proveedor a elegir** en la configuración:
   - *DuckDuckGo* — sin clave API (puede ser bloqueado temporalmente por su protección anti-bot: en ese caso la app lo indica claramente);
@@ -290,6 +292,7 @@ olladesk/
   theme.py                  temas oscuro/claro/sistema (Fusion + QSS)
   md.py                     Markdown → HTML (subset Qt rich text)
   i18n.py                   traducciones de la interfaz (catálogos en locale/*.po)
+  icons.py                  iconos Lucide (SVG en assets/icons, licencia ISC)
   context.py                adjuntos: texto/PDF/imágenes como contexto
   office.py                 texto de .docx/.doc/.xlsx/.xls/.odt/.ods
   portal.py                 portal FileTransfer para arrastrar y soltar en Flatpak
@@ -302,8 +305,10 @@ olladesk/
   workers.py                registro de los worker QThread activos y en parada
   companion.py              companion web: servidor HTTP en LAN y emparejamiento
   web/                      página móvil de la companion (HTML, CSS, JS, manifest e iconos)
+  assets/icons/             iconos Lucide (SVG, licencia ISC)
   main_window.py            ventana principal, cliente del motor de chat
   widgets/
+    about.py                página Info (versiones, licencia, copia de info del sistema)
     chat_area.py            área de mensajes + input (adjuntos, búsqueda web)
     message.py              burbujas de los mensajes
     sidebar.py              lista de conversaciones

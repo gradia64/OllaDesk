@@ -46,6 +46,7 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   lingue non ancora tradotte usa l'inglese) oppure si sceglie in
   Impostazioni → Generale → «Lingua»; vale dal riavvio. I cataloghi sono
   in `olladesk/locale/*.po` e si aggiornano con `python3 scripts/i18n.py update`.
+- **Interfaccia rinnovata**: icone a linea (Lucide) al posto di emoji e simboli, che seguono il colore del tema.
 - **Cronologia conversazioni** nella barra laterale (con la versione di
   OllaDesk nell'intestazione): nuova chat (anche con «＋» nella barra superiore,
   visibile a barra laterale chiusa), selezione, rinomina (tasto destro)
@@ -158,6 +159,7 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   ripristina con un clic sull'icona (menu: Mostra/nascondi, Esci);
   facoltativamente la chiusura (X) riduce nella tray invece di uscire,
   così la companion web e le generazioni in corso restano attive.
+- **Capacità del modello**: accanto al selettore, dei badge mostrano se il modello scelto accetta immagini, ragiona o usa strumenti.
 - **Gestione modelli** (pulsante «Modelli» nella sidebar, Ctrl+M): elenco dei
   modelli installati con dimensione/parametri/quantizzazione, **scaricamento**
   di nuovi modelli con barra di avanzamento e annullamento, ed **eliminazione**.
@@ -533,6 +535,7 @@ olladesk/
   theme.py                  temi scuro/chiaro/sistema (Fusion + QSS)
   md.py                     Markdown → HTML (subset Qt rich text)
   i18n.py                   traduzioni dell'interfaccia (cataloghi in locale/*.po)
+  icons.py                  icone Lucide (SVG in assets/icons, licenza ISC)
   context.py                allegati: testo/PDF/immagini come contesto
   office.py                 testo di .docx/.doc/.xlsx/.xls/.odt/.ods
   portal.py                 portale FileTransfer per il drag & drop in Flatpak
@@ -545,8 +548,10 @@ olladesk/
   workers.py                registro dei worker QThread attivi e in arresto
   companion.py              companion web: server HTTP in LAN e abbinamento
   web/                      pagina mobile della companion (HTML, CSS, JS, manifest e icone)
+  assets/icons/             icone Lucide (SVG, licenza ISC)
   main_window.py            finestra principale, client del motore di chat
   widgets/
+    about.py                pagina Info (versioni, licenza, copia info di sistema)
     chat_area.py            area messaggi + input (allegati, ricerca web)
     message.py              bolle dei messaggi
     sidebar.py              elenco conversazioni
