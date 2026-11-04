@@ -16,16 +16,8 @@ msgstr "Update the checkout: git pull, then restart OllaDesk."
 msgid "Aggiorna il pacchetto Python: pipx upgrade olladesk (oppure pip install -U)."
 msgstr "Update the Python package: pipx upgrade olladesk (or pip install -U)."
 
-#: olladesk/app_update.py:190
-msgid "limite di richieste a GitHub raggiunto, riprova più tardi"
-msgstr "GitHub rate limit reached, try again later"
-
-#: olladesk/app_update.py:192
-#, python-brace-format
-msgid "errore HTTP {code} da GitHub"
-msgstr "HTTP error {code} from GitHub"
-
-#: olladesk/app_update.py:197
+#: olladesk/app_update.py:195
+#: olladesk/updater.py:124
 #, python-brace-format
 msgid "GitHub non raggiungibile ({reason})"
 msgstr "GitHub unreachable ({reason})"
@@ -777,14 +769,23 @@ msgstr "Cannot reach the Ollama server ({host}): {reason}"
 msgid "scaricamento interrotto: il server ha chiuso la connessione"
 msgstr "download interrupted: the server closed the connection"
 
-#: olladesk/updater.py:113
+#: olladesk/updater.py:150
 msgid "il contenuto scaricato non sembra uno script di installazione"
 msgstr "the downloaded content does not look like an installation script"
 
-#: olladesk/updater.py:87
+#: olladesk/updater.py:73
 #, python-brace-format
-msgid "impossibile controllare gli aggiornamenti: {error}"
-msgstr "could not check for updates: {error}"
+msgid "errore HTTP {code} da GitHub"
+msgstr "HTTP error {code} from GitHub"
+
+#: olladesk/updater.py:84
+msgid "limite di richieste a GitHub raggiunto, riprova più tardi"
+msgstr "GitHub rate limit reached, try again later"
+
+#: olladesk/updater.py:85
+#, python-brace-format
+msgid "limite di richieste a GitHub raggiunto (60 all'ora per indirizzo IP): riprova dopo le {time}"
+msgstr "GitHub rate limit reached (60 per hour per IP address): try again after {time}"
 
 #: olladesk/web/app.js:12
 #: olladesk/web/app.js:487
@@ -1145,7 +1146,10 @@ msgid ""
 "• Ogni blocco di codice ha il nome del linguaggio e «Copia».\n"
 "• Il pulsante di copia del messaggio compare passando con il mouse.\n"
 "• Il pulsante di invio diventa un quadrato durante la risposta: premilo per interromperla."
-msgstr "• Each code block shows its language and \"Copy\".\n• The message copy button appears when you hover over it.\n• The send button turns into a square during the answer: press it to stop."
+msgstr ""
+"• Each code block shows its language and \"Copy\".\n"
+"• The message copy button appears when you hover over it.\n"
+"• The send button turns into a square during the answer: press it to stop."
 
 #: olladesk/widgets/about.py:113
 msgid "Companion web: OllaDesk dal telefono"
@@ -1172,7 +1176,10 @@ msgid ""
 "• «offline» in alto: controlla che Ollama sia avviato (ollama serve) e l'indirizzo del server.\n"
 "• Il modello dimentica l'inizio della conversazione: aumenta «num_ctx» nei parametri del modello o riduci allegati e messaggi inviati.\n"
 "• Per una segnalazione: Impostazioni → Info → «Copia informazioni di sistema»."
-msgstr "• \"offline\" at the top: check that Ollama is running (ollama serve) and the server address.\n• The model forgets the start of the conversation: increase \"num_ctx\" in the model parameters or send fewer attachments and messages.\n• For a bug report: Settings → Info → \"Copy system information\"."
+msgstr ""
+"• \"offline\" at the top: check that Ollama is running (ollama serve) and the server address.\n"
+"• The model forgets the start of the conversation: increase \"num_ctx\" in the model parameters or send fewer attachments and messages.\n"
+"• For a bug report: Settings → Info → \"Copy system information\"."
 
 #: olladesk/widgets/about.py:130
 #: olladesk/web/app.js:706
@@ -1265,7 +1272,11 @@ msgid ""
 "• Scegli il modello in alto e scrivi il messaggio: Invio lo invia, Shift+Invio va a capo.\n"
 "• Per scaricare o rimuovere modelli: «Modelli» nella barra laterale (Ctrl+M).\n"
 "• L'indicatore in alto a destra mostra lo stato di Ollama; un clic apre versione, aggiornamento, modelli e indirizzo del server."
-msgstr "OllaDesk talks to Ollama, which must be running on this computer or on the network (Settings → General → \"Ollama server\").\n• Choose the model at the top and type your message: Enter sends it, Shift+Enter adds a new line.\n• To download or remove models: \"Models\" in the sidebar (Ctrl+M).\n• The indicator at the top right shows the Ollama status; a click opens version, update, models and server address."
+msgstr ""
+"OllaDesk talks to Ollama, which must be running on this computer or on the network (Settings → General → \"Ollama server\").\n"
+"• Choose the model at the top and type your message: Enter sends it, Shift+Enter adds a new line.\n"
+"• To download or remove models: \"Models\" in the sidebar (Ctrl+M).\n"
+"• The indicator at the top right shows the Ollama status; a click opens version, update, models and server address."
 
 #: olladesk/widgets/about.py:82
 msgid "Per iniziare"
@@ -1281,7 +1292,11 @@ msgid ""
 "• L'elenco è diviso per data; il campo di ricerca (Ctrl+K) filtra i titoli.\n"
 "• Tasto destro su una conversazione: rinomina, archivia o elimina.\n"
 "• L'archivio (accanto a «Nuova chat») contiene le conversazioni archiviate: non sono eliminate e si ripristinano con il tasto destro."
-msgstr "• \"＋\" at the top or Ctrl+N: new conversation.\n• The list is grouped by date; the search field (Ctrl+K) filters the titles.\n• Right-click a conversation: rename, archive or delete.\n• The archive (next to \"New chat\") holds archived conversations: they are not deleted and can be restored with a right-click."
+msgstr ""
+"• \"＋\" at the top or Ctrl+N: new conversation.\n"
+"• The list is grouped by date; the search field (Ctrl+K) filters the titles.\n"
+"• Right-click a conversation: rename, archive or delete.\n"
+"• The archive (next to \"New chat\") holds archived conversations: they are not deleted and can be restored with a right-click."
 
 #: olladesk/widgets/about.py:95
 msgid "Allegati e cartelle"
@@ -1294,7 +1309,12 @@ msgid ""
 "• immagini, per i modelli che leggono le immagini (badge con l'occhio accanto al modello);\n"
 "• una cartella intera, con i file di testo, codice, PDF e documenti che contiene.\n"
 "I file si leggono al momento dell'invio; un documento molto grande viene allegato in parte, con un avviso."
-msgstr "With the paperclip in the input, by dragging or pasting:\n• text and code files, PDFs, Word, Excel and OpenDocument documents: the model receives their text;\n• images, for models that read images (eye badge next to the model);\n• a whole folder, with the text, code, PDF and document files it contains.\nFiles are read when you send; a very large document is attached in part, with a warning."
+msgstr ""
+"With the paperclip in the input, by dragging or pasting:\n"
+"• text and code files, PDFs, Word, Excel and OpenDocument documents: the model receives their text;\n"
+"• images, for models that read images (eye badge next to the model);\n"
+"• a whole folder, with the text, code, PDF and document files it contains.\n"
+"Files are read when you send; a very large document is attached in part, with a warning."
 
 #: olladesk/widgets/chat_area.py:100
 msgid "Un mattone pesa un chilo più mezzo mattone: quanto pesa un mattone?"
@@ -1979,43 +1999,48 @@ msgstr "Frequency penalty"
 msgid "Penalizza i token in base a quante volte sono già comparsi."
 msgstr "Penalizes tokens based on how many times they have already appeared."
 
-#: olladesk/widgets/ollama_update.py:104
+#: olladesk/widgets/ollama_update.py:105
 msgid "Verifica…"
 msgstr "Checking…"
 
-#: olladesk/widgets/ollama_update.py:114
+#: olladesk/widgets/ollama_update.py:115
 msgid "Ricontatto il server Ollama e GitHub…"
 msgstr "Contacting the Ollama server and GitHub again…"
 
-#: olladesk/widgets/ollama_update.py:136
+#: olladesk/widgets/ollama_update.py:137
 #, python-brace-format
 msgid "Versione installata: <b>{version}</b>"
 msgstr "Installed version: <b>{version}</b>"
 
-#: olladesk/widgets/ollama_update.py:142
+#: olladesk/widgets/ollama_update.py:144
 #, python-brace-format
 msgid "Ultima versione disponibile: <b>{tag}</b>"
 msgstr "Latest available version: <b>{tag}</b>"
 
-#: olladesk/widgets/ollama_update.py:157
+#: olladesk/widgets/ollama_update.py:160
 msgid "✓ Ollama è aggiornato."
 msgstr "✓ Ollama is up to date."
 
-#: olladesk/widgets/ollama_update.py:163
+#: olladesk/widgets/ollama_update.py:166
 #, python-brace-format
 msgid "✦ Aggiornamento disponibile ({installed} → {latest}), ma il server configurato non è su questa macchina: aggiorna Ollama sull'host remoto."
 msgstr "✦ Update available ({installed} → {latest}), but the configured server is not on this machine: update Ollama on the remote host."
 
-#: olladesk/widgets/ollama_update.py:170
+#: olladesk/widgets/ollama_update.py:173
 #, python-brace-format
 msgid "✦ Aggiornamento disponibile: {installed} → {latest}. Premi «Aggiorna ora» (serve la password di amministratore)."
 msgstr "✦ Update available: {installed} → {latest}. Press «Update now» (the administrator password is required)."
 
-#: olladesk/widgets/ollama_update.py:176
+#: olladesk/widgets/ollama_update.py:179
+#, python-brace-format
+msgid "⚠ Verifica non riuscita: {error}"
+msgstr "⚠ Check failed: {error}"
+
+#: olladesk/widgets/ollama_update.py:183
 msgid "⚠ Verifica non riuscita: controlla la connessione a internet o il server Ollama."
 msgstr "⚠ Check failed: check the internet connection or the Ollama server."
 
-#: olladesk/widgets/ollama_update.py:182
+#: olladesk/widgets/ollama_update.py:189
 #, python-brace-format
 msgid ""
 "⚠ `pkexec` non disponibile. Aggiorna manualmente da terminale:\n"
@@ -2024,20 +2049,20 @@ msgstr ""
 "⚠ `pkexec` not available. Update manually from a terminal:\n"
 "    {command}"
 
-#: olladesk/widgets/ollama_update.py:188
+#: olladesk/widgets/ollama_update.py:195
 msgid "Scarico lo script ufficiale di installazione…"
 msgstr "Downloading the official installation script…"
 
-#: olladesk/widgets/ollama_update.py:205
+#: olladesk/widgets/ollama_update.py:212
 msgid "⚠ `pkexec` non disponibile sul sistema."
 msgstr "⚠ `pkexec` not available on the system."
 
-#: olladesk/widgets/ollama_update.py:211
+#: olladesk/widgets/ollama_update.py:218
 #, python-brace-format
 msgid "Script ufficiale scaricato ({size} byte): passa a sh via stdin, esecuzione con privilegi di amministratore — inserisci la password quando richiesto…"
 msgstr "Official script downloaded ({size} bytes): passed to sh via stdin, run with administrator privileges — enter the password when asked…"
 
-#: olladesk/widgets/ollama_update.py:232
+#: olladesk/widgets/ollama_update.py:239
 #, python-brace-format
 msgid ""
 "⚠ Impossibile avviare `pkexec`. Aggiorna manualmente da terminale:\n"
@@ -2046,7 +2071,7 @@ msgstr ""
 "⚠ Could not start `pkexec`. Update manually from a terminal:\n"
 "    {command}"
 
-#: olladesk/widgets/ollama_update.py:239
+#: olladesk/widgets/ollama_update.py:246
 #, python-brace-format
 msgid ""
 "⚠ Impossibile scaricare lo script ({err}). Aggiorna manualmente da terminale:\n"
@@ -2055,26 +2080,26 @@ msgstr ""
 "⚠ Could not download the script ({err}). Update manually from a terminal:\n"
 "    {command}"
 
-#: olladesk/widgets/ollama_update.py:255
+#: olladesk/widgets/ollama_update.py:262
 msgid "✓ Aggiornamento completato. Riavvia il server Ollama per usare la nuova versione."
 msgstr "✓ Update completed. Restart the Ollama server to use the new version."
 
-#: olladesk/widgets/ollama_update.py:260
+#: olladesk/widgets/ollama_update.py:267
 #, python-brace-format
 msgid "⚠ Aggiornamento non riuscito (codice {code}). Vedi l'output qui sopra."
 msgstr "⚠ Update failed (code {code}). See the output above."
 
-#: olladesk/widgets/ollama_update.py:280
+#: olladesk/widgets/ollama_update.py:287
 msgid "Aggiornamento di Ollama"
 msgstr "Ollama update"
 
-#: olladesk/widgets/ollama_update.py:297
+#: olladesk/widgets/ollama_update.py:304
 #: olladesk/widgets/settings_dialog.py:684
 #: olladesk/widgets/settings_dialog.py:730
 msgid "Aggiornamento in corso"
 msgstr "Update in progress"
 
-#: olladesk/widgets/ollama_update.py:297
+#: olladesk/widgets/ollama_update.py:304
 #: olladesk/widgets/settings_dialog.py:684
 #: olladesk/widgets/settings_dialog.py:730
 msgid "Attendi la fine dell'aggiornamento."
@@ -2084,34 +2109,34 @@ msgstr "Wait for the update to finish."
 msgid "Aggiornamenti Ollama"
 msgstr "Ollama updates"
 
-#: olladesk/widgets/ollama_update.py:54
+#: olladesk/widgets/ollama_update.py:55
 #, python-brace-format
 msgid "Versione installata: <b>{installed}</b>"
 msgstr "Installed version: <b>{installed}</b>"
 
-#: olladesk/widgets/ollama_update.py:58
-#: olladesk/widgets/ollama_update.py:104
+#: olladesk/widgets/ollama_update.py:59
+#: olladesk/widgets/ollama_update.py:105
 msgid "Verifica aggiornamenti"
 msgstr "Check for updates"
 
-#: olladesk/widgets/ollama_update.py:64
-#: olladesk/widgets/ollama_update.py:147
+#: olladesk/widgets/ollama_update.py:65
+#: olladesk/widgets/ollama_update.py:150
 msgid "Ultima versione disponibile: —"
 msgstr "Latest available version: —"
 
-#: olladesk/widgets/ollama_update.py:67
+#: olladesk/widgets/ollama_update.py:68
 msgid "Aggiorna ora"
 msgstr "Update now"
 
-#: olladesk/widgets/ollama_update.py:71
+#: olladesk/widgets/ollama_update.py:72
 msgid "Esegue lo script ufficiale di installazione (richiede la password di amministratore tramite pkexec)"
 msgstr "Runs the official installation script (requires the administrator password via pkexec)"
 
-#: olladesk/widgets/ollama_update.py:86
+#: olladesk/widgets/ollama_update.py:87
 msgid "…output dell'aggiornamento…"
 msgstr "…update output…"
 
-#: olladesk/widgets/ollama_update.py:92
+#: olladesk/widgets/ollama_update.py:93
 msgid "Versione attuale non nota: avvia Ollama o premi «Verifica aggiornamenti»."
 msgstr "Current version unknown: start Ollama or press «Check for updates»."
 

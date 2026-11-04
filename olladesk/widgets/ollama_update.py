@@ -41,6 +41,7 @@ class OllamaUpdateBox(QGroupBox):
         self._host = host_getter
         self._installed_version = installed_version or "?"
         self._latest_version: str | None = None
+        self._latest_error = ""   # perché GitHub non ha dato la versione
         self._check_worker: ApiWorker | None = None
         self._update_proc: QProcess | None = None
         self._download_worker = None
@@ -138,12 +139,14 @@ class OllamaUpdateBox(QGroupBox):
 
     def _on_latest_version(self, tag: str) -> None:
         self._latest_version = tag
+        self._latest_error = ""
         self.latestFound.emit(tag)
         self.ver_latest_label.setText(_('Ultima versione disponibile: <b>{tag}</b>').format(tag=html.escape(tag)))
         self._check_step()
 
-    def _on_latest_failed(self, _err: str) -> None:
+    def _on_latest_failed(self, err: str) -> None:
         self._latest_version = None
+        self._latest_error = err
         self.ver_latest_label.setText(_("Ultima versione disponibile: —"))
         self._check_step()
 
@@ -171,6 +174,10 @@ class OllamaUpdateBox(QGroupBox):
                       'Premi «Aggiorna ora» (serve la password di amministratore).').format(installed=self._installed_version, latest=self._latest_version)
                 )
                 self.update_btn.setEnabled(True)
+        elif self._latest_error and self._installed_version not in ("", "?"):
+            # il server risponde: il problema è GitHub, non la connessione
+            self.update_status.setText(_("⚠ Verifica non riuscita: {error}").format(
+                error=self._latest_error))
         else:
             self.update_status.setText(
                 _("⚠ Verifica non riuscita: controlla la connessione a internet o il server Ollama.")

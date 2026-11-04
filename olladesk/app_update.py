@@ -29,7 +29,7 @@ from PySide6.QtCore import QThread, Signal
 from . import __version__
 from .i18n import _
 from .ollama_client import abort_response
-from .updater import is_newer
+from .updater import github_http_error, is_newer
 
 REPO = "gradia64/OllaDesk"
 RELEASES_API = f"https://api.github.com/repos/{REPO}/releases/latest"
@@ -186,10 +186,8 @@ class AppUpdateCheckWorker(QThread):
                 return
             if e.code == 404:
                 self.ready.emit(None)   # nessuna release pubblicata
-            elif e.code in (403, 429):
-                self.failed.emit(_("limite di richieste a GitHub raggiunto, riprova più tardi"))
             else:
-                self.failed.emit(_('errore HTTP {code} da GitHub').format(code=e.code))
+                self.failed.emit(github_http_error(e))
             return
         except Exception as e:
             if not self._stopped:

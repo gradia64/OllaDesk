@@ -2497,5 +2497,35 @@ def main() -> int:
     return 1 if failed else 0
 
 
+def test_github_http_error_rate_limit_and_reset_time():
+    import time
+    import urllib.error
+    from email.message import Message
+
+    from olladesk.updater import github_http_error
+
+    def err(code, **headers):
+        h = Message()
+        for k, v in headers.items():
+            h[k.replace("_", "-")] = v
+        return urllib.error.HTTPError("https://api.github.com/x", code, "x", h, None)
+
+    now = 1_800_000_000.0
+    reset = now + 1800
+    msg = github_http_error(err(403, X_RateLimit_Remaining="0", X_RateLimit_Reset=str(int(reset))), now=now)
+    assert "limite di richieste" in msg and time.strftime("%H:%M", time.localtime(reset)) in msg, msg
+    # Retry-After (limite secondario) e 429
+    msg = github_http_error(err(429, Retry_After="600"), now=now)
+    assert time.strftime("%H:%M", time.localtime(now + 600)) in msg, msg
+    # reset già passato o illeggibile: niente orario sbagliato
+    assert github_http_error(err(403, X_RateLimit_Remaining="0", X_RateLimit_Reset=str(int(now - 5))), now=now) \
+        == "limite di richieste a GitHub raggiunto, riprova più tardi"
+    assert github_http_error(err(403, X_RateLimit_Remaining="0", X_RateLimit_Reset="boh"), now=now) \
+        == "limite di richieste a GitHub raggiunto, riprova più tardi"
+    # 403 senza intestazioni del limite: rifiuto vero, non un limite
+    assert github_http_error(err(403), now=now) == "errore HTTP 403 da GitHub"
+    assert github_http_error(err(500), now=now) == "errore HTTP 500 da GitHub"
+
+
 if __name__ == "__main__":
     sys.exit(main())
