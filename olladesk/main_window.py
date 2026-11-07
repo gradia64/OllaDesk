@@ -562,6 +562,12 @@ class MainWindow(QMainWindow):
 
     def _new_chat(self) -> None:
         self._view_id = None
+        # come all'avvio: nessun modello scelto, il selettore torna al
+        # segnaposto invece di tenere quello dell'ultima chat vista
+        # (senza modelli installati resta la voce «— nessun modello —»)
+        self._preferred_model = None
+        if self.model_combo.isEnabled():
+            self.model_combo.setCurrentIndex(-1)
         self.chat_area.clear_messages()
         self.sidebar.set_chats(self.engine.chats(), None)
         self._sync_busy_ui()

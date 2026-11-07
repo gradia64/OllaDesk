@@ -172,6 +172,11 @@ assert engine.active_chat_id() == "chat_b"
 # nuova chat durante la generazione: consentito
 win._new_chat()
 assert win._view_id is None and win.chat_area.send_btn.property("mode") == "send"
+# la nuova chat non eredita il modello di quella vista prima
+assert win.model_combo.currentIndex() == -1 and win.current_model() is None
+assert all(b.isHidden() for b in win.cap_badges.values())
+win._set_models(win.engine.model_names())   # ↻: resta sul segnaposto
+assert win.current_model() is None
 
 # riaprendo B la risposta in corso riappare con il testo già ricevuto
 win._open_chat("chat_b")
