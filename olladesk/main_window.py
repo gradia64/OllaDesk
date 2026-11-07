@@ -165,6 +165,10 @@ class MainWindow(QMainWindow):
         self.model_combo = QComboBox(top)
         self.model_combo.setMinimumWidth(260)
         self.model_combo.setToolTip(_("Modello da usare per la conversazione"))
+        # all'avvio nessun modello è scelto: il selettore mostra il
+        # segnaposto (indice -1) finché l'utente non ne sceglie uno o apre
+        # una conversazione salvata, che ripristina il suo
+        self.model_combo.setPlaceholderText(_("Seleziona il modello"))
         top_lay.addWidget(self.model_combo, 0)
 
         self.reload_models_btn = QToolButton(top)
@@ -461,11 +465,11 @@ class MainWindow(QMainWindow):
                     self.model_combo.setItemData(
                         self.model_combo.count() - 1, f"{label}\n{extra}", Qt.ItemDataRole.ToolTipRole
                     )
-            preferred = self._preferred_model
-            if preferred:
-                idx = self.model_combo.findData(preferred)
-                if idx >= 0:
-                    self.model_combo.setCurrentIndex(idx)
+            # addItem sul combo vuoto seleziona la prima voce: si torna al
+            # segnaposto, a meno che il modello scelto prima del
+            # ricaricamento sia ancora installato
+            idx = self.model_combo.findData(self._preferred_model) if self._preferred_model else -1
+            self.model_combo.setCurrentIndex(idx)
             self._preferred_model = self.model_combo.currentData()
         self.model_combo.blockSignals(False)
         self._show_model_caps()   # con i segnali bloccati _on_model_changed non scatta
@@ -656,6 +660,13 @@ class MainWindow(QMainWindow):
                 )
             return
         model = self.current_model()
+        if not model and self.model_combo.isEnabled():
+            # modelli installati ma nessuno scelto (segnaposto dell'avvio)
+            self.chat_area.add_system_note(
+                _("Nessun modello selezionato: scegline uno dal selettore in alto, poi invia di nuovo.")
+            )
+            self.model_combo.setFocus()
+            return
         if not model:
             self.chat_area.add_system_note(
                 _("Nessun modello disponibile.\n"

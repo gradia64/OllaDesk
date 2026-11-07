@@ -75,6 +75,32 @@ win = MainWindow()
 win._sync_companion()
 assert win._companion.state() == "running"
 assert wait_until(lambda: win.engine.model_names() == MODELS)
+# all'avvio nessun modello è scelto: il selettore mostra il segnaposto
+assert win.model_combo.isEnabled() and win.model_combo.count() == len(MODELS)
+assert win.model_combo.currentIndex() == -1 and win.current_model() is None
+assert win.model_combo.placeholderText() == "Seleziona il modello"
+assert all(b.isHidden() for b in win.cap_badges.values()) and not fake.shows
+# l'invio senza modello è rifiutato con un avviso, senza creare chat
+n_chats = len(win.engine.chats())
+notes = []
+real_note = win.chat_area.add_system_note
+win.chat_area.add_system_note = notes.append
+win.chat_area.input.setPlainText("senza modello")
+win.chat_area._emit_send()
+win.chat_area.add_system_note = real_note
+assert len(notes) == 1 and notes[0].startswith("Nessun modello selezionato"), notes
+assert not win.engine.busy() and win._view_id is None
+assert len(win.engine.chats()) == n_chats
+assert win.chat_area.input.toPlainText() == "senza modello"
+win.chat_area.input.clear()
+# ricaricare l'elenco non sceglie un modello da solo
+win._set_models(win.engine.model_names())
+assert win.model_combo.currentIndex() == -1
+win.model_combo.setCurrentIndex(win.model_combo.findData(MODELS[0]))
+assert win.current_model() == MODELS[0]
+# ricaricare l'elenco tiene il modello scelto
+win._set_models(win.engine.model_names())
+assert win.current_model() == MODELS[0]
 # capacità del modello scelto da /api/show: badge accanto al selettore
 assert wait_until(lambda: not win.cap_badges["vision"].isHidden())
 assert not win.cap_badges["thinking"].isHidden() and win.cap_badges["tools"].isHidden()

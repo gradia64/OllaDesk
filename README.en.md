@@ -149,6 +149,7 @@ License: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   with a click on the icon (menu: Show/hide, Quit); optionally closing (X)
   minimizes to the tray instead of quitting, so the web companion and ongoing
   generations stay active.
+- **Model choice**: at startup the selector shows “Select a model” and no model is chosen; sending without choosing one shows a notice. Reopening a saved conversation restores the model it was started with.
 - **Model capabilities**: next to the selector, badges show whether the chosen model accepts images, reasons, or uses tools.
 - **Model management** ("Models" button in the sidebar, Ctrl+M): list of
   installed models with size/parameters/quantization, **downloading** new
