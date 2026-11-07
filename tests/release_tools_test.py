@@ -381,6 +381,11 @@ def test_workflow_verifica_il_tag_e_isola_i_secret(tmp, keys):
     assert "verify" in jobs["appimage"].split("\n")[0]
     assert "smoke-test.sh" in jobs["appimage"]
     assert "appimage" in jobs["publish"].split("\n")[0] and "name: appimage" in jobs["publish"]
+    # il bundle Flatpak: stesso percorso dell'AppImage
+    assert "verify" in jobs["flatpak"].split("\n")[0]
+    assert "scripts/build-flatpak.sh" in jobs["flatpak"]
+    assert "packaging/flatpak/smoke-test.sh" in jobs["flatpak"]
+    assert "flatpak" in jobs["publish"].split("\n")[0] and "name: flatpak" in jobs["publish"]
     # nessun job firma tag o esporta chiavi
     assert "git tag" not in text and "export-secret-keys" not in text
     # i secret solo nel job publish, nell'environment protetto

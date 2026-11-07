@@ -1,7 +1,8 @@
-# Flatpak (in preparazione, non su Flathub)
+# Flatpak (bundle nelle release, non su Flathub)
 
-Bundle Flatpak di OllaDesk, da distribuire insieme alle release. Per ora **non**
-va consegnato a Flathub. Primo build riuscito il 2026-10-25 (Plasma 6, Wayland):
+Bundle Flatpak di OllaDesk, `OllaDesk-X.Y.Z.flatpak`, costruito e provato dal job
+`flatpak` di `release.yml` e allegato alle release, firmato come gli altri file.
+Per ora **non** va consegnato a Flathub. Primo build riuscito il 2026-10-25 (Plasma 6, Wayland):
 l'app parte, PySide6 viene dalla base app, Ollama risponde dalla sandbox e il
 trascinamento da Dolphin allega file e cartelle. Restano i punti di «Cosa verificare»
 non ancora segnati ✅.
@@ -13,6 +14,8 @@ non ancora segnati ✅.
   `packaging/appimage/requirements.txt` **senza** `PySide6_Essentials`/`shiboken6`,
   ma con gli hash delle wheel per Python 3.13. Gli stessi URL e hash sono le
   `sources` del modulo `python3-deps` nel manifest.
+- `smoke-test.sh`, `smoke_check.py` — prova del bundle costruito (job `flatpak` e in
+  locale): installazione, controlli con il Python della sandbox, test offline, avvio.
 - `fontconfig-local.conf` — installato come `/app/etc/fonts/local.conf`: esclude i
   font WOFF/WOFF2 dell'host (vedi «Font WOFF dell'host»).
 
@@ -35,7 +38,10 @@ non ancora segnati ✅.
 ## Come costruire
 
 Serve `flatpak-builder` (`sudo apt install flatpak-builder`). Runtime, SDK e base
-app (`io.qt.PySide.BaseApp//6.11`) arrivano da Flathub con `--install-deps-from`:
+app (`io.qt.PySide.BaseApp//6.11`) arrivano da Flathub con `--install-deps-from`.
+`scripts/build-flatpak.sh` fa tutto e scrive `dist/OllaDesk-X.Y.Z.flatpak`, con
+l'indirizzo di Flathub per il runtime; poi `packaging/flatpak/smoke-test.sh
+dist/OllaDesk-X.Y.Z.flatpak` lo installa (`--user`) e lo prova. A mano:
 
 ```sh
 flatpak-builder --user --install-deps-from=flathub --force-clean \
@@ -114,11 +120,9 @@ flatpak run --command=sh io.github.gradia64.OllaDesk -c \
 5. **X11** — `--socket=fallback-x11` + `--share=ipc`, non `--socket=x11`: su Wayland
    il server X resterebbe esposto. I portali (tema chiaro/scuro compreso) sono sempre
    raggiungibili, senza `--talk-name`.
-6. **`install_method == "flatpak"`** — `olladesk/app_update.py` va esteso con la
-   branca `flatpak` (rileva via `FLATPAK_ID` o `/.flatpak/<app-id>`) e l'hint
-   `flatpak update io.github.gradia64.OllaDesk`. Il marcatore `_packaging=flatpak`
-   scritto nel manifest deve combaciare. Oggi un marcatore `flatpak` ricade su
-   `"pip"` (istruzioni di aggiornamento sbagliate). Verificare anche che
+6. ✅ **`install_method == "flatpak"`** (controllato da `smoke_check.py`) —
+   `olladesk/app_update.py` legge il marcatore `_packaging=flatpak` scritto dal
+   manifest e indica `flatpak install --user OllaDesk-X.Y.Z.flatpak`. Da verificare ancora che
    `app._desktop_file_installed()` trovi il `.desktop` nella sandbox, altrimenti
    `setDesktopFileName` non viene chiamato e su Wayland app_id e icona sono sbagliati.
 7. ✅ **PySide6 della base app** (verificato: 6.11.2 da `/app/lib/python3.13/site-packages`) — `io.qt.PySide.BaseApp // 6.11` è PySide 6.11.2,
@@ -139,7 +143,8 @@ flatpak run --command=sh io.github.gradia64.OllaDesk -c \
   generare i binding.
 
 - Formato YAML per i commenti; Flathub usa spesso JSON (senza commenti). Equivalenti.
-- `sources` punta a `../../` (checkout locale). In CI/Flathub: `type: git` (tag) o
+- `sources` punta a `../../` (checkout locale): in CI è il checkout del tag, già
+  verificato dal job `verify`. Per Flathub servirà `type: git` (tag) o
   `type: archive` (tarball con hash).
 - Mai `--talk-name=org.freedesktop.Flatpak` (`flatpak-spawn --host` esce dalla
   sandbox): l'aggiornamento di Ollama via pkexec in Flatpak non c'è, l'app mostra
