@@ -149,7 +149,7 @@ License: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   with a click on the icon (menu: Show/hide, Quit); optionally closing (X)
   minimizes to the tray instead of quitting, so the web companion and ongoing
   generations stay active.
-- **Model choice**: at startup the selector shows “Select a model” and no model is chosen; sending without choosing one shows a notice. Reopening a saved conversation restores the model it was started with.
+- **Model choice**: at startup and for every new conversation the selector shows “Select a model” and no model is chosen; sending without choosing one shows a notice. Reopening a saved conversation restores the model it was started with.
 - **Model capabilities**: next to the selector, badges show whether the chosen model accepts images, reasons, or uses tools.
 - **Model management** ("Models" button in the sidebar, Ctrl+M): list of
   installed models with size/parameters/quantization, **downloading** new
@@ -327,6 +327,29 @@ you find everything again, but don't open two OllaDesk at once. The API key
 passes through the keyring via Secret Service (KWallet on Plasma, GNOME Keyring
 elsewhere). x86_64 only: no ARM builds.
 
+## Flatpak (bundle)
+
+Releases also include `OllaDesk-<version>.flatpak`, a Flatpak bundle you can
+install without adding a repository. First verify its signature, like the
+other files (section “Signature verification”), then install it for your
+user:
+
+```bash
+gpg --verify OllaDesk-0.3.9.flatpak.sig OllaDesk-0.3.9.flatpak
+flatpak install --user OllaDesk-0.3.9.flatpak
+flatpak run io.github.gradia64.OllaDesk
+```
+
+You need Flatpak; the KDE runtime (`org.kde.Platform` 6.11) comes from Flathub
+on the first install. OllaDesk is not on Flathub: to update, install the new
+version's bundle the same way. OllaDesk tells you when one is out.
+
+**Good to know.** The app runs in the sandbox without access to your files:
+attachments and folders go through the system file picker or drag and drop.
+Chats and settings are in `~/.var/app/io.github.gradia64.OllaDesk/config/olladesk`,
+separate from the `.deb`, AUR package and AppImage: the first launch starts
+with an empty profile. Ollama is not included: install it separately.
+
 ## Installation on Debian
 
 ### From the .deb package (recommended)
@@ -498,10 +521,10 @@ python3 tests/companion_models_test.py  # web companion: download and delete mod
 ```
 
 CI (`.github/workflows/release.yml`) runs unit tests and offline tests on every
-push and pull request; on `v*` tags it builds tarball, `.deb`, AppImage and
-Arch package, signs them and publishes (GitHub release and AUR). The AppImage
+push and pull request; on `v*` tags it builds tarball, `.deb`, AppImage,
+Flatpak bundle and Arch package, signs them and publishes (GitHub release and AUR). The AppImage
 is tested with `packaging/appimage/smoke-test.sh`, which runs the offline
-tests with its Python. Details for publishers:
+tests with its Python; the Flatpak, likewise, with `packaging/flatpak/smoke-test.sh`. Details for publishers:
 [packaging/README.md](packaging/README.md).
 
 To read PDFs as attachments:

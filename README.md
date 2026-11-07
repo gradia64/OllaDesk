@@ -159,7 +159,7 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   ripristina con un clic sull'icona (menu: Mostra/nascondi, Esci);
   facoltativamente la chiusura (X) riduce nella tray invece di uscire,
   così la companion web e le generazioni in corso restano attive.
-- **Scelta del modello**: all'avvio il selettore mostra «Seleziona il modello» e nessun modello è scelto; inviando senza sceglierne uno compare un avviso. Riaprire una conversazione salvata ripristina il modello con cui era nata.
+- **Scelta del modello**: all'avvio e a ogni nuova conversazione il selettore mostra «Seleziona il modello» e nessun modello è scelto; inviando senza sceglierne uno compare un avviso. Riaprire una conversazione salvata ripristina il modello con cui era nata.
 - **Capacità del modello**: accanto al selettore, dei badge mostrano se il modello scelto accetta immagini, ragiona o usa strumenti.
 - **Gestione modelli** (pulsante «Modelli» nella sidebar, Ctrl+M): elenco dei
   modelli installati con dimensione/parametri/quantizzazione, **scaricamento**
@@ -342,6 +342,29 @@ passando all'AppImage ritrovi tutto, ma non aprire due OllaDesk insieme. La
 chiave API passa dal portachiavi tramite Secret Service (KWallet su Plasma,
 GNOME Keyring altrove). Solo x86_64: niente build per ARM.
 
+## Flatpak (bundle)
+
+Le release includono anche `OllaDesk-<versione>.flatpak`, un bundle Flatpak
+da installare senza aggiungere repository. Verifica prima la firma, come per
+gli altri file (sezione «Verifica delle firme»), poi installalo per il tuo
+utente:
+
+```bash
+gpg --verify OllaDesk-0.3.9.flatpak.sig OllaDesk-0.3.9.flatpak
+flatpak install --user OllaDesk-0.3.9.flatpak
+flatpak run io.github.gradia64.OllaDesk
+```
+
+Serve Flatpak; il runtime KDE (`org.kde.Platform` 6.11) arriva da Flathub
+alla prima installazione. Non è su Flathub: per aggiornare si installa allo
+stesso modo il bundle della versione nuova, che OllaDesk segnala da sola.
+
+**Da sapere.** L'app gira nella sandbox senza accesso ai tuoi file: allegati
+e cartelle passano dalla finestra di scelta del sistema o dal trascinamento.
+Chat e impostazioni sono in `~/.var/app/io.github.gradia64.OllaDesk/config/olladesk`,
+separate da quelle del `.deb`, del pacchetto AUR e dell'AppImage: al primo
+avvio il profilo è vuoto. Ollama non è incluso: va installato a parte.
+
 ## Installazione su Debian
 
 ### Dal pacchetto .deb (consigliata)
@@ -514,10 +537,10 @@ python3 tests/companion_models_test.py  # companion web: scarica ed elimina mode
 ```
 
 La CI (`.github/workflows/release.yml`) esegue unit test e test offline a ogni
-push e pull request; sui tag `v*` costruisce tarball, `.deb`, AppImage e
-pacchetto Arch, li firma e li pubblica (release GitHub e AUR). L'AppImage si
+push e pull request; sui tag `v*` costruisce tarball, `.deb`, AppImage,
+bundle Flatpak e pacchetto Arch, li firma e li pubblica (release GitHub e AUR). L'AppImage si
 prova con `packaging/appimage/smoke-test.sh`, che esegue i test offline con
-il suo Python. Dettagli per chi pubblica:
+il suo Python; il Flatpak, allo stesso modo, con `packaging/flatpak/smoke-test.sh`. Dettagli per chi pubblica:
 [packaging/README.md](packaging/README.md).
 
 Per leggere i PDF come allegati:

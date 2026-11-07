@@ -45,7 +45,7 @@ Lizenz: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   - **Bekannte Einschränkung:** die Verbindung ist unverschlüsseltes HTTP, daher kann jeder im selben WLAN das Cookie abfangen. In einem geschützten Heimnetz (WPA2/WPA3) ist das in Ordnung; öffne den Port nicht im Router. Keine externen Ressourcen: die Seite funktioniert auch ohne Internet.
 - **Client für Ollama von Drittanbietern** (Smartphone-Apps, die mit der Ollama-API sprechen): die Freigabe der API der Versionen 0.2.x wurde in 0.3 entfernt, weil die Ollama-API keine Authentifizierung hat und der Web-Companion schon. Beim Update von einer 0.2.x mit aktiver Freigabe kehrt das Feld „Ollama-Server“, das auf deren Port zeigte, seit 0.3.6 von selbst zu `http://localhost:11434` zurück. Wer Ollama dennoch im Netzwerk exponieren will, konfiguriert es im Systemdienst, **auf eigene Verantwortung**: `sudo systemctl edit ollama`, dann im Abschnitt `[Service]` die Zeile `Environment="OLLAMA_HOST=0.0.0.0"` und `sudo systemctl restart ollama` (mit derselben Firewall-Regel für Port 11434). Wer den Port erreicht, kann die Modelle und die GPU nutzen: für Zugriff von außerhalb des Hauses besser eine VPN (z. B. Tailscale) oder einen SSH-Tunnel.
 - **Tray-Icon**: das Fenster reduziert sich in den Benachrichtigungsbereich und wird mit einem Klick auf das Icon wiederhergestellt (Menü: Anzeigen/ausblenden, Beenden); optional reduziert das Schließen (X) in die Tray statt zu beenden, so dass Web-Companion und laufende Generierungen aktiv bleiben.
-- **Modellwahl**: beim Start zeigt das Auswahlfeld „Modell auswählen“ und kein Modell ist gewählt; wer ohne Auswahl sendet, erhält einen Hinweis. Beim erneuten Öffnen eines gespeicherten Gesprächs wird das Modell wiederhergestellt, mit dem es begonnen wurde.
+- **Modellwahl**: beim Start und bei jedem neuen Gespräch zeigt das Auswahlfeld „Modell auswählen“ und kein Modell ist gewählt; wer ohne Auswahl sendet, erhält einen Hinweis. Beim erneuten Öffnen eines gespeicherten Gesprächs wird das Modell wiederhergestellt, mit dem es begonnen wurde.
 - **Modellfähigkeiten**: neben dem Auswahlfeld zeigen Badges, ob das gewählte Modell Bilder akzeptiert, reasoning nutzt oder Werkzeuge verwendet.
 - **Modellverwaltung** (Schaltfläche «Modelle» in der Seitenleiste, Strg+M): Liste der installierten Modelle mit Größe/Parametern/Quantisierung, **Download** neuer Modelle mit Fortschrittsbalken und Abbruch sowie **Löschen**. Das für das Gespräch ausgewählte Modell ist mit «●» markiert. PC und Telefon teilen sich dieselbe Operation: jeweils eine zur Zeit, sichtbar und abbrechbar von beiden, ein Modell wird nicht gelöscht, während der PC antwortet, und nicht benutzt, während es gelöscht wird. Schließt man das Fenster, läuft der Download weiter; beim erneuten Öffnen sieht man den Fortschritt wieder. Mit Ollama 0.40.0, nach der Konvertierung der Modelle auf die neue Engine, meldet die Liste von Ollama denselben Namen zweimal plus einen internen Eintrag `llamacpp:<sha>` ([ollama/ollama#18830](https://github.com/ollama/ollama/issues/18830)): OllaDesk zeigt jedes Modell nur einmal und blendet den internen Eintrag aus (auf der Festplatte ändert sich nichts; `ollama list` zeigt sie weiterhin).
 - **Websuche** (🌐 im Eingabefeld, grau wenn aus und blau wenn an): vor der Antwort sucht die App im Web und hängt die Ergebnisse an den Kontext. Unter der Antwort listet der einklappbare Block **«🌐 Quellen»** die genutzten Ergebnisse, mit derselben Nummerierung [1], [2]… die das Modell sieht (auch auf dem Telefon und in zuvor gespeicherten Gesprächen). **Wählbarer Provider** in den Einstellungen:
@@ -139,6 +139,31 @@ rm -r squashfs-root
 **Aktualisierungen.** Die AppImage aktualisiert sich nicht selbst: wenn eine neue Version erscheint, meldet OllaDesk das (Einstellungen → Aktualisierungen) und nennt die zu ladende Datei. Man ersetzt einfach die alte `.AppImage` durch die neue (mit Gear Lever oder AppImageLauncher, indem man die neue Datei öffnet). Bei der manuellen Integration steht der Dateiname im `.desktop`: nach der Aktualisierung die obigen Befehle wiederholen.
 
 **Zu wissen.** Chats, Einstellungen und abgeglichene Geräte liegen in `~/.config/olladesk`, demselben Ordner wie beim `.deb` und beim AUR-Paket: beim Wechsel zur AppImage findest du alles wieder, aber öffne nicht zwei OllaDesk gleichzeitig. Der API-Schlüssel läuft über den Schlüsselbund via Secret Service (KWallet unter Plasma, GNOME Keyring anderswo). Nur x86_64: keine Builds für ARM.
+
+## Flatpak (Bundle)
+
+Die Releases enthalten auch `OllaDesk-<Version>.flatpak`, ein Flatpak-Bundle,
+das sich ohne zusätzliches Repository installieren lässt. Prüfen Sie zuerst die
+Signatur wie bei den anderen Dateien (Abschnitt „Verifizierung der
+Signaturen“) und installieren Sie es dann für Ihren Benutzer:
+
+```bash
+gpg --verify OllaDesk-0.3.9.flatpak.sig OllaDesk-0.3.9.flatpak
+flatpak install --user OllaDesk-0.3.9.flatpak
+flatpak run io.github.gradia64.OllaDesk
+```
+
+Flatpak wird benötigt; die KDE-Laufzeit (`org.kde.Platform` 6.11) kommt bei der
+ersten Installation von Flathub. OllaDesk ist nicht auf Flathub: Zum
+Aktualisieren installieren Sie das Bundle der neuen Version auf dieselbe Weise;
+OllaDesk weist von selbst darauf hin.
+
+**Gut zu wissen.** Die App läuft in der Sandbox ohne Zugriff auf Ihre Dateien:
+Anhänge und Ordner gehen über die Dateiauswahl des Systems oder per Drag & Drop.
+Chats und Einstellungen liegen in
+`~/.var/app/io.github.gradia64.OllaDesk/config/olladesk`, getrennt von `.deb`,
+AUR-Paket und AppImage: Beim ersten Start ist das Profil leer. Ollama ist nicht
+enthalten und muss separat installiert werden.
 
 ## Installation auf Debian
 
@@ -280,7 +305,7 @@ python3 tests/sync_test.py            # Live-Synchronisation Telefon-PC (ohne Ne
 python3 tests/companion_models_test.py  # Web-Companion: Modelle herunterladen und löschen (ohne Netz)
 ```
 
-Die CI (`.github/workflows/release.yml`) führt Unit-Tests und Offline-Tests bei jedem Push und Pull Request aus; bei Tags `v*` baut sie Tarball, `.deb`, AppImage und Arch-Paket, signiert sie und veröffentlicht sie (GitHub-Release und AUR). Die AppImage wird mit `packaging/appimage/smoke-test.sh` getestet, das die Offline-Tests mit ihrem Python ausführt. Details für Veröffentlichende: [packaging/README.md](packaging/README.md).
+Die CI (`.github/workflows/release.yml`) führt Unit-Tests und Offline-Tests bei jedem Push und Pull Request aus; bei Tags `v*` baut sie Tarball, `.deb`, AppImage, Flatpak-Bundle und Arch-Paket, signiert sie und veröffentlicht sie (GitHub-Release und AUR). Die AppImage wird mit `packaging/appimage/smoke-test.sh` getestet, das die Offline-Tests mit ihrem Python ausführt; das Flatpak ebenso mit `packaging/flatpak/smoke-test.sh`. Details für Veröffentlichende: [packaging/README.md](packaging/README.md).
 
 Zum Lesen von PDFs als Anhänge:
 

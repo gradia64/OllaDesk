@@ -45,7 +45,7 @@ Licencia: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   - **Límite conocido:** el enlace es HTTP en claro, así que quien esté en la misma Wi-Fi puede interceptar la cookie. Está bien en una red doméstica protegida (WPA2/WPA3); no abras el puerto en el router. Sin recursos externos: la página funciona también sin internet.
 - **Cliente Ollama de terceros** (apps para smartphone que hablan con la API de Ollama): el compartido de la API de las versiones 0.2.x se eliminó en la 0.3, porque la API de Ollama no tiene autenticación y la companion web sí. Al actualizar desde una 0.2.x con el compartido activo, desde la 0.3.6 el campo «Servidor Ollama» que apuntaba a su puerto vuelve solo a `http://localhost:11434`. Quien quiera exponer Ollama en red lo configura en el servicio del sistema, **bajo su propia responsabilidad**: `sudo systemctl edit ollama`, luego en la sección `[Service]` la línea `Environment="OLLAMA_HOST=0.0.0.0"` y `sudo systemctl restart ollama` (con la misma regla del firewall para el puerto 11434). Quien alcance el puerto puede usar los modelos y la GPU: para el acceso desde fuera de casa mejor una VPN (ej. Tailscale) o un túnel SSH.
 - **Icono en la bandeja**: la ventana se reduce al área de notificación y se restaura con un clic en el icono (menú: Mostrar/ocultar, Salir); opcionalmente el cierre (X) reduce en la bandeja en lugar de salir, así la companion web y las generaciones en curso permanecen activas.
-- **Elección del modelo**: al iniciar, el selector muestra «Selecciona el modelo» y no hay ningún modelo elegido; enviar sin elegir uno muestra un aviso. Reabrir una conversación guardada restablece el modelo con el que se empezó.
+- **Elección del modelo**: al iniciar y en cada nueva conversación, el selector muestra «Selecciona el modelo» y no hay ningún modelo elegido; enviar sin elegir uno muestra un aviso. Reabrir una conversación guardada restablece el modelo con el que se empezó.
 - **Capacidades del modelo**: junto al selector, unas insignias muestran si el modelo elegido acepta imágenes, razona o usa herramientas.
 - **Gestión de modelos** (botón «Modelos» en la barra lateral, Ctrl+M): lista de los modelos instalados con tamaño/parámetros/cuantización, **descarga** de nuevos modelos con barra de progreso y cancelación, y **eliminación**. El modelo seleccionado para la conversación está marcado con «●». PC y teléfono comparten la misma operación: se hace una a la vez, se ve y se cancela desde ambos, un modelo no se elimina mientras el PC responde y no se usa mientras se elimina. Al cerrar la ventana la descarga continúa; al reabrirla se ve el progreso. Con Ollama 0.40.0, tras la conversión de los modelos al nuevo motor, la lista de Ollama reporta el mismo nombre dos veces más una entrada interna `llamacpp:<sha>` ([ollama/ollama#18830](https://github.com/ollama/ollama/issues/18830)): OllaDesk muestra cada modelo una sola vez y oculta la entrada interna (en disco no cambia nada; `ollama list` sigue mostrándolas).
 - **Búsqueda web** (🌐 en el input, gris apagada y azul activa): antes de responder, la app busca en la web y adjunta los resultados al contexto. Bajo la respuesta el bloque plegable **«🌐 Fuentes»** lista los resultados usados, con la misma numeración [1], [2]… que ve el modelo (también en el teléfono y en las conversaciones guardadas anteriormente). **Proveedor a elegir** en la configuración:
@@ -134,6 +134,30 @@ rm -r squashfs-root
 **Actualizaciones.** La AppImage no se actualiza sola: cuando sale una versión nueva, OllaDesk lo indica (Configuración → Actualizaciones) y señala el archivo a descargar. Basta sustituir el viejo `.AppImage` por el nuevo (con Gear Lever o AppImageLauncher, abriendo el archivo nuevo). Con la integración a mano el nombre del archivo está escrito en el `.desktop`: tras la actualización repite los comandos de arriba.
 
 **A saber.** Chat, configuración y dispositivos emparejados están en `~/.config/olladesk`, la misma carpeta del `.deb` y del paquete AUR: al pasar a la AppImage recuperas todo, pero no abras dos OllaDesk a la vez. La clave API pasa del llavero mediante Secret Service (KWallet en Plasma, GNOME Keyring en otros). Solo x86_64: sin builds para ARM.
+
+## Flatpak (bundle)
+
+Las releases incluyen también `OllaDesk-<versión>.flatpak`, un bundle Flatpak
+que se instala sin añadir repositorios. Verifica antes la firma, como con los
+demás archivos (sección «Verificación de firmas»), y luego instálalo para tu
+usuario:
+
+```bash
+gpg --verify OllaDesk-0.3.9.flatpak.sig OllaDesk-0.3.9.flatpak
+flatpak install --user OllaDesk-0.3.9.flatpak
+flatpak run io.github.gradia64.OllaDesk
+```
+
+Necesitas Flatpak; el runtime de KDE (`org.kde.Platform` 6.11) llega de Flathub
+en la primera instalación. OllaDesk no está en Flathub: para actualizar, instala
+de la misma forma el bundle de la nueva versión, que OllaDesk avisa por sí sola.
+
+**A tener en cuenta.** La aplicación funciona en la sandbox sin acceso a tus
+archivos: adjuntos y carpetas pasan por el selector de archivos del sistema o
+por arrastrar y soltar. Chats y configuración están en
+`~/.var/app/io.github.gradia64.OllaDesk/config/olladesk`, separados de los del
+`.deb`, el paquete AUR y la AppImage: en el primer inicio el perfil está vacío.
+Ollama no está incluido: instálalo aparte.
 
 ## Instalación en Debian
 
@@ -275,7 +299,7 @@ python3 tests/sync_test.py            # sincronización teléfono-PC en vivo (si
 python3 tests/companion_models_test.py  # companion web: descarga y elimina modelos (sin red)
 ```
 
-La CI (`.github/workflows/release.yml`) ejecuta unit tests y pruebas offline en cada push y pull request; en los tags `v*` construye tarball, `.deb`, AppImage y paquete Arch, los firma y los publica (release GitHub y AUR). La AppImage se prueba con `packaging/appimage/smoke-test.sh`, que ejecuta las pruebas offline con su Python. Detalles para quien publica: [packaging/README.md](packaging/README.md).
+La CI (`.github/workflows/release.yml`) ejecuta unit tests y pruebas offline en cada push y pull request; en los tags `v*` construye tarball, `.deb`, AppImage, bundle Flatpak y paquete Arch, los firma y los publica (release GitHub y AUR). La AppImage se prueba con `packaging/appimage/smoke-test.sh`, que ejecuta las pruebas offline con su Python; el Flatpak, del mismo modo, con `packaging/flatpak/smoke-test.sh`. Detalles para quien publica: [packaging/README.md](packaging/README.md).
 
 Para leer los PDF como adjuntos:
 
