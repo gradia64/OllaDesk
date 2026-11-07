@@ -8,6 +8,6 @@
 # Addons (WebEngine, 3D, Multimedia…), centinaia di MB che OllaDesk non usa.
 # Le wheel di PySide6 richiedono glibc >= 2.34 (manylinux_2_34).
 PySide6-Essentials==6.11.2
-pypdf==6.21.2
+pypdf==6.21.4
 keyring==25.7.0
 qrcode==8.2
