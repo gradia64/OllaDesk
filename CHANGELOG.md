@@ -8,6 +8,10 @@ Le note dettagliate di ogni rilascio sono anche in `packaging/release-notes/`. I
 
 ## [Non rilasciato]
 
+### Correzioni
+
+- **AppImage su X11**: su distribuzioni recenti (Arch, Fedora 45) OllaDesk si chiudeva all'avvio con un errore di segmentazione nelle sessioni X11. L'AppImage portava con sé una libxkbcommon-x11 di Ubuntu 22.04, che non va d'accordo con la libxkbcommon più recente del sistema; ora la usa dal sistema, insieme alle estensioni di libxcb. Su Wayland il problema non c'era.
+
 ## [0.3.8] — 2026-11-07
 
 ### Novità
