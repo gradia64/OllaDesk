@@ -117,7 +117,7 @@ Antes de ejecutarla verifica la firma, como para los demás archivos (sección �
 gpg --verify OllaDesk-0.3.4-x86_64.AppImage.sig OllaDesk-0.3.4-x86_64.AppImage
 ```
 
-**Requisitos.** Sistema de 64 bits x86_64 con glibc 2.34 o más reciente: Debian 12, Ubuntu 22.04, Fedora 35, openSUSE Tumbleweed o posteriores (es el mínimo de PySide6). Del sistema la AppImage usa solo las bibliotecas que todo escritorio ya tiene: OpenGL/EGL, xkbcommon, fontconfig, D-Bus, GLib, Kerberos (`libgssapi_krb5`) y X11 o Wayland. Para montarse necesita FUSE (`fusermount3`, paquete `fuse3`); donde falte, por ejemplo en un contenedor, se ejecuta con `./OllaDesk-*.AppImage --appimage-extract-and-run`. Ollama no está incluido: hay que instalarlo aparte.
+**Requisitos.** Sistema de 64 bits x86_64 con glibc 2.34 o más reciente: Debian 12, Ubuntu 22.04, Fedora 35, openSUSE Tumbleweed o posteriores (es el mínimo de PySide6). Del sistema la AppImage usa solo las bibliotecas que todo escritorio ya tiene: OpenGL/EGL, xkbcommon, xkbcommon-x11, fontconfig, D-Bus, GLib, Kerberos (`libgssapi_krb5`) y X11 o Wayland. Para montarse necesita FUSE (`fusermount3`, paquete `fuse3`); donde falte, por ejemplo en un contenedor, se ejecuta con `./OllaDesk-*.AppImage --appimage-extract-and-run`. Ollama no está incluido: hay que instalarlo aparte.
 
 **Menú e icono.** Ejecutada así, OllaDesk no aparece en el menú y en la barra de aplicaciones tiene un icono genérico. Para integrarla usa [Gear Lever](https://flathub.org/apps/it.mijorus.gearlever) o [AppImageLauncher](https://github.com/TheAssassin/AppImageLauncher): copian la AppImage a una carpeta fija e instalan entrada de menú e icono, que en Plasma aparece también en la barra. Para hacerlo a mano, desde la carpeta en la que guardas la AppImage:
 

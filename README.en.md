@@ -291,8 +291,8 @@ gpg --verify OllaDesk-0.3.4-x86_64.AppImage.sig OllaDesk-0.3.4-x86_64.AppImage
 **Requirements.** 64-bit x86_64 system with glibc 2.34 or newer: Debian 12,
 Ubuntu 22.04, Fedora 35, openSUSE Tumbleweed or later (it's PySide6's
 minimum). From the system the AppImage uses only libraries every desktop
-already has: OpenGL/EGL, xkbcommon, fontconfig, D-Bus, GLib, Kerberos
-(`libgssapi_krb5`) and X11 or Wayland. To mount itself it needs FUSE
+already has: OpenGL/EGL, xkbcommon, xkbcommon-x11, fontconfig, D-Bus,
+GLib, Kerberos (`libgssapi_krb5`) and X11 or Wayland. To mount itself it needs FUSE
 (`fusermount3`, package `fuse3`); where it's missing, for example in a
 container, it runs with `./OllaDesk-*.AppImage --appimage-extract-and-run`.
 Ollama is not included: it must be installed separately.

@@ -305,8 +305,8 @@ gpg --verify OllaDesk-0.3.4-x86_64.AppImage.sig OllaDesk-0.3.4-x86_64.AppImage
 **Requisiti.** Sistema a 64 bit x86_64 con glibc 2.34 o più recente:
 Debian 12, Ubuntu 22.04, Fedora 35, openSUSE Tumbleweed o successive (è il
 minimo di PySide6). Dal sistema l'AppImage usa solo le librerie che ogni
-desktop ha già: OpenGL/EGL, xkbcommon, fontconfig, D-Bus, GLib, Kerberos
-(`libgssapi_krb5`) e X11 o Wayland. Per montarsi le serve FUSE
+desktop ha già: OpenGL/EGL, xkbcommon e xkbcommon-x11, fontconfig, D-Bus,
+GLib, Kerberos (`libgssapi_krb5`) e X11 o Wayland. Per montarsi le serve FUSE
 (`fusermount3`, pacchetto `fuse3`); dove manca, per esempio in un
 container, si avvia con `./OllaDesk-*.AppImage --appimage-extract-and-run`.
 Ollama non è incluso: va installato a parte.
