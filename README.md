@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="README.en.md"><img src="https://img.shields.io/badge/Lang-English-blue?style=for-the-badge" alt="English"></a>
+  <a href="README.it.md"><img src="https://img.shields.io/badge/Lang-Italiano-blue?style=for-the-badge" alt="Italiano"></a>
   <a href="README.fr.md"><img src="https://img.shields.io/badge/Lang-Français-blue?style=for-the-badge" alt="Français"></a>
   <a href="README.de.md"><img src="https://img.shields.io/badge/Lang-Deutsch-blue?style=for-the-badge" alt="Deutsch"></a>
   <a href="README.es.md"><img src="https://img.shields.io/badge/Lang-Español-orange?style=for-the-badge" alt="Español"></a>
@@ -7,186 +7,174 @@
 
 # OllaDesk
 
-**OllaDesk** è un'applicazione desktop nativa per Linux per interagire con e
-gestire i modelli LLM locali tramite [Ollama](https://ollama.com), realizzata
-con **Qt / PySide6**. Leggera, in stile ChatGPT, pensata per Debian SID con
+**OllaDesk** is a native Linux desktop application for interacting with and
+managing local LLM models through [Ollama](https://ollama.com), built with
+**Qt / PySide6**. Lightweight, ChatGPT-style, designed for Debian SID with
 KDE Plasma.
 
 > *A native Linux desktop application for interacting with and managing local
 > LLMs through Ollama, designed with Qt/PySide6.*
 
-Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
+License: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
 
 <p align="center">
   <img src="docs/screenshots/chat.png" alt="OllaDesk — chat" width="45%" />
-  <img src="docs/screenshots/web-search.png" alt="Ricerca web" width="45%" />
+  <img src="docs/screenshots/web-search.png" alt="Web search" width="45%" />
 </p>
 <p align="center">
-  <img src="docs/screenshots/models.png" alt="Gestione modelli" width="46%" />
-  <img src="docs/screenshots/settings.png" alt="Impostazioni" width="44%" />
+  <img src="docs/screenshots/models.png" alt="Model management" width="46%" />
+  <img src="docs/screenshots/settings.png" alt="Settings" width="44%" />
 </p>
 <p align="center">
-  <img src="docs/screenshots/phone.png" alt="Companion web sul telefono" width="30%" />
+  <img src="docs/screenshots/phone.png" alt="Web companion on phone" width="30%" />
 </p>
 
-## Funzionalità
+## Features
 
-- **Chat in stile ChatGPT**: bolle utente/assistente, risposta in *streaming*
-  token per token, pulsante per interrompere la generazione, statistiche
-  (token, tok/s, durata), rendering Markdown (blocchi di codice, elenchi,
-  grassetti, link…). Ogni blocco di codice ha una riga con il linguaggio e
-  «Copia»; il pulsante di copia del messaggio compare al passaggio del mouse. La colonna dei
-  messaggi ha larghezza massima fissa e resta centrata anche quando la
-  sidebar è nascosta (Ctrl+B): il contenuto non si stira a tutta finestra.
-  Durante la risposta del modello la vista resta dove la lasci (si può
-  risalire con la rotella) e torna a seguire la risposta quando si scende di
-  nuovo in fondo; lo stesso vale nella companion web.
-- **Interfaccia multilingue**: italiano, inglese, francese, tedesco e
-  spagnolo, anche nella companion web. Segue la lingua del sistema (per le
-  lingue non ancora tradotte usa l'inglese) oppure si sceglie in
-  Impostazioni → Generale → «Lingua»; vale dal riavvio. I cataloghi sono
-  in `olladesk/locale/*.po` e si aggiornano con `python3 scripts/i18n.py update`.
-- **Interfaccia rinnovata**: icone a linea (Lucide) al posto di emoji e simboli, che seguono il colore del tema.
-- **Cronologia conversazioni** nella barra laterale (con la versione di
-  OllaDesk nell'intestazione): nuova chat (anche con «＋» nella barra superiore,
-  visibile a barra laterale chiusa), selezione, rinomina (tasto destro)
-  ed eliminazione; persistenza su disco. L'elenco è diviso per data (Oggi,
-  Ieri, Ultimi 7 giorni, Ultimi 30 giorni, Più vecchie) e un campo di ricerca
-  (Ctrl+K) filtra i titoli, senza distinguere maiuscole e accenti, anche
-  nell'archivio. I titoli lunghi si accorciano con «…» alla larghezza reale
-  della colonna.
-- **Archivio delle conversazioni** (tasto destro → «Archivia»): la chat esce
-  dall'elenco senza essere eliminata e si ritrova con «🗄 N» accanto a «Nuova
-  chat», in cima alla barra laterale, da cui si apre o si ripristina. Scrivere un
-  nuovo messaggio in una chat archiviata la riporta nell'elenco. Facoltativa
-  l'archiviazione automatica all'avvio delle chat senza messaggi da un certo
-  numero di giorni (Impostazioni → Generale, spenta di default).
-- **Allegati come contesto** (📎 nell'input): file di testo e codice (inlinati
-  nel messaggio), PDF (richiede il pacchetto opzionale `pypdf`), documenti
-  Word, Excel e OpenDocument (`.docx`, `.doc`, `.xlsx`, `.xls`, `.odt`, `.ods`:
-  il testo, e i fogli di calcolo riga per riga, senza dipendenze aggiuntive) e
-  immagini (inviate in base64 ai modelli visione: llava, llama3.2-vision, gemma3…).
-  Gli allegati compaiono come chip sopra l'input e nella bolla del messaggio.
-- **Cartella come contesto** (📎 → «Cartella…», oppure trascinandola
-  nell'input): un solo allegato «📁 nome/» con i file di testo, codice, PDF e documenti
-  che contiene, ciascuno con il percorso relativo. Sono ora inclusi anche i
-  moduli JavaScript (`.mjs`, `.cjs`) e altri tipi comuni (`.vue`, `.svelte`,
-  `.swift`, `.dart`, `.cs`, `.proto`, `.tf`, `.nix`, `.lock`…) e file come
-  `COPYING`, `CHANGELOG` e `PKGBUILD`; i file rimasti fuori perché di tipo non
-  supportato sono elencati nell'avviso. Restano fuori i file e le
-  cartelle nascosti, dipendenze e cache (`node_modules`, `__pycache__`,
-  `venv`, `build`, `dist`…), ciò che esclude il `.gitignore` in cima alla
-  cartella (con `*`, `**` e le barre come git, ma senza negazioni né
-  `.gitignore` interni), i probabili file di credenziali (`*.env`,
-  `credentials.*`, `secrets.*`, `token.*`, `*.pem`, `*.key`, `id_rsa*`…, che si
-  possono comunque allegare uno per uno), le immagini, i file speciali (pipe,
-  socket) e i collegamenti simbolici che escono dalla cartella. Limiti: 200 file, 10 PDF,
-  30.000 caratteri per file e 200.000 in tutto, 5000 voci esaminate (file e
-  cartelle), 2 secondi tra visita e lettura (prima i file di testo, poi i
-  documenti, infine i PDF). Un avviso riassume cosa è rimasto fuori, e il
-  modello riceve lo stesso elenco. La cartella si legge al momento
-  dell'invio: nella conversazione resta solo il percorso.
-- **Ragionamento (thinking)**: con i modelli che lo supportano (qwen3,
-  deepseek-r1…) il pulsante 🧠 dell'input abilita o disattiva il ragionamento
-  e il pensiero del modello compare nella bolla in un blocco «💭 Pensiero»
-  in streaming, richiudibile all'arrivo della risposta e salvato nella
-  conversazione. Finché il modello pensa non si vedono solo i puntini: la
-  bolla mostra «sta pensando…» e poi il testo del ragionamento.
-- **Companion web** (voce «📱 Companion» della barra laterale, `Ctrl+D`;
-  spenta di default): una
-  pagina per smartphone e tablet nella rete locale, con le stesse
-  conversazioni del PC. Dal telefono si leggono le chat, se ne apre una
-  nuova o si continua una esistente: si sceglie il modello, si accende o
-  spegne il ragionamento (🧠) e la ricerca web (🌐, con il provider scelto
-  sul PC; a ogni apertura della pagina riparte spenta e, finché è accesa,
-  la barra di scrittura lo ricorda) e la risposta arriva in streaming, con il
-  pulsante ■ per interromperla. Il PC genera una risposta alla volta: se
-  sta già rispondendo, il telefono lo segnala e attende. PC e telefono
-  restano sincronizzati dal vivo: un messaggio scritto da una parte compare
-  sull'altra, l'elenco delle chat sul telefono si aggiorna da solo e un
-  pallino indica la conversazione che sta rispondendo. Durante una risposta
-  il PC resta libero di aprire altre conversazioni: la risposta continua in
-  background e si ritrova riaprendo la sua chat.
-  - **Dal telefono:** allegati con 📎 (foto dalla fotocamera o dalla
-    galleria, file di testo, PDF e documenti Office, fino a 20 MB ciascuno): le foto vengono
-    ridotte sul telefono prima del caricamento e il PC le passa ai modelli
-    che leggono le immagini. Dal menu «⋯» di una chat si rinomina, si
-    archivia (o ripristina) o si elimina la conversazione, anche dal PC; le
-    archiviate stanno in un riquadro chiuso in fondo all'elenco; il pulsante ⧉ sotto ogni
-    messaggio ne copia il testo. Con 🧩 si scaricano (con avanzamento e
-    «Annulla») ed eliminano i modelli: lo scaricamento avviene sul PC. Resta
-    solo sul PC il resto delle impostazioni.
-  - **Finestra «Companion»:** raccoglie tutto in un posto: attivazione e
-    porta, stato e indirizzo (con «Copia indirizzo»), abbinamento e
-    dispositivi. Quando è attiva, anche il pulsante 📱 della barra superiore
-    apre la stessa finestra.
-  - **Abbinamento:** nella finestra compaiono l'indirizzo, un codice di 6
-    cifre valido 2 minuti e una sola volta e, se
-    è installato `python3-qrcode` (`python-qrcode` su Arch), un QR code da
-    inquadrare. Il telefono riceve un cookie di sessione; «Revoca
-    dispositivi» li scollega tutti (se ne ricordano al massimo 20).
-  - **Sulla schermata Home:** dal menu del browser «Aggiungi a schermata
-    Home» la pagina diventa un'icona con il logo di OllaDesk. Su iPhone e
-    iPad si apre a schermo intero, senza barra degli indirizzi, ma ha
-    cookie separati da Safari: l'abbinamento va ripetuto la prima volta che
-    la si apre dall'icona. Su Android Chrome crea un collegamento (l'app
-    installabile vera richiede HTTPS, rinviato a una versione successiva).
-  - **Firewall:** il PC deve accettare la porta (predefinita 8765) **dalla
-    sola rete locale**, es. firewalld: `sudo firewall-cmd --permanent
+- **ChatGPT-style chat**: user/assistant bubbles, token-by-token *streaming*
+  response, button to stop generation, statistics (tokens, tok/s, duration),
+  Markdown rendering (code blocks, lists, bold, links…). Each code block has a
+  bar with its language and "Copy"; the message copy button appears on hover. The message column has a fixed maximum width and stays centered even
+  when the sidebar is hidden (Ctrl+B): the content does not stretch to the
+  full window. While the model is replying, the view stays where you leave it
+  (you can scroll up with the wheel) and resumes following the reply when you
+  scroll back to the bottom; the same applies in the web companion.
+- **Multilingual interface**: Italian, English, French, German and Spanish,
+  in the web companion too. It follows the system language (languages not
+  yet translated fall back to English) or can be chosen in Settings →
+  General → «Language»; it applies after a restart. The catalogs are in
+  `olladesk/locale/*.po` and are updated with `python3 scripts/i18n.py update`.
+- **Renewed interface**: line icons (Lucide) instead of emoji and symbols, following the theme color.
+- **Conversation history** in the sidebar (with the OllaDesk version in the
+  header): new chat (also with "＋" in the top bar, visible with the sidebar
+  closed), selection, rename (right-click) and deletion; persisted
+  to disk. The list is grouped by date (Today, Yesterday, Last 7 days, Last 30
+  days, Older) and a search field (Ctrl+K) filters the titles, ignoring case
+  and accents, in the archive too. Long titles are shortened with «…» to the
+  actual column width.
+- **Conversation archive** (right-click → "Archive"): the chat leaves the
+  list without being deleted and is found again via "🗄 N" next to "New
+  chat", at the top of the sidebar, from which it can be opened or restored. Writing a
+  new message in an archived chat brings it back into the list. Optional
+  automatic archiving on startup of chats with no messages for a given number
+  of days (Settings → General, off by default).
+- **Attachments as context** (📎 in the input): text and code files (inlined
+  in the message), PDFs (requires the optional `pypdf` package), Word, Excel
+  and OpenDocument documents (`.docx`, `.doc`, `.xlsx`, `.xls`, `.odt`, `.ods`:
+  the text, and spreadsheets row by row, with no extra dependencies) and images
+  (sent as base64 to vision models: llava, llama3.2-vision, gemma3…).
+  Attachments appear as chips above the input and in the message bubble.
+- **Folder as context** (📎 → "Folder…", or by dragging it into the input): a
+  single "📁 name/" attachment with the text, code, PDF and document files it contains,
+  each with its relative path. JavaScript modules (`.mjs`, `.cjs`) and other
+  common types (`.vue`, `.svelte`, `.swift`, `.dart`, `.cs`, `.proto`, `.tf`,
+  `.nix`, `.lock`…) plus files such as `COPYING`, `CHANGELOG` and `PKGBUILD`
+  are now included too; files left out because their type is not supported
+  are listed in the notice. Hidden files and folders, dependencies and
+  caches (`node_modules`, `__pycache__`, `venv`, `build`, `dist`…), what the
+  `.gitignore` at the top of the folder excludes (with `*`, `**` and slashes
+  like git, but without negations or nested `.gitignore`), likely credential
+  files (`*.env`, `credentials.*`, `secrets.*`, `token.*`, `*.pem`, `*.key`,
+  `id_rsa*`…, which can still be attached one by one), images, special files
+  (pipes, sockets) and symlinks leaving the folder are kept out. Limits: 200
+  files, 10 PDFs, 30,000 characters per file and 200,000 in total, 5,000
+  entries examined (files and folders), 2 seconds between visiting and reading
+  (text files first, then documents, then PDFs). A warning summarizes what was left out, and
+  the model receives the same list. The folder is read at send time: only the
+  path remains in the conversation.
+- **Reasoning (thinking)**: with models that support it (qwen3, deepseek-r1…)
+  the 🧠 button in the input enables or disables reasoning, and the model's
+  thought appears in the bubble in a "💭 Thought" block in streaming,
+  collapsible when the reply arrives and saved in the conversation. While the
+  model thinks, the bubble doesn't just show dots: it shows "thinking…" and
+  then the reasoning text.
+- **Web companion** ("📱 Companion" item in the sidebar, `Ctrl+D`; off by
+  default): a page for smartphones and tablets on the local network, with the
+  same conversations as the PC. From the phone you read chats, open a new one
+  or continue an existing one: you choose the model, turn reasoning on or off
+  (🧠) and web search on or off (🌐, with the provider chosen on the PC; on
+  every page load it starts off and, while it's on, the writing bar reminds
+  you) and the reply arrives in streaming, with the ■ button to stop it. The
+  PC generates one reply at a time: if it's already replying, the phone
+  reports it and waits. PC and phone stay synchronized live: a message
+  written on one side appears on the other, the chat list on the phone updates
+  itself and a dot indicates the conversation that is replying. During a reply
+  the PC is free to open other conversations: the reply continues in the
+  background and is found again by reopening its chat.
+  - **From the phone:** attachments with 📎 (photos from the camera or gallery,
+    text files, PDFs and Office documents, up to 20 MB each): photos are resized on the phone
+    before upload and the PC passes them to models that read images. From a
+    chat's "⋯" menu you rename, archive (or restore) or delete the
+    conversation, even from the PC; archived ones sit in a closed box at the
+    bottom of the list; the ⧉ button under each message copies its text. With
+    🧩 you download (with progress and "Cancel") and delete models: the
+    download happens on the PC. The rest of the settings stay on the PC only.
+  - **"Companion" window:** gathers everything in one place: activation and
+    port, status and address (with "Copy address"), pairing and devices. When
+    active, the 📱 button in the top bar also opens the same window.
+  - **Pairing:** the window shows the address, a 6-digit code valid for 2
+    minutes and only once and, if `python3-qrcode` is installed
+    (`python-qrcode` on Arch), a QR code to scan. The phone receives a
+    session cookie; "Revoke devices" disconnects them all (at most 20 are
+    remembered).
+  - **On the Home screen:** from the browser menu "Add to Home Screen" the
+    page becomes an icon with the OllaDesk logo. On iPhone and iPad it opens
+    full screen, without the address bar, but it has separate cookies from
+    Safari: pairing must be repeated the first time it's opened from the icon.
+    On Android Chrome it creates a shortcut (a true installable app requires
+    HTTPS, deferred to a later version).
+  - **Firewall:** the PC must accept the port (default 8765) **from the local
+    network only**, e.g. firewalld: `sudo firewall-cmd --permanent
     --add-rich-rule='rule family=ipv4 source address=192.168.1.0/24 port
-    port=8765 protocol=tcp accept'` e `sudo firewall-cmd --reload`; analogo
-    con `ufw allow from 192.168.1.0/24 to any port 8765 proto tcp`.
-    Sostituisci `192.168.1.0/24` con la sottorete della tua LAN (la vedi con
-    `ip -4 addr`).
-  - **Limite noto:** il collegamento è HTTP in chiaro, quindi chi è sulla
-    stessa Wi-Fi può intercettare il cookie. Va bene su una rete domestica
-    protetta (WPA2/WPA3); non aprire la porta sul router. Nessuna risorsa
-    esterna: la pagina funziona anche senza internet.
-- **Client Ollama di terze parti** (app per smartphone che parlano con
-  l'API di Ollama): la condivisione dell'API delle versioni 0.2.x è stata
-  rimossa nella 0.3, perché l'API di Ollama non ha autenticazione e la
-  companion web sì. Aggiornando da una 0.2.x con la condivisione attiva,
-  dalla 0.3.6 il campo «Server Ollama» che puntava alla sua porta torna da
-  solo a `http://localhost:11434`. Chi vuole comunque esporre Ollama in
-  rete lo configura nel servizio di sistema, **sotto la propria
-  responsabilità**:
-  `sudo systemctl edit ollama`, poi nella sezione `[Service]` la riga
-  `Environment="OLLAMA_HOST=0.0.0.0"` e `sudo systemctl restart ollama`
-  (con la stessa regola del firewall per la porta 11434). Chi raggiunge la
-  porta può usare i modelli e la GPU: per l'accesso da fuori casa meglio
-  una VPN (es. Tailscale) o un tunnel SSH.
-- **Icona nella tray**: la finestra si riduce nell'area di notifica e si
-  ripristina con un clic sull'icona (menu: Mostra/nascondi, Esci);
-  facoltativamente la chiusura (X) riduce nella tray invece di uscire,
-  così la companion web e le generazioni in corso restano attive.
-- **Scelta del modello**: all'avvio e a ogni nuova conversazione il selettore mostra «Seleziona il modello» e nessun modello è scelto; inviando senza sceglierne uno compare un avviso. Riaprire una conversazione salvata ripristina il modello con cui era nata.
-- **Capacità del modello**: accanto al selettore, dei badge mostrano se il modello scelto accetta immagini, ragiona o usa strumenti.
-- **Gestione modelli** (pulsante «Modelli» nella sidebar, Ctrl+M): elenco dei
-  modelli installati con dimensione/parametri/quantizzazione, **scaricamento**
-  di nuovi modelli con barra di avanzamento e annullamento, ed **eliminazione**.
-  Il modello selezionato per la conversazione è contrassegnato con «●».
-  PC e telefono condividono la stessa operazione: se ne fa una alla volta, si
-  vede e si annulla da entrambi, un modello non si elimina mentre il PC
-  risponde e non si usa mentre lo si elimina. Chiudendo la finestra lo
-  scaricamento continua; riaprendola se ne rivede l'avanzamento.
-  Con Ollama 0.40.0, dopo la conversione dei modelli al nuovo motore, l'elenco
-  di Ollama riporta lo stesso nome due volte più una voce interna
-  `llamacpp:<sha>` ([ollama/ollama#18830](https://github.com/ollama/ollama/issues/18830)):
-  OllaDesk mostra ogni modello una volta sola e nasconde la voce interna
-  (su disco non cambia nulla; `ollama list` continua a mostrarle).
-- **Ricerca web** (🌐 nell'input, grigia da spenta e blu da attiva): prima di
-  rispondere, l'app cerca sul web e allega i risultati al contesto. Sotto la
-  risposta il blocco richiudibile **«🌐 Fonti»** elenca i risultati usati, con
-  la stessa numerazione [1], [2]… che vede il modello (anche sul telefono e
-  nelle conversazioni salvate in precedenza). **Provider a scelta** nelle
-  impostazioni:
-  - *DuckDuckGo* — senza chiave API (può essere temporaneamente bloccato dalla
-    sua protezione anti-bot: in quel caso l'app lo segnala chiaramente);
-  - *Ollama Cloud* — endpoint ufficiale `ollama.com/api/web_search`, richiede
-    la chiave API dell'account ollama.com;
-  - *SearXNG* — la tua istanza personale (es. `http://localhost:8888`), via
-    API JSON: ideale in locale. L'istanza deve avere l'output JSON abilitato —
-    in `settings.yml` di SearXNG:
+    port=8765 protocol=tcp accept'` and `sudo firewall-cmd --reload`; analogous
+    with `ufw allow from 192.168.1.0/24 to any port 8765 proto tcp`.
+    Replace `192.168.1.0/24` with your LAN subnet (see it with `ip -4 addr`).
+  - **Known limit:** the connection is plain HTTP, so anyone on the same Wi-Fi
+    can intercept the cookie. Fine on a protected home network (WPA2/WPA3); do
+    not open the port on the router. No external resources: the page works
+    even without internet.
+- **Third-party Ollama clients** (smartphone apps that talk to the Ollama
+  API): sharing the API of versions 0.2.x was removed in 0.3, because the
+  Ollama API has no authentication and the web companion does. When
+  upgrading from 0.2.x with sharing on, since 0.3.6 the «Ollama server»
+  field that pointed to its port goes back to `http://localhost:11434` by
+  itself. Anyone who still wants to expose Ollama on the network configures
+  it in the system service, **at their own risk**:
+  `sudo systemctl edit ollama`, then in the `[Service]` section the line
+  `Environment="OLLAMA_HOST=0.0.0.0"` and `sudo systemctl restart ollama`
+  (with the same firewall rule for port 11434). Whoever reaches the port can
+  use the models and the GPU: for access from outside home, better a VPN (e.g.
+  Tailscale) or an SSH tunnel.
+- **Tray icon**: the window minimizes to the notification area and is restored
+  with a click on the icon (menu: Show/hide, Quit); optionally closing (X)
+  minimizes to the tray instead of quitting, so the web companion and ongoing
+  generations stay active.
+- **Model choice**: at startup and for every new conversation the selector shows “Select a model” and no model is chosen; sending without choosing one shows a notice. Reopening a saved conversation restores the model it was started with.
+- **Model capabilities**: next to the selector, badges show whether the chosen model accepts images, reasons, or uses tools.
+- **Model management** ("Models" button in the sidebar, Ctrl+M): list of
+  installed models with size/parameters/quantization, **downloading** new
+  models with progress bar and cancel, and **deletion**. The model selected
+  for the conversation is marked with "●". PC and phone share the same
+  operation: one at a time, visible and cancellable from both, a model is not
+  deleted while the PC is replying and is not used while being deleted.
+  Closing the window continues the download; reopening shows its progress.
+  With Ollama 0.40.0, after converting models to the new engine, Ollama's
+  list reports the same name twice plus an internal `llamacpp:<sha>` entry
+  ([ollama/ollama#18830](https://github.com/ollama/ollama/issues/18830)):
+  OllaDesk shows each model only once and hides the internal entry (nothing
+  changes on disk; `ollama list` keeps showing them).
+- **Web search** (🌐 in the input, gray when off and blue when on): before
+  replying, the app searches the web and attaches the results to the context.
+  Under the reply the collapsible **"🌐 Sources"** block lists the results
+  used, with the same numbering [1], [2]… seen by the model (also on the phone
+  and in conversations saved earlier). **Provider of choice** in settings:
+  - *DuckDuckGo* — no API key (may be temporarily blocked by its anti-bot
+    protection: in that case the app reports it clearly);
+  - *Ollama Cloud* — official endpoint `ollama.com/api/web_search`, requires
+    the API key of the ollama.com account;
+  - *SearXNG* — your personal instance (e.g. `http://localhost:8888`), via
+    JSON API: ideal locally. The instance must have JSON output enabled — in
+    SearXNG's `settings.yml`:
 
     ```yaml
     search:
@@ -195,12 +183,12 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
         - json
     ```
 
-    Se l'istanza risponde senza risultati perché i suoi motori non hanno
-    risposto (tipico a connessioni fredde), l'app riprova una volta e poi
-    elenca i motori in errore: di solito aiuta alzare
-    `outgoing.request_timeout` o cambiare motori nel `settings.yml`. Se
-    duckduckgo o brave vengono bloccati (CAPTCHA, «too many requests»),
-    disattivali e attiva bing o startpage:
+    If the instance responds with no results because its engines didn't
+    respond (typical on cold connections), the app retries once and then lists
+    the engines in error: usually raising `outgoing.request_timeout` or
+    changing engines in `settings.yml` helps. If duckduckgo or brave get
+    blocked (CAPTCHA, "too many requests"), disable them and enable bing or
+    startpage:
 
     ```yaml
     outgoing:
@@ -215,112 +203,110 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
         disabled: true
     ```
 
-  Un **provider di riserva** facoltativo (predefinito: nessuno; mai lo
-  stesso del principale) viene
-  provato quando il principale fallisce o non trova nulla, e una nota in
-  chat dice quale ha risposto. Il messaggio compare in chat subito, mentre
-  la ricerca è in corso.
-  Come query viene usata solo la prima riga del messaggio (massimo 200
-  caratteri), non l'intero testo. Il numero di risultati è configurabile. I modelli non chiamano il tool da
-  soli: i risultati vengono iniettati nel prompt dalla GUI (verificato e2e).
-- **Aggiornamenti Ollama**: all'avvio, al massimo una volta al giorno, l'app
-  controlla l'ultima release su GitHub; se è più recente del server in uso,
-  l'indicatore di stato in alto a destra mostra «⬆ versione». Un clic
-  sull'indicatore apre il menu con l'**aggiornamento in un clic** tramite lo
-  script ufficiale (eseguito con `pkexec`, quindi con la password di
-  amministratore di KDE), i modelli e l'indirizzo del server. La stessa
-  verifica è in Impostazioni → Aggiornamenti, dove si disattiva il controllo
-  all'avvio. Solo con un server Ollama su questo computer.
-- **Aggiornamenti di OllaDesk**: all'avvio, al massimo una volta al giorno,
-  l'app controlla su GitHub se è uscita una nuova versione e, in quel caso,
-  mostra un avviso nella barra superiore con le istruzioni adatte a come è
-  stata installata (.deb, AUR, AppImage, pip o sorgenti). Solo un avviso: nessun
-  download né installazione automatica. Si può saltare una versione, verificare
-  a mano o disattivare il controllo in Impostazioni → Aggiornamenti.
-- **Impostazioni** (pagine Generale, Aspetto, Ricerca web, Aggiornamenti, Aiuto e Info, scelte dal menu a sinistra; F1 apre l'Aiuto, con le funzioni principali e le scorciatoie; Info ha versioni, licenza, collegamenti e «Copia informazioni di sistema» per le segnalazioni): URL del server Ollama, tema
-  scuro/chiaro/**sistema** (segue KDE Plasma, anche a caldo quando lo cambi),
-  dimensione del carattere, streaming on/off, invio con Invio, orario nei
-  messaggi, icona nella tray, quantità di contesto
-  inviata al modello, archiviazione automatica delle chat inattive, prompt di
-  sistema predefinito, risultati ricerca web.
-- **Impostazioni → «Parametri modelli»**: profilo di parametri separato
-  per ogni modello (temperatura, top_k, top_p, min_p, num_ctx, num_predict,
-  penalità di ripetizione/presenza/frequenza, seed, sequenze di stop, mirostat,
-  num_gpu, num_thread…). Solo i parametri spuntati vengono inviati a Ollama:
-  gli altri restano ai valori predefiniti del server. Ogni profilo può essere
-  **salvato** e **ripristinato ai predefiniti** con un clic.
-- Stato della connessione sempre visibile (verde/rosso) con ricontrollo
-  automatico ogni 30 s.
+  An optional **fallback provider** (default: none; never the same as the
+  main one) is tried when the main one fails or finds nothing, and a note in
+  chat says which one answered. The message appears in chat right away, while
+  the search is in progress.
+  Only the first line of the message is used as the query (max 200
+  characters), not the whole text. The number of results is configurable. Models
+  don't call the tool themselves: results are injected into the prompt by the
+  GUI (verified e2e).
+- **Ollama updates**: on startup, at most once a day, the app checks the
+  latest release on GitHub; if it is newer than the server in use, the status
+  indicator at the top right shows "⬆ version". Clicking the indicator opens a
+  menu with the **one-click update** via the official script (run with
+  `pkexec`, so with the KDE administrator password), the models and the server
+  address. The same check is in Settings → Updates, where the startup check
+  can be turned off. Only with an Ollama server on this computer.
+- **OllaDesk updates**: on startup, at most once a day, the app checks GitHub
+  for a new version and, if so, shows a notice in the top bar with instructions
+  suited to how it was installed (.deb, AUR, AppImage, pip or sources). Just a
+  notice: no automatic download or install. You can skip a version, check
+  manually or disable the check in Settings → Updates.
+- **Settings** (General, Appearance, Web search, Updates, Help and About pages, chosen from the menu on the left; F1 opens Help, with the main features and the shortcuts; About has versions, license, links and "Copy system information" for bug reports): Ollama server URL, dark/light/**system**
+  theme (follows KDE Plasma, even hot when you change it), font size,
+  streaming on/off, send with Enter, timestamps in messages, tray icon, amount
+  of context sent to the model, automatic archiving of inactive chats, default
+  system prompt, web search results.
+- **Settings → "Model parameters"**: separate parameter profile for each
+  model (temperature, top_k, top_p, min_p, num_ctx, num_predict, repetition/
+  presence/frequency penalties, seed, stop sequences, mirostat, num_gpu,
+  num_thread…). Only checked parameters are sent to Ollama: the others keep
+  the server defaults. Each profile can be **saved** and **reset to defaults**
+  with one click.
+- Connection status always visible (green/red) with automatic recheck every
+  30 s.
 
-## Requisiti
+## Requirements
 
-- Python 3.10+ con PySide6 (l'AppImage li include già)
-- Un server Ollama in esecuzione (`ollama serve`) con almeno un modello
+- Python 3.10+ with PySide6 (the AppImage already includes them)
+- A running Ollama server (`ollama serve`) with at least one model
 
-## Installazione su Arch Linux (AUR)
+## Installation on Arch Linux (AUR)
 
-Il pacchetto [`olladesk`](https://aur.archlinux.org/packages/olladesk) è su
-AUR. Con un helper:
+The [`olladesk`](https://aur.archlinux.org/packages/olladesk) package is on
+AUR. With a helper:
 
 ```bash
 yay -S olladesk
 ```
 
-oppure a mano:
+or by hand:
 
 ```bash
 git clone https://aur.archlinux.org/olladesk.git && cd olladesk
 curl -LO https://github.com/gradia64/OllaDesk/releases/latest/download/olladesk-release-key.asc
-gpg --import olladesk-release-key.asc   # impronta: vedi «Verifica delle firme»
+gpg --import olladesk-release-key.asc   # fingerprint: see "Signature verification"
 makepkg -si
 ```
 
-Dalla 0.2.5 il PKGBUILD clona da GitHub il tag della versione e makepkg ne
-verifica la firma GPG (`?signed` e `validpgpkeys` nel PKGBUILD): se la chiave
-di release non è nel tuo portachiavi, o è una copia precedente al 03/10/2026
-senza le sottochiavi nuove, la build si ferma. Importala (o reimportala) dal
-file `olladesk-release-key.asc` allegato a ogni release
-(`gpg --import olladesk-release-key.asc`) dopo averne controllato l'impronta.
-Ogni release include anche il pacchetto già costruito
-(`olladesk-<versione>-1-any.pkg.tar.zst`, installabile con `sudo pacman -U`).
+From 0.2.5 the PKGBUILD clones the version tag from GitHub and makepkg
+verifies its GPG signature (`?signed` and `validpgpkeys` in the PKGBUILD): if
+the release key is not in your keyring, or it's an older copy from before
+03/10/2026 without the new subkeys, the build stops. Import it (or re-import
+it) from the `olladesk-release-key.asc` file attached to every release
+(`gpg --import olladesk-release-key.asc`) after checking its fingerprint.
+Every release also includes the already-built package
+(`olladesk-<version>-1-any.pkg.tar.zst`, installable with `sudo pacman -U`).
 
-## AppImage (qualunque distribuzione)
+## AppImage (any distribution)
 
-Dalla 0.3.4 ogni release include `OllaDesk-<versione>-x86_64.AppImage`: un
-solo file con dentro Python, Qt e le dipendenze facoltative (PDF,
-portachiavi, QR code), da scaricare e avviare senza installare nulla.
+From 0.3.4 every release includes
+`OllaDesk-<version>-x86_64.AppImage`: a single file containing Python, Qt and
+the optional dependencies (PDF, keyring, QR code), to download and run
+without installing anything.
 
 ```bash
 chmod +x OllaDesk-*-x86_64.AppImage
 ./OllaDesk-*-x86_64.AppImage
 ```
 
-Prima di avviarla verifica la firma, come per gli altri file (sezione
-«Verifica delle firme»):
+Before running it, verify the signature, as for the other files (section
+"Signature verification"):
 
 ```bash
 gpg --verify OllaDesk-0.3.4-x86_64.AppImage.sig OllaDesk-0.3.4-x86_64.AppImage
 ```
 
-**Requisiti.** Sistema a 64 bit x86_64 con glibc 2.34 o più recente:
-Debian 12, Ubuntu 22.04, Fedora 35, openSUSE Tumbleweed o successive (è il
-minimo di PySide6). Dal sistema l'AppImage usa solo le librerie che ogni
-desktop ha già: OpenGL/EGL, xkbcommon e xkbcommon-x11, fontconfig, D-Bus,
-GLib, Kerberos (`libgssapi_krb5`) e X11 o Wayland. Per montarsi le serve FUSE
-(`fusermount3`, pacchetto `fuse3`); dove manca, per esempio in un
-container, si avvia con `./OllaDesk-*.AppImage --appimage-extract-and-run`.
-Ollama non è incluso: va installato a parte.
+**Requirements.** 64-bit x86_64 system with glibc 2.34 or newer: Debian 12,
+Ubuntu 22.04, Fedora 35, openSUSE Tumbleweed or later (it's PySide6's
+minimum). From the system the AppImage uses only libraries every desktop
+already has: OpenGL/EGL, xkbcommon, xkbcommon-x11, fontconfig, D-Bus,
+GLib, Kerberos (`libgssapi_krb5`) and X11 or Wayland. To mount itself it needs FUSE
+(`fusermount3`, package `fuse3`); where it's missing, for example in a
+container, it runs with `./OllaDesk-*.AppImage --appimage-extract-and-run`.
+Ollama is not included: it must be installed separately.
 
-**Menu e icona.** Avviata così com'è, OllaDesk non compare nel menu e nella
-barra delle applicazioni ha un'icona generica. Per integrarla usa
-[Gear Lever](https://flathub.org/apps/it.mijorus.gearlever) o
-[AppImageLauncher](https://github.com/TheAssassin/AppImageLauncher): copiano
-l'AppImage in una cartella fissa e installano voce di menu e icona, che su
-Plasma compare anche nella barra. Per farlo a mano, dalla cartella in cui
-tieni l'AppImage:
+**Menu and icon.** Run as-is, OllaDesk doesn't appear in the menu and has a
+generic icon in the application bar. To integrate it use
+[Gear Lever](https://flathub.org/apps/it.mijorus.gearlever) or
+[AppImageLauncher](https://github.com/TheAssassin/AppImageLauncher): they copy
+the AppImage into a fixed folder and install the menu entry and icon, which on
+Plasma also appears in the bar. To do it by hand, from the folder where you
+keep the AppImage:
 
 ```bash
-./OllaDesk-*-x86_64.AppImage --appimage-extract 'usr/share/*'   # solo usr/share, circa 1 MB
+./OllaDesk-*-x86_64.AppImage --appimage-extract 'usr/share/*'   # only usr/share, about 1 MB
 sed "s|^Exec=.*|Exec=$PWD/$(ls OllaDesk-*-x86_64.AppImage)|" \
     squashfs-root/usr/share/applications/io.github.gradia64.OllaDesk.desktop \
     > ~/.local/share/applications/io.github.gradia64.OllaDesk.desktop
@@ -329,25 +315,24 @@ install -Dm644 squashfs-root/usr/share/icons/hicolor/scalable/apps/io.github.gra
 rm -r squashfs-root
 ```
 
-**Aggiornamenti.** L'AppImage non si aggiorna da sola: quando esce una
-versione nuova, OllaDesk lo segnala (Impostazioni → Aggiornamenti) e indica
-il file da scaricare. Basta sostituire il vecchio `.AppImage` con il nuovo
-(con Gear Lever o AppImageLauncher, aprendo il file nuovo). Con
-l'integrazione a mano il nome del file è scritto nel `.desktop`: dopo
-l'aggiornamento ripeti i comandi qui sopra.
+**Updates.** The AppImage doesn't update itself: when a new version is out,
+OllaDesk reports it (Settings → Updates) and indicates the file to download.
+Just replace the old `.AppImage` with the new one (with Gear Lever or
+AppImageLauncher, by opening the new file). With hand integration the file
+name is written in the `.desktop`: after updating, repeat the commands above.
 
-**Da sapere.** Chat, impostazioni e dispositivi abbinati sono in
-`~/.config/olladesk`, la stessa cartella del `.deb` e del pacchetto AUR:
-passando all'AppImage ritrovi tutto, ma non aprire due OllaDesk insieme. La
-chiave API passa dal portachiavi tramite Secret Service (KWallet su Plasma,
-GNOME Keyring altrove). Solo x86_64: niente build per ARM.
+**To know.** Chats, settings and paired devices are in `~/.config/olladesk`,
+the same folder as the `.deb` and the AUR package: switching to the AppImage
+you find everything again, but don't open two OllaDesk at once. The API key
+passes through the keyring via Secret Service (KWallet on Plasma, GNOME Keyring
+elsewhere). x86_64 only: no ARM builds.
 
 ## Flatpak (bundle)
 
-Le release includono anche `OllaDesk-<versione>.flatpak`, un bundle Flatpak
-da installare senza aggiungere repository. Verifica prima la firma, come per
-gli altri file (sezione «Verifica delle firme»), poi installalo per il tuo
-utente:
+Releases also include `OllaDesk-<version>.flatpak`, a Flatpak bundle you can
+install without adding a repository. First verify its signature, like the
+other files (section “Signature verification”), then install it for your
+user:
 
 ```bash
 gpg --verify OllaDesk-0.3.9.flatpak.sig OllaDesk-0.3.9.flatpak
@@ -355,96 +340,96 @@ flatpak install --user OllaDesk-0.3.9.flatpak
 flatpak run io.github.gradia64.OllaDesk
 ```
 
-Serve Flatpak; il runtime KDE (`org.kde.Platform` 6.11) arriva da Flathub
-alla prima installazione. Non è su Flathub: per aggiornare si installa allo
-stesso modo il bundle della versione nuova, che OllaDesk segnala da sola.
+You need Flatpak; the KDE runtime (`org.kde.Platform` 6.11) comes from Flathub
+on the first install. OllaDesk is not on Flathub: to update, install the new
+version's bundle the same way. OllaDesk tells you when one is out.
 
-**Da sapere.** L'app gira nella sandbox senza accesso ai tuoi file: allegati
-e cartelle passano dalla finestra di scelta del sistema o dal trascinamento.
-Chat e impostazioni sono in `~/.var/app/io.github.gradia64.OllaDesk/config/olladesk`,
-separate da quelle del `.deb`, del pacchetto AUR e dell'AppImage: al primo
-avvio il profilo è vuoto. Ollama non è incluso: va installato a parte.
+**Good to know.** The app runs in the sandbox without access to your files:
+attachments and folders go through the system file picker or drag and drop.
+Chats and settings are in `~/.var/app/io.github.gradia64.OllaDesk/config/olladesk`,
+separate from the `.deb`, AUR package and AppImage: the first launch starts
+with an empty profile. Ollama is not included: install it separately.
 
-## Installazione su Debian
+## Installation on Debian
 
-### Dal pacchetto .deb (consigliata)
+### From the .deb package (recommended)
 
-Scarica `olladesk_<versione>_all.deb` dall'ultima
-[release su GitHub](https://github.com/gradia64/OllaDesk/releases/latest)
-e installalo: apt risolve da solo le dipendenze (Python 3.10+ e i moduli
-PySide6 di Qt core/gui/widgets/network):
+Download `olladesk_<version>_all.deb` from the latest
+[release on GitHub](https://github.com/gradia64/OllaDesk/releases/latest)
+and install it: apt resolves the dependencies on its own (Python 3.10+ and
+Qt core/gui/widgets/network PySide6 modules):
 
 ```bash
 sudo apt install ./olladesk_*_all.deb
 ```
 
-Il pacchetto installa il launcher `/usr/bin/olladesk`, la voce «OllaDesk»
-nel menu applicazioni con la relativa icona, la manpage e il changelog;
-la disinstallazione è `sudo apt remove olladesk`.
+The package installs the `/usr/bin/olladesk` launcher, the "OllaDesk" entry
+in the applications menu with its icon, the manpage and the changelog;
+uninstalling is `sudo apt remove olladesk`.
 
-### Verifica delle firme
+### Signature verification
 
-Dalla 0.2.3 ogni file della release ha una firma GPG staccata (`.sig`) fatta
-con la chiave di release del progetto, pubblicata come
-`olladesk-release-key.asc` nella release e in `packaging/` nel repository.
-Dalla 0.2.5 firmano due sottochiavi della stessa chiave, con ruoli separati:
-una i tag git (solo il maintainer), l'altra gli allegati (la CI). L'impronta
-da controllare resta quella della chiave primaria:
+From 0.2.3 every release file has a detached GPG signature (`.sig`) made with
+the project's release key, published as `olladesk-release-key.asc` in the
+release and in `packaging/` in the repository. From 0.2.5 two subkeys of the
+same key sign, with separate roles: one the git tags (maintainer only), the
+other the attachments (CI). The fingerprint to check stays that of the primary
+key:
 
 ```
 gradia (OllaDesk release signing) <gradia@disroot.org>
 ed25519  5B16 6C1B 4AD7 428C 74A0  7D5B A337 0987 A057 6694
 ```
 
-Dopo l'import controlla che l'impronta mostrata da gpg coincida, poi:
+After importing, check that the fingerprint shown by gpg matches, then:
 
 ```bash
 gpg --import olladesk-release-key.asc
 gpg --verify olladesk_0.3.4_all.deb.sig olladesk_0.3.4_all.deb
-# oppure tutto in una volta:
+# or all at once:
 gpg --verify SHA256SUMS.sig SHA256SUMS && sha256sum -c --ignore-missing SHA256SUMS
 ```
 
-Per costruire il pacchetto dai sorgenti (serve `dpkg-deb`, presente su
-qualunque Debian):
+To build the package from sources (needs `dpkg-deb`, present on any Debian):
 
 ```bash
-scripts/build-deb.sh        # produce dist/olladesk_<versione>_all.deb
+scripts/build-deb.sh        # produces dist/olladesk_<version>_all.deb
 ```
 
-### Dai sorgenti
+### From sources
 
-Con i pacchetti di Debian:
+With Debian packages:
 
 ```bash
 sudo apt install python3-pyside6 qt6-svg-plugins
 ```
 
-oppure via pip (ambiente virtuale):
+or via pip (virtual environment):
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-poi avvia dalla cartella del progetto:
+then run from the project folder:
 
 ```bash
 python3 main.py
-# oppure
+# or
 python3 -m olladesk
 ```
 
-### Come pacchetto Python (pipx/pip)
+### As a Python package (pipx/pip)
 
 ```bash
-pipx install .            # oppure: pip install --user .
-olladesk                  # entry point creato da pyproject.toml
+pipx install .            # or: pip install --user .
+olladesk                  # entry point created by pyproject.toml
 ```
 
-Nel `.desktop` puoi allora usare `Exec=olladesk` al posto del percorso assoluto.
+In the `.desktop` you can then use `Exec=olladesk` instead of the absolute
+path.
 
-### Integrazione con KDE Plasma (menu applicazioni)
+### Integration with KDE Plasma (applications menu)
 
 ```bash
 cp io.github.gradia64.OllaDesk.desktop ~/.local/share/applications/
@@ -453,161 +438,160 @@ install -Dm644 olladesk/assets/olladesk.svg \
 update-desktop-database ~/.local/share/applications
 ```
 
-Il `.desktop` usa `Exec=olladesk` (l'entry point installato con `pipx`/`pip`)
-e `Icon=io.github.gradia64.OllaDesk` (l'icona copiata qui sopra nel tema
-`hicolor`). Se avvii l'app dai sorgenti senza installarla, sostituisci `Exec=`
-con `python3 /percorso/di/OllaDesk/main.py`.
+The `.desktop` uses `Exec=olladesk` (the entry point installed with
+`pipx`/`pip`) and `Icon=io.github.gradia64.OllaDesk` (the icon copied above
+into the `hicolor` theme). If you run the app from sources without installing
+it, replace `Exec=` with `python3 /path/to/OllaDesk/main.py`.
 
-Fino alla 0.3.3 i file si chiamavano `olladesk.desktop` e `olladesk.svg`: se
-li avevi copiati a mano, cancellali per non avere OllaDesk due volte nel menu.
+Until 0.3.3 the files were named `olladesk.desktop` and `olladesk.svg`: if
+you copied them by hand, delete them so OllaDesk doesn't appear twice in the
+menu.
 
-## Scorciatoie
+## Shortcuts
 
-| Scorciatoia | Azione                          |
-|-------------|---------------------------------|
-| `Ctrl+N`    | Nuova conversazione             |
-| `Ctrl+B`    | Mostra/nascondi la sidebar      |
-| `Ctrl+K`    | Cerca tra le conversazioni      |
-| `Ctrl+M`    | Gestione modelli (download/rimozione) |
-| `Ctrl+D`    | Companion web (telefono e tablet) |
-| `Ctrl+,`    | Apri le impostazioni            |
-| `F1`        | Aiuto: funzioni principali e scorciatoie |
-| `Invio`     | Invia il messaggio (attivabile) |
-| `Ctrl+Invio` | Invia il messaggio (sempre)    |
-| `Shift+Invio` | A capo                        |
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+N` | New conversation |
+| `Ctrl+B` | Show/hide sidebar |
+| `Ctrl+K` | Search conversations |
+| `Ctrl+M` | Model management (download/removal) |
+| `Ctrl+D` | Web companion (phone and tablet) |
+| `Ctrl+,` | Open settings |
+| `F1` | Help: main features and shortcuts |
+| `Enter` | Send message (configurable) |
+| `Ctrl+Enter` | Send message (always) |
+| `Shift+Enter` | New line |
 
-## Parametri dei modelli
+## Model parameters
 
-Nella scheda «Parametri modelli» ogni riga ha una casella di
-personalizzazione: **solo i parametri spuntati** vengono inclusi nell'opzione
-`options` della richiesta a `/api/chat`; gli altri restano ai valori di
-default di Ollama, quindi «Ripristina predefiniti» equivale a non inviare più
-nessuna personalizzazione.
+In the "Model parameters" tab each row has a customization checkbox: **only
+checked parameters** are included in the `options` of the request to
+`/api/chat`; the others keep Ollama's defaults, so "Reset to defaults" is
+equivalent to sending no customization anymore.
 
-I profili sono salvati per-modello in `~/.config/olladesk/model_params.json`
-e vengono applicati automaticamente al modello selezionato nella chat.
+Profiles are saved per-model in `~/.config/olladesk/model_params.json` and are
+applied automatically to the model selected in the chat.
 
-## File di configurazione
+## Configuration files
 
-Tutto è salvato in `$XDG_CONFIG_HOME/olladesk` (di default
-`~/.config/olladesk`). Se esiste una configurazione del vecchio nome
-(`~/.config/ollama-gui`), viene migrata automaticamente al primo avvio:
+Everything is saved in `$XDG_CONFIG_HOME/olladesk` (by default
+`~/.config/olladesk`). If a configuration with the old name exists
+(`~/.config/ollama-gui`), it is migrated automatically on first launch:
 
-| Percorso            | Contenuto                          |
-|---------------------|------------------------------------|
-| `settings.json`     | Impostazioni della GUI (la chiave API viaggia nel portachiavi di KDE, se disponibile) |
-| `model_params.json` | Profili di parametri per modello   |
-| `chats/index.json`  | Indice delle conversazioni (solo metadati) |
-| `chats/<id>.json`   | Una conversazione per file: salvare un messaggio non riscrive l'archivio |
-| `attachments/`      | Immagini incollate dagli appunti (cartella privata, permessi 700) |
+| Path | Content |
+|------|---------|
+| `settings.json` | GUI settings (the API key travels in KDE's keyring, if available) |
+| `model_params.json` | Parameter profiles per model |
+| `chats/index.json` | Conversation index (metadata only) |
+| `chats/<id>.json` | One conversation per file: saving a message doesn't rewrite the archive |
+| `attachments/` | Images pasted from the clipboard (private folder, permissions 700) |
 
-Il vecchio `chats.json` monolitico viene migrato automaticamente al primo
-avvio (lasciato come `chats.json.bak`). Gli allegati sono referenziati per
-percorso e il loro testo viene allegato al contesto solo nel turno in cui
-vengono inviati.
+The old monolithic `chats.json` is migrated automatically on first launch
+(left as `chats.json.bak`). Attachments are referenced by path and their text
+is attached to the context only in the turn in which they are sent.
 
-## Test
+## Tests
 
-Smoke test offscreen (avvia la GUI, chatta davvero con Ollama, salva/ripristina
-i parametri e salva screenshot in `/tmp/olladesk_shots`):
-
-```bash
-python3 tests/gui_smoke.py      # funzionalità base
-python3 tests/gui_features.py   # allegati, ricerca web, modelli, aggiornamenti
-python3 tests/gui_errors.py     # percorsi di errore (server offline)
-python3 tests/unit_test.py      # unit test delle funzioni pure (senza rete)
-python3 tests/repro_qthread_crash.py  # chiusura dialoghi con worker bloccati (senza rete)
-python3 tests/release_tools_test.py   # script di rilascio: firma dei tag e degli allegati (senza rete)
-```
-
-Gli script `gui_*.py` sono collaudi end-to-end (richiedono Ollama e, per la
-ricerca web, la rete). `pytest` raccoglie solo `tests/unit_test.py`;
-gli altri script senza rete (`release_tools_test.py`, `engine_test.py`, i
-test della companion e `sync_test.py`) hanno il loro runner e si eseguono
-con `python3` (`tests/conftest.py`). La configurazione di prova vive in una
-cartella temporanea nuova a ogni esecuzione.
+Offscreen smoke test (starts the GUI, really chats with Ollama, saves/restores
+parameters and saves screenshots in `/tmp/olladesk_shots`):
 
 ```bash
-python3 tests/offline_app_update.py   # controllo aggiornamenti con finto GitHub (senza rete)
-python3 tests/engine_test.py          # motore di chat con finto Ollama (senza rete)
-python3 tests/companion_test.py       # companion web: server, abbinamento, lettura (senza rete)
-python3 tests/companion_send_test.py  # companion web: invio e streaming SSE (senza rete)
-python3 tests/sync_test.py            # sincronizzazione telefono-PC dal vivo (senza rete)
-python3 tests/companion_models_test.py  # companion web: scarica ed elimina modelli (senza rete)
+python3 tests/gui_smoke.py      # basic features
+python3 tests/gui_features.py   # attachments, web search, models, updates
+python3 tests/gui_errors.py     # error paths (offline server)
+python3 tests/unit_test.py      # unit tests of pure functions (no network)
+python3 tests/repro_qthread_crash.py  # closing dialogs with blocked workers (no network)
+python3 tests/release_tools_test.py   # release scripts: tag and attachment signing (no network)
 ```
 
-La CI (`.github/workflows/release.yml`) esegue unit test e test offline a ogni
-push e pull request; sui tag `v*` costruisce tarball, `.deb`, AppImage,
-bundle Flatpak e pacchetto Arch, li firma e li pubblica (release GitHub e AUR). L'AppImage si
-prova con `packaging/appimage/smoke-test.sh`, che esegue i test offline con
-il suo Python; il Flatpak, allo stesso modo, con `packaging/flatpak/smoke-test.sh`. Dettagli per chi pubblica:
+The `gui_*.py` scripts are end-to-end checks (require Ollama and, for web
+search, the network). `pytest` collects only `tests/unit_test.py`; the other
+offline scripts (`release_tools_test.py`, `engine_test.py`, the companion tests
+and `sync_test.py`) have their own runner and run with `python3`
+(`tests/conftest.py`). Test configuration lives in a fresh temporary folder on
+every run.
+
+```bash
+python3 tests/offline_app_update.py   # OllaDesk update check with fake GitHub (no network)
+python3 tests/engine_test.py          # chat engine with fake Ollama (no network)
+python3 tests/companion_test.py       # web companion: server, pairing, reading (no network)
+python3 tests/companion_send_test.py  # web companion: sending and SSE streaming (no network)
+python3 tests/sync_test.py            # phone-PC live synchronization (no network)
+python3 tests/companion_models_test.py  # web companion: download and delete models (no network)
+```
+
+CI (`.github/workflows/release.yml`) runs unit tests and offline tests on every
+push and pull request; on `v*` tags it builds tarball, `.deb`, AppImage,
+Flatpak bundle and Arch package, signs them and publishes (GitHub release and AUR). The AppImage
+is tested with `packaging/appimage/smoke-test.sh`, which runs the offline
+tests with its Python; the Flatpak, likewise, with `packaging/flatpak/smoke-test.sh`. Details for publishers:
 [packaging/README.md](packaging/README.md).
 
-Per leggere i PDF come allegati:
+To read PDFs as attachments:
 
 ```bash
-pip install pypdf    # oppure: sudo apt install python3-pypdf
+pip install pypdf    # or: sudo apt install python3-pypdf
 ```
 
-## Struttura del progetto
+## Project structure
 
 ```
-main.py                     punto di ingresso
+main.py                     entry point
 olladesk/
-  app.py                    avvio dell'applicazione
-  config.py                 persistenza (settings, parametri, chat) + migrazione
-  theme.py                  temi scuro/chiaro/sistema (Fusion + QSS)
-  md.py                     Markdown → HTML (subset Qt rich text)
-  i18n.py                   traduzioni dell'interfaccia (cataloghi in locale/*.po)
-  icons.py                  icone Lucide (SVG in assets/icons, licenza ISC)
-  context.py                allegati: testo/PDF/immagini come contesto
-  office.py                 testo di .docx/.doc/.xlsx/.xls/.odt/.ods
-  portal.py                 portale FileTransfer per il drag & drop in Flatpak
-  web_search.py             ricerca web (DuckDuckGo/Ollama Cloud/SearXNG) + worker
-  updater.py                aggiornamenti di Ollama (release GitHub + pkexec)
-  app_update.py             aggiornamenti di OllaDesk (solo controllo e avviso)
-  ollama_client.py          client API Ollama (stdlib) + worker QThread
-  netinfo.py                indirizzi di rete locale (per la companion web)
-  engine.py                 motore di chat: conversazioni, generazione, salvataggio
-  workers.py                registro dei worker QThread attivi e in arresto
-  companion.py              companion web: server HTTP in LAN e abbinamento
-  web/                      pagina mobile della companion (HTML, CSS, JS, manifest e icone)
-  assets/icons/             icone Lucide (SVG, licenza ISC)
-  main_window.py            finestra principale, client del motore di chat
+  app.py                    application startup
+  config.py                 persistence (settings, parameters, chats) + migration
+  theme.py                  dark/light/system themes (Fusion + QSS)
+  md.py                     Markdown → HTML (Qt rich text subset)
+  i18n.py                   interface translations (catalogs in locale/*.po)
+  icons.py                  Lucide icons (SVG in assets/icons, ISC license)
+  context.py                attachments: text/PDF/images as context
+  office.py                 text of .docx/.doc/.xlsx/.xls/.odt/.ods
+  portal.py                 FileTransfer portal for drag & drop in Flatpak
+  web_search.py             web search (DuckDuckGo/Ollama Cloud/SearXNG) + worker
+  updater.py                Ollama updates (GitHub release + pkexec)
+  app_update.py             OllaDesk updates (check and notice only)
+  ollama_client.py          Ollama API client (stdlib) + QThread worker
+  netinfo.py                local network addresses (for the web companion)
+  engine.py                 chat engine: conversations, generation, saving
+  workers.py                registry of active and stopping QThread workers
+  companion.py              web companion: HTTP server on LAN and pairing
+  web/                      mobile companion page (HTML, CSS, JS, manifest and icons)
+  assets/icons/             Lucide icons (SVG, ISC license)
+  main_window.py            main window, chat engine client
   widgets/
-    about.py                pagina Info (versioni, licenza, copia info di sistema)
-    chat_area.py            area messaggi + input (allegati, ricerca web)
-    message.py              bolle dei messaggi
-    sidebar.py              elenco conversazioni
-    model_params.py         definizioni ed editor dei parametri
-    steppers.py             campi numerici con pulsanti tondi −/+
-    model_manager.py        dialog scaricamento/eliminazione modelli
-    ollama_update.py        aggiornamento di Ollama (impostazioni e indicatore di stato)
-    settings_dialog.py      finestra impostazioni (2 schede + aggiornamenti)
-    companion_dialog.py     finestra della companion: servizio, abbinamento, dispositivi
-tests/gui_smoke.py          collaudo automatico offscreen (base)
-tests/gui_features.py       collaudo automatico offscreen (funzionalità extra)
-tests/gui_errors.py         collaudo percorsi di errore (offline)
-tests/unit_test.py          unit test delle funzioni pure
-tests/repro_qthread_crash.py regressione: dialoghi distrutti con worker bloccati
-tests/offline_app_update.py controllo aggiornamenti di OllaDesk (finto GitHub)
-tests/engine_test.py        motore di chat (finto Ollama)
-tests/companion_test.py     companion web (server, abbinamento, lettura)
-tests/companion_send_test.py companion web (invio, streaming SSE, stop)
-tests/sync_test.py          sincronizzazione telefono-PC dal vivo
-tests/companion_models_test.py companion web (scarica ed elimina modelli)
-tests/fake_ollama.py        finto server Ollama per i test offline
-tests/companion_client.py   client HTTP/SSE per i test della companion
-tests/release_tools_test.py script di rilascio (chiavi e repository temporanei)
-io.github.gradia64.OllaDesk.desktop  voce per il menu applicazioni (ID dell'app)
-io.github.gradia64.OllaDesk.metainfo.xml  metadati AppStream (centri software)
-packaging/                  file comuni .deb/Arch, modello PKGBUILD, AppImage, chiave di release
-scripts/                    build (.deb, AppImage, sorgenti, Arch), firma, pubblicazione AUR,
-                            icone web, screenshot (docs/screenshots/, per AppStream),
-                            i18n (aggiornamento/controllo cataloghi gettext)
+    about.py                Info page (versions, license, copy system info)
+    chat_area.py            message area + input (attachments, web search)
+    message.py              message bubbles
+    sidebar.py              conversation list
+    model_params.py         parameter definitions and editor
+    steppers.py             numeric fields with round −/+ buttons
+    model_manager.py        model download/deletion dialog
+    ollama_update.py        Ollama update (settings and status indicator)
+    settings_dialog.py      settings window (2 tabs + updates)
+    companion_dialog.py     companion window: service, pairing, devices
+tests/gui_smoke.py          offscreen automated check (base)
+tests/gui_features.py       offscreen automated check (extra features)
+tests/gui_errors.py         error paths (offline)
+tests/unit_test.py          unit tests of pure functions
+tests/repro_qthread_crash.py regression: dialogs destroyed with blocked workers
+tests/offline_app_update.py OllaDesk update check (fake GitHub)
+tests/engine_test.py        chat engine (fake Ollama)
+tests/companion_test.py     web companion (server, pairing, reading)
+tests/companion_send_test.py web companion (sending, SSE streaming, stop)
+tests/sync_test.py          phone-PC live synchronization
+tests/companion_models_test.py web companion (download and delete models)
+tests/fake_ollama.py        fake Ollama server for offline tests
+tests/companion_client.py   HTTP/SSE client for companion tests
+tests/release_tools_test.py release scripts (keys and temporary repositories)
+io.github.gradia64.OllaDesk.desktop  entry for the applications menu (app ID)
+io.github.gradia64.OllaDesk.metainfo.xml  AppStream metadata (software centers)
+packaging/                  common .deb/Arch files, PKGBUILD template, AppImage, release key
+scripts/                    build (.deb, AppImage, sources, Arch), signing, AUR publishing,
+                            web icons, screenshots (docs/screenshots/, for AppStream),
+                            i18n (update/check of gettext catalogs)
 ```
 
-## Licenza
+## License
 
-Questo progetto è distribuito sotto licenza **GNU General Public License
-v3.0** — vedi il file [LICENSE](LICENSE).
+This project is distributed under the **GNU General Public License
+v3.0** — see the [LICENSE](LICENSE) file.
