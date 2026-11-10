@@ -8,6 +8,8 @@ Le note dettagliate di ogni rilascio sono anche in `packaging/release-notes/`. I
 
 ## [Non rilasciato]
 
+## [0.3.10] — 2026-11-10
+
 ### Novità
 
 - **Solo modelli da chat nel selettore**: il selettore dei modelli, sul PC e sul telefono, elenca solo i modelli che sanno chattare. Quelli di embedding e i modelli decisionali e vocali arrivati con Ollama 0.40 restano nel gestore dei modelli, dove si possono eliminare; prima, sceglierli in chat portava all'errore «does not support chat». OllaDesk legge le capacità di ogni modello una volta sola e le richiede quando il modello viene aggiornato.
@@ -20,7 +22,11 @@ Dalla revisione di sicurezza della 0.3.9.
 - **Allegati lenti da leggere**: un PDF piccolo ma costruito apposta poteva tenere ferma la finestra per più di un minuto, e una GIF di pochi byte per alcuni secondi. Ora un PDF si legge per al massimo 5 secondi, saltando le pagine con un contenuto enorme, e le immagini da convertire hanno un limite di memoria e di tempo; quando un allegato è letto solo in parte compare un avviso.
 - **Aggiornamento di Ollama**: lo script di installazione, che viene eseguito come amministratore, si scarica solo in https da ollama.com e dagli indirizzi di GitHub da cui viene distribuito. Prima un redirect verso un altro indirizzo, anche in chiaro, veniva seguito.
 - **Companion web**: «Revoca dispositivi» chiude subito anche le pagine già aperte sul telefono, che prima continuavano a ricevere la conversazione. Un computer della rete, anche non abbinato, non può più bloccare la companion aprendo centinaia di connessioni lente. L'avviso di salvataggio non riuscito non mostra più al telefono il percorso della cartella di configurazione.
+
+### Note tecniche
+
 - **Pacchetto AUR**: il PKGBUILD accetta solo un tag firmato dalla sottochiave del maintainer, non da quella della CI, e la chiave per pubblicare su AUR non sta più nella CI.
+
 
 ## [0.3.9] — 2026-11-09
 
