@@ -19,7 +19,7 @@ import time
 from pathlib import Path
 
 from .i18n import _
-from .office import OFFICE_EXTS, office_text
+from .office import MAX_SECONDS, OFFICE_EXTS, office_text
 
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
 PDF_EXTS = {".pdf"}
@@ -72,15 +72,27 @@ MAX_IMAGE_BYTES = 20 * 1024 * 1024
 # formati che i modelli visione di Ollama decodificano direttamente; gli altri
 # (gif, bmp, webp…) vengono convertiti in PNG prima dell'invio
 _NATIVE_IMAGE_EXTS = {".png", ".jpg", ".jpeg"}
+# memoria massima (MB) per decodificare un'immagine da convertire: il limite
+# sui 20 MB del file non basta, una GIF di 42 byte può dichiarare una tela di
+# 8000×8000 (256 MB in memoria, secondi di codifica PNG nel thread
+# dell'interfaccia). 128 MB sono 32 megapixel: bastano per le foto vere
+MAX_IMAGE_DECODE_MB = 128
+# tempo massimo speso a convertire le immagini di un solo messaggio
+MAX_IMAGE_SECONDS = 5.0
 
 
 def _to_png(path: Path) -> bytes | None:
     try:
         from PySide6.QtCore import QBuffer, QByteArray, QIODevice
-        from PySide6.QtGui import QImage
+        from PySide6.QtGui import QImageReader
     except ImportError:
         return None
-    img = QImage(str(path))
+    reader = QImageReader(str(path))
+    # Qt rifiuta l'immagine prima di allocarla; la dimensione dichiarata
+    # (reader.size()) non basta come controllo: per una GIF è quella del primo
+    # fotogramma, non della tela che il decoder alloca davvero
+    reader.setAllocationLimit(MAX_IMAGE_DECODE_MB)
+    img = reader.read()
     if img.isNull():
         return None
     ba = QByteArray()
@@ -91,8 +103,11 @@ def _to_png(path: Path) -> bytes | None:
     return bytes(ba.data()) if ok else None
 
 
-def image_to_b64(path) -> tuple[str | None, str | None]:
-    """Restituisce (immagine in base64, nota di errore o None)."""
+def image_to_b64(path, deadline: float | None = None) -> tuple[str | None, str | None]:
+    """Restituisce (immagine in base64, nota di errore o None).
+
+    Con `deadline` (time.monotonic) superata un'immagine da convertire non si
+    converte più: le conversioni avvengono nel thread dell'interfaccia."""
     p = Path(path)
     try:
         size = p.stat().st_size
@@ -102,6 +117,8 @@ def image_to_b64(path) -> tuple[str | None, str | None]:
     except OSError as e:
         return None, _("impossibile leggere l'immagine {name}: {error}").format(name=p.name, error=e.strerror or e)
     if p.suffix.lower() not in _NATIVE_IMAGE_EXTS:
+        if deadline is not None and time.monotonic() > deadline:
+            return None, _('immagine {name} non convertita: tempo di conversione esaurito, non inviata').format(name=p.name)
         data = _to_png(p)
         if data is None:
             return None, _("formato dell'immagine {name} non supportato: non inviata").format(name=p.name)
@@ -132,26 +149,49 @@ def context_overflow_note(messages: list[dict], num_ctx: int | None) -> str | No
     )
 
 
+# contenuto decompresso di una pagina oltre il quale non se ne estrae il testo:
+# extract_text di pypdf non si interrompe a metà pagina e il suo costo cresce
+# più che linearmente con gli operatori (un PDF di 11 KB con 200 000 «Tj»
+# teneva fermo il thread dell'interfaccia per 8 s). Una pagina di testo fitto
+# ne usa poche centinaia di KB; le immagini stanno negli XObject, non qui
+MAX_PDF_PAGE_CONTENT = 1024 * 1024
+
+
 def _pdf_text(path: Path, limit: int, deadline: float | None = None) -> tuple[str, str | None]:
     try:
         from pypdf import PdfReader
     except ImportError:
         return "", _("pypdf non installato: impossibile leggere i PDF (`pip install pypdf`)")
+    # si legge nel thread dell'interfaccia: senza scadenza esplicita vale la
+    # stessa dei documenti Office
+    if deadline is None:
+        deadline = time.monotonic() + MAX_SECONDS
     try:
         reader = PdfReader(str(path))
         # pagina per pagina, fino a `limit` caratteri: l'estrazione è lenta
         # (secondi per un manuale) e il testo oltre il limite andrebbe perso
-        chunks, total = [], 0
-        for i in range(min(len(reader.pages), 50)):
-            chunk = reader.pages[i].extract_text() or ""
+        chunks, total, partial = [], 0, False
+        n_pages = len(reader.pages)
+        for i in range(min(n_pages, 50)):
+            # PDF di sole immagini: niente testo, ma ogni pagina costa
+            if time.monotonic() > deadline:
+                partial = True
+                break
+            page = reader.pages[i]
+            contents = page.get_contents()
+            if contents is not None and len(contents.get_data()) > MAX_PDF_PAGE_CONTENT:
+                partial = True
+                continue
+            chunk = page.extract_text() or ""
             chunks.append(chunk)
             total += len(chunk) + 1
             if total > limit:
                 break
-            # PDF di sole immagini: niente testo, ma ogni pagina costa
-            if deadline is not None and time.monotonic() > deadline:
-                break
-        return "\n".join(chunks), None
+        note = None
+        if partial:
+            note = _('{name}: documento troppo grande o lento da leggere, '
+                     'allegato solo in parte').format(name=path.name)
+        return "\n".join(chunks), note
     except Exception as e:
         return "", _('impossibile leggere il PDF {name}: {error}').format(name=path.name, error=e)
 

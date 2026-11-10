@@ -1,7 +1,11 @@
 # Test a ogni push/PR. Sui tag v*: verifica del tag firmato, tarball sorgente,
 # .deb, AppImage, bundle Flatpak e pacchetto Arch dal tag, allegati firmati sulla release
-# GitHub e PKGBUILD pubblicato su AUR. Le action sono fissate per SHA
-# (commento = versione).
+# GitHub. Le action sono fissate per SHA (commento = versione).
+#
+# AUR non si pubblica da qui: la chiave SSH di AUR vale per tutto l'account e
+# non sta nella CI. Il job «arch» produce e prova il PKGBUILD; il maintainer
+# lo pubblica con scripts/aur-release.sh, che controlla che coincida con
+# quello generato dal tag.
 #
 # Due sottochiavi di firma con ruoli separati (scripts/release-keys.sh,
 # modello di fiducia in packaging/README.md): il tag lo firma il maintainer
@@ -12,7 +16,6 @@
 # Secret, solo nell'environment «release» (limitato ai tag v*, con
 # approvazione del maintainer): nessun altro job li vede.
 #   GPG_PRIVATE_KEY, GPG_PASSPHRASE   sottochiave della CI (obbligatori)
-#   AUR_SSH_PRIVATE_KEY               push su AUR (se assente il passo è saltato)
 name: release
 
 on:
@@ -241,7 +244,7 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-24.04
     # unico job con i secret, e solo dopo l'approvazione del maintainer:
-    # l'ultimo punto di controllo prima della release e di AUR
+    # l'ultimo punto di controllo prima della release
     environment: release
     permissions:
       contents: write   # necessaria per creare la release e caricare i file
@@ -286,8 +289,6 @@ jobs:
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
         run: |
           cp arch/dist/*.pkg.tar.zst dist/
-          mkdir -p build/aur
-          cp arch/build/aur/PKGBUILD arch/build/aur/.SRCINFO build/aur/
           scripts/sign-release.sh dist
           cp packaging/olladesk-release-key.asc dist/
 
@@ -305,13 +306,3 @@ jobs:
             gh release create "$tag" dist/* --verify-tag --title "$tag" \
               --notes-file "$RUNNER_TEMP/note.md"
           fi
-
-      - name: Pubblica su AUR
-        env:
-          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
-        run: |
-          if [ -z "$AUR_SSH_PRIVATE_KEY" ]; then
-            echo "::notice::secret AUR_SSH_PRIVATE_KEY assente: pubblicazione su AUR saltata"
-            exit 0
-          fi
-          scripts/publish-aur.sh

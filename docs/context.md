@@ -5,7 +5,7 @@ Prepara gli allegati (file di testo/codice, PDF e immagini) e la cronologia da i
 
 - **Immagini:** vengono codificate in base64 e inviate nel campo `"images"` del messaggio. Servono i modelli visione di Ollama (llava, llama3.2-vision, gemma3…).
 - **Testo/codice:** il contenuto viene inserito nel testo del messaggio come blocco allegato.
-- **PDF:** il testo viene estratto solo se è installato il pacchetto opzionale `pypdf`.
+- **PDF:** il testo viene estratto solo se è installato il pacchetto opzionale `pypdf`. Un PDF allegato da solo si legge per al massimo 5 secondi (`MAX_SECONDS` di `office.py`), e una pagina con più di 1 MB di contenuto decompresso (`MAX_PDF_PAGE_CONTENT`) si salta: l'estrazione di pypdf non si interrompe a metà pagina e il suo costo cresce più che linearmente con gli operatori.
 - **Documenti Office e OpenDocument** (`.docx`, `.docm`, `.doc`, `.xlsx`, `.xlsm`, `.xls`, `.odt`, `.ods`): il testo viene estratto da `olladesk/office.py`, con la sola libreria standard. I fogli di calcolo diventano righe con le celle separate da tabulazioni, sotto un'intestazione `## Foglio: <nome>` (tradotta nella lingua dell'interfaccia); le date vengono scritte in formato ISO e delle formule si usa il risultato salvato. Il formato si riconosce dal contenuto (parti dello zip, flussi del file OLE), non dall'estensione.
 - **Limiti di `office.py`** per i file non attendibili: 64 MB per parte dello zip decompressa (`MAX_PART_BYTES`) e per file OLE (`MAX_OLE_BYTES`), 256 colonne (`MAX_COLS`), 500 000 stringhe condivise per `.xlsx` (`MAX_SHARED_STRINGS`), righe ODS ripetute scritte al massimo 100 volte (`MAX_REPEAT_ROWS`). Un documento allegato da solo si legge per al massimo 5 secondi (`MAX_SECONDS`); dentro una cartella vale la scadenza della cartella. Una lettura interrotta per tempo o dimensione restituisce il testo letto fin lì con una nota; qualunque errore di lettura diventa una nota, mai un'eccezione.
 
@@ -23,6 +23,9 @@ Il modulo stima anche l'occupazione della finestra di contesto e sceglie quali m
 | `MAX_TEXT_CHARS` | `120_000` | caratteri massimi letti da un file di testo |
 | `MAX_IMAGE_BYTES` | 20 MB | dimensione massima di un'immagine allegata |
 | `_NATIVE_IMAGE_EXTS` | `.png .jpg .jpeg` | formati inviati così come sono; gli altri vengono convertiti in PNG |
+| `MAX_IMAGE_DECODE_MB` | `128` | memoria massima (MB, cioè 32 megapixel) per decodificare un'immagine da convertire |
+| `MAX_IMAGE_SECONDS` | `5.0` | tempo massimo per le conversioni delle immagini di un messaggio (lo applica `engine.py`) |
+| `MAX_PDF_PAGE_CONTENT` | 1 MB | contenuto decompresso oltre il quale una pagina PDF si salta |
 
 ## Funzioni
 
@@ -32,15 +35,16 @@ Restituisce `"text"`, `"image"`, `"pdf"`, `"document"` oppure `"unknown"`.
 2. Poi controlla l'estensione, in minuscolo, contro `IMAGE_EXTS`, `PDF_EXTS`, `OFFICE_EXTS` e `TEXT_EXTS`, in quest'ordine.
 
 ### `_to_png(path: Path) -> bytes | None`
-Converte un'immagine in PNG con `QImage` di PySide6 e restituisce i byte del PNG. Restituisce `None` in tre casi:
+Converte un'immagine in PNG con `QImageReader` di PySide6 e restituisce i byte del PNG. Il lettore ha un limite di allocazione di `MAX_IMAGE_DECODE_MB`: Qt rifiuta l'immagine prima di allocarla. Il limite sui byte del file non basterebbe, perché una GIF di 42 byte può dichiarare una tela di 8000×8000 (256 MB in memoria e secondi di codifica PNG nel thread dell'interfaccia); nemmeno la dimensione dichiarata basta, perché per una GIF è quella del primo fotogramma. Restituisce `None` in tre casi:
 - PySide6 non è importabile;
-- Qt non riesce a leggere l'immagine;
+- Qt non riesce a leggere l'immagine, o l'immagine supera il limite di allocazione;
 - il salvataggio fallisce.
 
 Accetta solo i formati che Qt sa leggere, non qualsiasi formato.
 
-### `image_to_b64(path) -> tuple[str | None, str | None]`
+### `image_to_b64(path, deadline: float | None = None) -> tuple[str | None, str | None]`
 Restituisce `(base64, None)` se va a buon fine, oppure `(None, nota)` se fallisce.
+- Con `deadline` (`time.monotonic`) superata, un'immagine da convertire non si converte e la nota lo dice; i formati nativi passano comunque.
 - Se il file supera `MAX_IMAGE_BYTES`, la nota indica la dimensione in MB e l'immagine non viene inviata.
 - Se la lettura fallisce (`OSError`), la nota riporta il messaggio di sistema.
 - I formati diversi da PNG e JPEG vengono convertiti con `_to_png`. Se la conversione fallisce, la nota dice che il formato non è supportato.
@@ -59,7 +63,7 @@ Somma le stime di `content` di tutti i messaggi e la confronta con la finestra d
 Il controllo serve perché Ollama tronca silenziosamente dall'inizio: si perdono il prompt di sistema e i primi messaggi senza alcun errore.
 
 ### `_pdf_text(path: Path, limit: int, deadline: float | None = None) -> tuple[str, str | None]`
-Estrae il testo, pagina per pagina, fino a `limit` caratteri o alla scadenza `deadline`, delle prime **50 pagine** con `pypdf.PdfReader`. Le pagine senza testo contano come stringa vuota. In caso di problemi restituisce `("", nota)`:
+Estrae il testo, pagina per pagina, fino a `limit` caratteri o alla scadenza `deadline`, delle prime **50 pagine** con `pypdf.PdfReader`. Senza `deadline` la scadenza è a `MAX_SECONDS` secondi. Le pagine senza testo contano come stringa vuota; quelle con più di `MAX_PDF_PAGE_CONTENT` byte di contenuto si saltano. Se una pagina è stata saltata o la scadenza è arrivata, restituisce il testo letto con la nota «documento troppo grande o lento da leggere, allegato solo in parte». In caso di problemi restituisce `("", nota)`:
 - se `pypdf` non è installato, la nota suggerisce `pip install pypdf`;
 - per qualsiasi eccezione di lettura, la nota riporta l'eccezione.
 

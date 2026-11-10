@@ -9,6 +9,7 @@ Una sola elaborazione alla volta, globale (ricerca web + generazione).
 """
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 from PySide6.QtCore import QObject, Signal
@@ -341,8 +342,10 @@ class ChatEngine(QObject):
         if not config.save_chat(chat):
             self.notice.emit(
                 chat["id"],
-                _('⚠ Impossibile salvare la conversazione su disco ({path}): spazio '
-                  'esaurito o permessi mancanti?').format(path=config.chats_dir()),
+                # senza percorso: gli avvisi arrivano anche al telefono abbinato,
+                # che non deve vedere nome utente e cartelle del PC
+                _('⚠ Impossibile salvare la conversazione su disco: spazio '
+                  'esaurito o permessi mancanti?'),
             )
         # tiene allineato l'elenco in memoria (ordine e titolo nella sidebar)
         entry = {"id": chat["id"], "title": chat.get("title", _("Conversazione")),
@@ -599,8 +602,11 @@ class ChatEngine(QObject):
             entry = {"role": "user", "content": content}
             if full and m.get("image_paths"):
                 imgs = []
+                # le conversioni (gif, webp…) avvengono qui, nel thread
+                # dell'interfaccia: un tetto di tempo per l'intero messaggio
+                deadline = time.monotonic() + context.MAX_IMAGE_SECONDS
                 for path in m["image_paths"]:
-                    b64, note = context.image_to_b64(path)
+                    b64, note = context.image_to_b64(path, deadline)
                     if note:
                         warnings.append(note)
                     if b64:

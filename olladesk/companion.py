@@ -26,6 +26,7 @@ import queue
 import re
 import secrets
 import socket
+import sys
 import threading
 import time
 import urllib.parse
@@ -46,6 +47,15 @@ COOKIE = "olladesk_session"
 COOKIE_MAX_AGE = 365 * 24 * 3600
 MAX_BODY = 512 * 1024     # un messaggio di MAX_TEXT caratteri anche se tutto escapato
 BRIDGE_TIMEOUT = 5.0
+# connessioni servite insieme, in tutto e da uno stesso indirizzo: senza tetto
+# un host della LAN, anche non abbinato, apriva connessioni lente fino a
+# esaurire i descrittori del processo (e quindi anche quelli della finestra)
+MAX_CONNECTIONS = 64
+MAX_CONNECTIONS_PER_HOST = 16
+# secondi entro cui una richiesta deve arrivare completa (riga, intestazioni e
+# corpo JSON): il timeout del socket vale per ogni singola lettura, e un byte
+# ogni pochi secondi lo rinnova all'infinito
+REQUEST_DEADLINE = 15.0
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
 STATIC = {
@@ -639,6 +649,55 @@ class _Handler(BaseHTTPRequestHandler):
     def log_message(self, *_a) -> None:
         pass   # niente log su stderr a ogni richiesta
 
+    # ------------------------------------------------- scadenza richiesta
+
+    def _arm_deadline(self) -> None:
+        self._disarm_deadline()
+        t = threading.Timer(REQUEST_DEADLINE, self._deadline_expired)
+        t.daemon = True
+        self._deadline = t
+        t.start()
+
+    def _disarm_deadline(self) -> None:
+        t = getattr(self, "_deadline", None)
+        if t is not None:
+            t.cancel()
+            self._deadline = None
+
+    def _deadline_expired(self) -> None:
+        # chiude il socket: la lettura in corso nel thread della richiesta
+        # termina e la connessione si libera
+        self._expired = True
+        try:
+            self.connection.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass
+
+    def handle_one_request(self) -> None:
+        # vale anche per le richieste successive di una connessione keep-alive
+        self._arm_deadline()
+        try:
+            super().handle_one_request()
+        finally:
+            self._disarm_deadline()
+
+    def parse_request(self) -> bool:
+        # richiesta troncata dalla scadenza: niente risposta, il socket è chiuso
+        if getattr(self, "_expired", False):
+            self.close_connection = True
+            return False
+        ok = super().parse_request()
+        if getattr(self, "_expired", False):
+            self.close_connection = True
+            return False
+        return ok
+
+    def send_response(self, code: int, message: str | None = None) -> None:
+        # la richiesta è stata letta: da qui in poi (stream SSE compresi) la
+        # durata la decide il server, non il client
+        self._disarm_deadline()
+        super().send_response(code, message)
+
     # ------------------------------------------------------------ risposte
 
     def _send(self, status: int, body: bytes, ctype: str, extra: dict | None = None) -> None:
@@ -925,6 +984,9 @@ class _Handler(BaseHTTPRequestHandler):
         self.close_connection = True
         if not self._authed():
             return
+        # dispositivo abbinato: un file di 20 MB da una rete lenta può
+        # richiedere più di REQUEST_DEADLINE secondi
+        self._disarm_deadline()
         ctype = (self.headers.get("Content-Type") or "").split(";")[0].strip().lower()
         if ctype != "application/octet-stream":
             self._error(415, _("serve Content-Type: application/octet-stream"))
@@ -1037,6 +1099,7 @@ class _Handler(BaseHTTPRequestHandler):
             except (KeyError, ValueError):
                 pass
         hub = self.ctx.hub
+        auth, token = self.ctx.auth, self._token()
         q, backlog, busy = hub.subscribe()
         self.close_connection = True
         st = _StreamState()
@@ -1061,13 +1124,20 @@ class _Handler(BaseHTTPRequestHandler):
                 try:
                     ev = q.get(timeout=wait)
                 except queue.Empty:
+                    # il token si ricontrolla per tutta la durata dello stream:
+                    # un dispositivo revocato (o uscito per MAX_DEVICES) non
+                    # deve ricevere altro della conversazione
+                    if not auth.check(token):
+                        break
                     if st.dirty:
                         self._flush_answer(st)
                     else:
                         self.wfile.write(b": ping\n\n")
                     self.wfile.flush()
                     continue
-                if ev is None:      # server in arresto
+                if ev is None:      # server in arresto o dispositivi revocati
+                    break
+                if not auth.check(token):
                     break
                 self._handle_event(ev, chat_id, 0, st)
                 if st.dirty and time.monotonic() - st.last_sent >= ANSWER_INTERVAL:
@@ -1080,6 +1150,63 @@ class _Handler(BaseHTTPRequestHandler):
 
 
 # ------------------------------------------------------------------ server
+
+class _LimitedHTTPServer(ThreadingHTTPServer):
+    """ThreadingHTTPServer con un tetto alle connessioni servite insieme.
+
+    Oltre MAX_CONNECTIONS (o MAX_CONNECTIONS_PER_HOST dallo stesso indirizzo)
+    la connessione si chiude subito, senza aprire un thread."""
+
+    daemon_threads = True
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._conn_lock = threading.Lock()
+        self._conn_total = 0
+        self._conn_by_host: dict[str, int] = {}
+
+    def _acquire(self, host: str) -> bool:
+        with self._conn_lock:
+            if (self._conn_total >= MAX_CONNECTIONS
+                    or self._conn_by_host.get(host, 0) >= MAX_CONNECTIONS_PER_HOST):
+                return False
+            self._conn_total += 1
+            self._conn_by_host[host] = self._conn_by_host.get(host, 0) + 1
+            return True
+
+    def _release(self, host: str) -> None:
+        with self._conn_lock:
+            self._conn_total -= 1
+            left = self._conn_by_host.get(host, 1) - 1
+            if left > 0:
+                self._conn_by_host[host] = left
+            else:
+                self._conn_by_host.pop(host, None)
+
+    def handle_error(self, request, client_address) -> None:
+        # client sparito (connessione chiusa, scadenza della richiesta): non è
+        # un errore di OllaDesk, niente traceback su stderr
+        if isinstance(sys.exc_info()[1], OSError):
+            return
+        super().handle_error(request, client_address)
+
+    def process_request(self, request, client_address) -> None:
+        host = client_address[0]
+        if not self._acquire(host):
+            self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, client_address)
+        except BaseException:
+            self._release(host)
+            raise
+
+    def process_request_thread(self, request, client_address) -> None:
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._release(client_address[0])
+
 
 class CompanionServer(QObject):
     """Server companion: avvio/arresto dal thread principale."""
@@ -1094,7 +1221,7 @@ class CompanionServer(QObject):
         self.bridge = _Bridge(self)
         self.hub = EventHub(engine, self)
         self.uploads = UploadStore()
-        self._httpd: ThreadingHTTPServer | None = None
+        self._httpd: _LimitedHTTPServer | None = None
         self._thread: threading.Thread | None = None
         self._state = "off"
         self.port = 0
@@ -1113,7 +1240,7 @@ class CompanionServer(QObject):
         self.stop()
         handler = type("CompanionHandler", (_Handler,), {"ctx": self})
         try:
-            httpd = ThreadingHTTPServer((bind, port), handler)
+            httpd = _LimitedHTTPServer((bind, port), handler)
         except OSError as e:
             self._set_state("error", _('porta {port} non disponibile ({error})').format(port=port, error=e.strerror or e))
             return
@@ -1138,6 +1265,11 @@ class CompanionServer(QObject):
             self.auth.cancel_code()
         if self._state != "off":
             self._set_state("off", "")
+
+    def revoke_all(self) -> None:
+        """Scollega tutti i dispositivi e chiude subito gli stream aperti."""
+        self.auth.revoke_all()
+        self.hub.close_all()
 
     def urls(self) -> list[str]:
         return netinfo.lan_urls(self.port) if self._httpd is not None else []

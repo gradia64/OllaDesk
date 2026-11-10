@@ -23,9 +23,10 @@ Cosa garantisce cosa:
 
 - **La firma del tag** dice che il codice di quella versione l'ha approvato
   il maintainer. È quella che verifica makepkg (`?signed` nel PKGBUILD): il
-  pacchetto AUR si costruisce dal tag, non dagli allegati. Il job `verify`
-  accetta solo la sottochiave dei tag: un tag firmato con la sottochiave
-  della CI o con la primaria, valido per gpg, qui viene rifiutato.
+  pacchetto AUR si costruisce dal tag, non dagli allegati. Il job `verify` e
+  il `prepare()` del PKGBUILD accettano solo la sottochiave dei tag: un tag
+  firmato con la sottochiave della CI o con la primaria, valido per gpg,
+  viene rifiutato.
 - **La firma degli allegati** dice che quei file li ha prodotti la CI di
   questo repository da quel tag. Non dice nulla di più del tag.
 - **Se la CI o i secret vengono compromessi**: si revoca solo la
@@ -34,15 +35,18 @@ Cosa garantisce cosa:
 
 Limiti da sapere:
 
-- makepkg accetta una firma di **qualunque** chiave della primaria in
-  `validpgpkeys`. Chi avesse la sottochiave della CI potrebbe firmare un
-  tag che makepkg accetta, anche se `verify` lo rifiuta: per questo la
-  sottochiave sta solo nell'environment protetto, e va revocata subito al
-  primo sospetto.
-- La chiave SSH di AUR nella CI dà accesso a tutto l'account AUR
-  (`olladesk` e `klamav-py`): chi la ottiene può pubblicare un PKGBUILD a
-  sua scelta. L'approvazione dell'environment è l'ultimo controllo prima
-  di AUR.
+- makepkg da solo accetta una firma di **qualunque** chiave della primaria
+  in `validpgpkeys`. Per questo il PKGBUILD ha un `prepare()` che rilegge
+  la riga `VALIDSIG` di `git verify-tag` e pretende una delle
+  `TAG_SIGNING_SUBKEYS`, come `scripts/verify-tag.sh`. `validpgpkeys`
+  resta sulla primaria: con una sottochiave makepkg rifiuterebbe ogni tag.
+- La chiave SSH di AUR vale per tutto l'account (`olladesk` e
+  `klamav-py`): **non sta nella CI**. La CI costruisce e prova il PKGBUILD;
+  il maintainer lo pubblica dalla sua macchina con
+  `scripts/aur-release.sh`, che verifica il tag e pretende che il PKGBUILD
+  della CI sia identico a quello generato dal tag. Chi ottiene i secret
+  della CI non può quindi né pubblicare su AUR né firmare un tag che
+  makepkg accetti.
 
 La separazione non rende innocua una CI compromessa: la rende rimediabile
 senza danni allo storico.
@@ -60,7 +64,9 @@ esegue, in ordine:
 | `appimage` | `scripts/build-appimage.sh`, poi `packaging/appimage/smoke-test.sh`: controlli con il Python dell'AppImage, test offline, avvio offscreen e su X11 (xvfb). SHA-256 nel riepilogo del job, da confrontare con una build locale |
 | `flatpak` | `scripts/build-flatpak.sh` (runtime KDE, SDK e base app PySide da Flathub), poi `packaging/flatpak/smoke-test.sh`: bundle installato, controlli con il Python della sandbox, test offline, avvio offscreen. SHA-256 nel riepilogo del job |
 | `arch`    | in un container `archlinux:base-devel`: PKGBUILD che clona il tag da GitHub e ne **verifica la firma**, `check()`, namcap, installazione e avvio di prova |
-| `publish` | **attende la tua approvazione** (environment `release`), poi: firma di tutti gli artefatti con la sottochiave della CI, release GitHub con la descrizione da `packaging/release-notes/X.Y.Z.md`, push del PKGBUILD su AUR |
+| `publish` | **attende la tua approvazione** (environment `release`), poi: firma di tutti gli artefatti con la sottochiave della CI, release GitHub con la descrizione da `packaging/release-notes/X.Y.Z.md` |
+
+AUR si pubblica dopo, dalla macchina del maintainer (`scripts/aur-release.sh`, passo 4 del rilascio).
 
 Solo `publish` vede i secret. Avviato a mano (`workflow_dispatch`) il
 workflow esegue `test`, `dist`, `appimage` e `flatpak`: `verify`, `arch` e `publish` servono un tag.
@@ -126,8 +132,8 @@ Settings → Environments → New environment, nome `release`:
   gpg --armor --export-secret-subkeys '<CI>!' \
       | gh secret set GPG_PRIVATE_KEY --env release -R gradia64/OllaDesk
   gh secret set GPG_PASSPHRASE --env release -R gradia64/OllaDesk
-  gh secret set AUR_SSH_PRIVATE_KEY --env release -R gradia64/OllaDesk < ~/.ssh/aur_olladesk_ci
   ```
+  Nessuna chiave SSH di AUR (sezione 5).
   Il `!` esporta solo la sottochiave della CI: né la primaria né la
   sottochiave dei tag.
 
@@ -168,17 +174,37 @@ di nuovo.
 
 ### 5. Account AUR
 
+La chiave SSH di AUR resta sulla macchina del maintainer: vale per tutti i
+pacchetti dell'account, quindi non va nella CI.
+
 1. Registrati su <https://aur.archlinux.org> e aggiungi al profilo una chiave
-   SSH **dedicata** (non la tua personale):
+   SSH **dedicata**, meglio se con passphrase:
    ```bash
-   ssh-keygen -t ed25519 -f ~/.ssh/aur_olladesk_ci -C "olladesk CI"
+   ssh-keygen -t ed25519 -f ~/.ssh/aur -C "AUR gradia"
    ```
-2. Caricala nell'environment (sezione 3).
+2. In `~/.ssh/config`:
+   ```
+   Host aur.archlinux.org
+       User aur
+       IdentityFile ~/.ssh/aur
+       IdentitiesOnly yes
+   ```
+3. Serve anche `gh` autenticato: `scripts/aur-release.sh` scarica con
+   `gh run download` l'artefatto `arch` della run del tag.
 
 `publish-aur.sh` rifiuta di pubblicare se il tag non è clonabile senza
-autenticazione (repository privato o tag non pubblicato). Senza il secret
-il passo di pubblicazione viene saltato con un avviso e il resto della
-release procede.
+autenticazione (repository privato o tag non pubblicato); la chiave host di
+AUR è fissata nello script.
+
+Fino alla 0.3.9 il push lo faceva la CI con il secret `AUR_SSH_PRIVATE_KEY`
+(chiave «olladesk CI», `~/.ssh/aur_olladesk_ci`). Per chiudere quella
+strada: togli la chiave dal profilo AUR (My Account → SSH Public Key) e il
+secret dall'environment:
+
+```bash
+gh secret delete AUR_SSH_PRIVATE_KEY --env release -R gradia64/OllaDesk
+gh secret list --env release -R gradia64/OllaDesk   # solo GPG_PRIVATE_KEY e GPG_PASSPHRASE
+```
 
 ### 6. Chiave sull'account GitHub (tag «Verified»)
 
@@ -242,9 +268,20 @@ gh api repos/gradia64/OllaDesk/git/tags/$(git rev-parse vX.Y.Z) --jq .verificati
    è stato firmato con la chiave sbagliata.
 3. Segui il workflow (`gh run watch`) e approva `publish` quando `dist`,
    `appimage`, `flatpak` e `arch` sono verdi. Se `publish` fallisce dopo l'upload si può
-   rilanciare: upload con `--clobber`, push AUR idempotente. Una release
+   rilanciare: upload con `--clobber`. Una release
    già esistente (creata a mano o da un rilancio) non viene ricreata: si
    caricano solo i file, e la descrizione resta quella che ha.
+4. Con la run verde, pubblica su AUR dalla tua macchina:
+   ```bash
+   scripts/aur-release.sh vX.Y.Z
+   ```
+   Verifica il tag, rigenera il PKGBUILD dal contenuto del tag, lo confronta
+   con quello dell'artefatto `arch` (costruito e provato dalla CI), controlla
+   `.SRCINFO` e fa il push con la tua chiave SSH. Si può rilanciare: se AUR
+   è già aggiornato non pubblica nulla. Controllo:
+   ```bash
+   git ls-remote https://aur.archlinux.org/olladesk.git   # nuovo commit «olladesk X.Y.Z»
+   ```
 
 ## Rotazione e revoca
 
@@ -257,8 +294,8 @@ gpg --quick-add-key 5B166C1B4AD7428C74A07D5BA3370987A0576694 ed25519 sign 2y
 ```
 
 Aggiorna `CI_SIGNING_SUBKEY` in `scripts/release-keys.sh`, ripubblica la
-chiave pubblica (sezione 2), ricarica `GPG_PRIVATE_KEY` nell'environment e
-sostituisci la chiave SSH della CI nel profilo AUR. La sottochiave dei tag
+chiave pubblica (sezione 2) e ricarica `GPG_PRIVATE_KEY` nell'environment.
+La CI non ha accesso ad AUR: lì non c'è niente da cambiare. La sottochiave dei tag
 non si tocca, e nemmeno la copia sull'account GitHub (sezione 6), che non
 contiene la sottochiave della CI.
 
@@ -298,7 +335,8 @@ Tutti gli script funzionano anche in locale, con gli stessi risultati della CI.
 | `scripts/sign-release.sh [dir]` | firme `.sig` + `SHA256SUMS` con la sottochiave della CI; verifica con la sola chiave pubblica del repository |
 | `scripts/prepare-aur.sh` | `build/aur/PKGBUILD` da `packaging/arch/PKGBUILD.in` |
 | `scripts/build-arch.sh` | build dal tag firmato e controlli del pacchetto Arch (come root in un container Arch) |
-| `scripts/publish-aur.sh` | push di PKGBUILD e `.SRCINFO` su AUR |
+| `scripts/aur-release.sh <tag>` | pubblicazione su AUR dalla macchina del maintainer: tag verificato, PKGBUILD del tag identico a quello della CI, poi `publish-aur.sh` |
+| `scripts/publish-aur.sh` | push di PKGBUILD e `.SRCINFO` su AUR con la chiave SSH dell'utente |
 
 Esempio in locale (su Debian, con Docker per la parte Arch; il tag deve
 essere già pubblicato):

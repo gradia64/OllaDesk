@@ -2566,5 +2566,200 @@ def test_github_http_error_rate_limit_and_reset_time():
     assert github_http_error(err(500), now=now) == "errore HTTP 500 da GitHub"
 
 
+
+def test_md_nul_placeholder_terminates():
+    """Un NUL nel testo non deve imitare i segnaposto interni del renderer
+    (prima: ciclo infinito, o IndexError con un indice inesistente)."""
+    import time as _t
+    for text in ("[a](https://x/\x00I0\x00)", "`\x00I0\x00`", "[a](https://x/\x00I9\x00)",
+                 "\x00I0\x00 testo"):
+        t0 = _t.monotonic()
+        out = md_to_html(text)
+        assert _t.monotonic() - t0 < 1, text
+        assert "\x00" not in out, out
+    # la nidificazione legittima (inline code nell'etichetta di un link) resta
+    out = md_to_html("[`x`](https://a.b)")
+    assert '<a href="https://a.b">' in out and "<code>" in out, out
+
+
+def test_md_deep_nesting_no_recursion_error():
+    """Annidamenti estremi: niente RecursionError, il testo resta visibile."""
+    from olladesk import md
+    out = md_to_html(">" * 1000 + " fondo")
+    assert "fondo" in out and out.count("<blockquote>") == md._MAX_NEST, out.count("<blockquote>")
+    out = md_to_html("\n".join(" " * i + "- v" for i in range(1500)))
+    assert out.count("<ul>") == md._MAX_NEST + 1 and out.count("<li>") == 1500
+    alt = "\n".join("- a" if i % 2 else "1. b" for i in range(3000))
+    out = md_to_html(alt)
+    assert out.count("<li>") == 3000
+    assert out.count("<ul>") == out.count("</ul>") and out.count("<ol>") == out.count("</ol>")
+
+
+def _pdf_with_pages(pages_ops: list[bytes]) -> bytes:
+    import zlib
+    objs: list[bytes] = [b"<< /Type /Catalog /Pages 2 0 R >>", b"",
+                         b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"]
+    kids = []
+    for ops in pages_ops:
+        c = zlib.compress(ops)
+        objs.append(b"<< /Length %d /Filter /FlateDecode >>\nstream\n" % len(c) + c + b"\nendstream")
+        objs.append(b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents %d 0 R "
+                    b"/Resources << /Font << /F1 3 0 R >> >> >>" % len(objs))
+        kids.append(len(objs))
+    objs[1] = (b"<< /Type /Pages /Kids [" + b" ".join(b"%d 0 R" % k for k in kids)
+               + b"] /Count %d >>" % len(kids))
+    out, offs = b"%PDF-1.4\n", []
+    for i, o in enumerate(objs, 1):
+        offs.append(len(out))
+        out += b"%d 0 obj\n" % i + o + b"\nendobj\n"
+    xref = len(out)
+    out += b"xref\n0 %d\n0000000000 65535 f \n" % (len(objs) + 1)
+    out += b"".join(b"%010d 00000 n \n" % o for o in offs)
+    out += b"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n" % (len(objs) + 1, xref)
+    return out
+
+
+def test_pdf_extraction_bounded():
+    """Un PDF piccolo con milioni di operatori non blocca l'interfaccia: la
+    pagina oltre MAX_PDF_PAGE_CONTENT si salta, con la nota di lettura parziale."""
+    try:
+        import pypdf  # noqa: F401
+    except ImportError:
+        return
+    import time as _t
+    from olladesk import context
+    d = Path(tempfile.mkdtemp())
+    ok = d / "ok.pdf"
+    ok.write_bytes(_pdf_with_pages([b"BT /F1 12 Tf 72 700 Td (Pagina %d) Tj ET" % i for i in range(3)]))
+    text, note = extract_text(ok)
+    assert note is None and "Pagina 0" in text and "Pagina 2" in text, (text, note)
+    bomb = d / "bomba.pdf"
+    bomb.write_bytes(_pdf_with_pages(
+        [b"BT /F1 12 Tf " + b"(AAAAAAAAAAAAAAAA) Tj " * 200_000 + b"ET",
+         b"BT /F1 12 Tf 72 700 Td (dopo) Tj ET"]))
+    assert bomb.stat().st_size < 50_000
+    t0 = _t.monotonic()
+    text, note = extract_text(bomb)
+    assert _t.monotonic() - t0 < 2, _t.monotonic() - t0
+    assert "dopo" in text and "solo in parte" in (note or ""), (text, note)
+    # senza scadenza esplicita vale quella dei documenti Office
+    t0 = _t.monotonic()
+    text, note = context._pdf_text(ok, 1000, _t.monotonic() - 1)
+    assert text == "" and "solo in parte" in note
+
+
+def test_image_conversion_allocation_limit_and_deadline():
+    """Una GIF di pochi byte con una tela enorme non si decodifica (prima:
+    256 MB e secondi di codifica PNG nel thread dell'interfaccia)."""
+    import struct
+    import time as _t
+    from PySide6.QtGui import QImage
+    from PySide6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    from olladesk import context
+    d = Path(tempfile.mkdtemp())
+    gif = d / "tela.gif"
+    gif.write_bytes(b"GIF89a" + struct.pack("<HH", 8000, 8000) + b"\x00\x00\x00"
+                    + b",\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;")
+    t0 = _t.monotonic()
+    b64, note = context.image_to_b64(gif)
+    assert b64 is None and note and _t.monotonic() - t0 < 0.5
+    webp = d / "foto.webp"
+    img = QImage(640, 480, QImage.Format.Format_RGB32)
+    img.fill(0x336699)
+    assert img.save(str(webp), "WEBP")
+    b64, note = context.image_to_b64(webp)
+    assert b64 and note is None
+    # tempo del messaggio esaurito: le conversioni successive si saltano,
+    # i formati nativi passano comunque
+    b64, note = context.image_to_b64(webp, _t.monotonic() - 1)
+    assert b64 is None and "tempo di conversione esaurito" in note
+
+
+def test_ollama_install_script_origin_pinned():
+    """Lo script che finisce in `pkexec sh -s` arriva solo in https dagli host
+    previsti: niente redirect altrove o in chiaro, niente 206, niente corpi enormi."""
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    from olladesk import updater
+
+    allowed = updater._allowed_script_url
+    assert allowed("https://ollama.com/install.sh")
+    assert allowed("https://github.com/ollama/ollama/releases/download/v1/install.sh")
+    assert allowed("https://release-assets.githubusercontent.com/x?sig=1")
+    for bad in ("http://ollama.com/install.sh", "https://ollama.com:8443/x",
+                "https://ollama.com.evil.tld/x", "https://ollama.com@evil.tld/x",
+                "https://evil.tld/install.sh", "ftp://ollama.com/x", "https://[::1/x"):
+        assert not allowed(bad), bad
+
+    routes = {}
+
+    class H(BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def do_GET(self):
+            status, headers, body = routes[self.path]
+            self.send_response(status)
+            for k, v in headers.items():
+                self.send_header(k, v)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    srv = HTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{srv.server_port}"
+    routes["/redir"] = (302, {"Location": f"{base}/evil"}, b"")
+    routes["/evil"] = (200, {}, b"#!/bin/sh\necho preso\n")
+    routes["/partial"] = (206, {}, b"#!/bin/sh\necho par")
+    routes["/huge"] = (200, {}, b"#!/bin/sh\n" + b"#" * (updater.MAX_INSTALL_SCRIPT_BYTES + 10))
+
+    def fetch(path):
+        old = updater.INSTALL_SCRIPT_URL
+        updater.INSTALL_SCRIPT_URL = base + path
+        try:
+            w = updater.UpdateDownloadWorker(None)
+            got = {}
+            w.ready.connect(lambda b: got.setdefault("ready", b))
+            w.failed.connect(lambda e: got.setdefault("failed", e))
+            w.run()
+            return got
+        finally:
+            updater.INSTALL_SCRIPT_URL = old
+
+    try:
+        got = fetch("/redir")
+        assert "ready" not in got and "origine non prevista" in got["failed"], got
+        got = fetch("/partial")
+        assert "ready" not in got and "206" in got["failed"], got
+        got = fetch("/huge")
+        assert "ready" not in got and "troppo grande" in got["failed"], got
+        # controllo positivo: l'URL iniziale è fissato dal codice, il suo
+        # contenuto passa se è uno script
+        got = fetch("/evil")
+        assert got.get("ready", b"").startswith(b"#!"), got
+    finally:
+        srv.shutdown()
+        srv.server_close()
+
+
+def test_save_failure_notice_has_no_path():
+    """L'avviso di salvataggio fallito arriva anche al telefono: niente percorsi."""
+    from olladesk import config
+    from olladesk.engine import ChatEngine
+    eng = ChatEngine(config.load_settings())
+    seen = []
+    eng.notice.connect(lambda cid, text: seen.append(text))
+    old = config.save_chat
+    config.save_chat = lambda chat: False
+    try:
+        eng._persist({"id": "x1", "title": "t", "messages": []})
+    finally:
+        config.save_chat = old
+    assert seen and "Impossibile salvare" in seen[0], seen
+    assert str(config.config_dir()) not in seen[0] and "/" not in seen[0], seen
+
+
 if __name__ == "__main__":
     sys.exit(main())

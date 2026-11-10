@@ -301,6 +301,109 @@ def test_pubblicazione_aur_solo_con_il_tag_pubblicato(tmp, keys):
     assert "già aggiornato" in again.stdout
 
 
+
+# -- prepare() del PKGBUILD e scripts/aur-release.sh ------------------------------
+
+def _signed_project(tmp: Path, keys: Keyring, signer: str | None) -> Path:
+    """Progetto con gli script AUR e il modello del PKGBUILD, alla versione
+    1.0.0, con il tag v1.0.0 firmato da `signer` (None: annotato non firmato)."""
+    repo = _project(tmp, keys)
+    for name in ("prepare-aur.sh", "aur-release.sh"):
+        shutil.copy(SCRIPTS / name, repo / "scripts" / name)
+    (repo / "packaging" / "arch").mkdir()
+    shutil.copy(ROOT / "packaging/arch/PKGBUILD.in", repo / "packaging/arch/PKGBUILD.in")
+    (repo / "olladesk").mkdir()
+    (repo / "olladesk" / "__init__.py").write_text('__version__ = "1.0.0"\n')
+    _run([*_git(repo), "add", "."], tmp)
+    _run([*_git(repo), "commit", "-q", "-m", "versione 1.0.0"], tmp)
+    _tag(repo, tmp, keys, "v1.0.0", key=None if signer is None else f"{signer}!")
+    return repo
+
+
+def _pkgbuild(tmp: Path, keys: Keyring, out: Path) -> Path:
+    _run([SCRIPTS / "prepare-aur.sh", out], tmp, cwd=ROOT, PATH="/usr/bin:/bin", **keys.roles())
+    return out / "PKGBUILD"
+
+
+def test_prepare_del_pkgbuild_accetta_solo_la_sottochiave_dei_tag(tmp, keys):
+    # makepkg accetta la firma di qualunque sottochiave della primaria in
+    # validpgpkeys: è prepare() a rifiutare il tag firmato dalla CI. Qui
+    # prepare() gira come in makepkg: in $srcdir, con il clone in «olladesk»
+    pkgbuild = _pkgbuild(tmp, keys, tmp / "aur")
+    text = pkgbuild.read_text()
+    assert f"_tag_subkeys=('{keys.tag_subkey}')" in text, text
+    for name, signer, ok in (("tag", keys.tag_subkey, True), ("ci", keys.ci_subkey, False),
+                             ("primaria", keys.release, False), ("nessuno", None, False)):
+        sub = tmp / name
+        sub.mkdir()
+        repo = _signed_project(sub, keys, signer)
+        srcdir = sub / "src"
+        srcdir.mkdir()
+        _run(["git", "clone", "-q", repo, srcdir / "olladesk"], sub)
+        proc = _run(["bash", "-c", 'source "$1"; pkgver=1.0.0; cd "$2" && prepare',
+                     "_", pkgbuild, srcdir], sub, check=False, GNUPGHOME=keys.home)
+        assert (proc.returncode == 0) == ok, (name, proc.stdout, proc.stderr)
+        if not ok:
+            assert "non è una sottochiave dei tag" in proc.stderr, (name, proc.stderr)
+
+
+def _ci_artifact(tmp: Path, keys: Keyring) -> Path:
+    """Come l'artefatto «arch» della CI: PKGBUILD e .SRCINFO di makepkg."""
+    art = tmp / "artefatto"
+    pkgbuild = _pkgbuild(tmp, keys, art)
+    text = pkgbuild.read_text().replace("pkgver=" + re.search(r"^pkgver=(.*)$", pkgbuild.read_text(), re.M).group(1),
+                                        "pkgver=1.0.0")
+    pkgbuild.write_text(text)
+    (art / ".SRCINFO").write_text(
+        "pkgbase = olladesk\n\tpkgdesc = x\n\tpkgver = 1.0.0\n\tpkgrel = 1\n"
+        "\tsource = olladesk::git+https://github.com/gradia64/OllaDesk.git#tag=v1.0.0?signed\n"
+        f"\tvalidpgpkeys = {keys.release}\n\tsha256sums = SKIP\n\npkgname = olladesk\n")
+    return art
+
+
+def test_aur_release_pubblica_solo_il_pkgbuild_del_tag(tmp, keys):
+    remote = tmp / "aur.git"
+    _run(["git", "init", "-q", "--bare", "-b", "master", remote], tmp)
+    env = dict(AUR_REMOTE=remote, AUR_SKIP_SOURCE_CHECK="1", **keys.roles())
+
+    # tag firmato dalla sottochiave della CI: rifiutato prima di tutto
+    bad = tmp / "ci"
+    bad.mkdir()
+    repo = _signed_project(bad, keys, keys.ci_subkey)
+    art = _ci_artifact(bad, keys)
+    proc = _run(["scripts/aur-release.sh", "v1.0.0"], bad, cwd=repo, check=False,
+                OLLADESK_ARCH_ARTIFACT=art, **env)
+    assert proc.returncode != 0 and "non è una sottochiave dei tag" in proc.stderr, proc.stderr
+
+    repo = _signed_project(tmp, keys, keys.tag_subkey)
+    art = _ci_artifact(tmp, keys)
+    good_pkgbuild = (art / "PKGBUILD").read_text()
+    good_srcinfo = (art / ".SRCINFO").read_text()
+
+    # PKGBUILD della CI diverso da quello del tag: niente push
+    (art / "PKGBUILD").write_text(good_pkgbuild.replace("prepare() {", "prepare() {\n  return 0"))
+    proc = _run(["scripts/aur-release.sh", "v1.0.0"], tmp, cwd=repo, check=False,
+                OLLADESK_ARCH_ARTIFACT=art, **env)
+    assert proc.returncode != 0 and "diverso da quello generato dal tag" in proc.stderr, proc.stderr
+    (art / "PKGBUILD").write_text(good_pkgbuild)
+
+    # .SRCINFO con un sorgente in più o un'altra chiave: niente push
+    for tampered in (good_srcinfo.replace("\tsha256sums", "\tsource = https://evil.example/x\n\tsha256sums"),
+                     good_srcinfo.replace(keys.release, keys.other)):
+        (art / ".SRCINFO").write_text(tampered)
+        proc = _run(["scripts/aur-release.sh", "v1.0.0"], tmp, cwd=repo, check=False,
+                    OLLADESK_ARCH_ARTIFACT=art, **env)
+        assert proc.returncode != 0 and ".SRCINFO della CI" in proc.stderr, proc.stderr
+    (art / ".SRCINFO").write_text(good_srcinfo)
+    assert _run(["git", "-C", remote, "rev-list", "--all"], tmp).stdout == "", "push prima del via"
+
+    proc = _run(["scripts/aur-release.sh", "v1.0.0"], tmp, cwd=repo,
+                OLLADESK_ARCH_ARTIFACT=art, **env)
+    assert "pubblicato su AUR: olladesk 1.0.0" in proc.stdout, proc.stdout
+    pushed = _run(["git", "-C", remote, "show", "master:PKGBUILD"], tmp).stdout
+    assert pushed == good_pkgbuild
+
+
 # -- il repository vero: PKGBUILD, workflow, chiave pubblica ---------------------
 
 def _roles() -> dict:
@@ -388,6 +491,10 @@ def test_workflow_verifica_il_tag_e_isola_i_secret(tmp, keys):
     assert "flatpak" in jobs["publish"].split("\n")[0] and "name: flatpak" in jobs["publish"]
     # nessun job firma tag o esporta chiavi
     assert "git tag" not in text and "export-secret-keys" not in text
+    # la chiave SSH di AUR non è nella CI: il push lo fa il maintainer
+    # (scripts/aur-release.sh), la CI produce e prova solo il PKGBUILD
+    steps = "".join(jobs.values())
+    assert "AUR_SSH" not in steps and "publish-aur" not in steps and "aur-release" not in steps
     # i secret solo nel job publish, nell'environment protetto
     assert [name for name, body in jobs.items() if "secrets." in body] == ["publish"]
     assert "environment: release" in jobs["publish"]

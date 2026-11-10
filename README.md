@@ -266,6 +266,10 @@ the release key is not in your keyring, or it's an older copy from before
 03/10/2026 without the new subkeys, the build stops. Import it (or re-import
 it) from the `olladesk-release-key.asc` file attached to every release
 (`gpg --import olladesk-release-key.asc`) after checking its fingerprint.
+The PKGBUILD's `prepare()` also checks that the tag was signed by the
+maintainer's tag subkey and not by the CI one, which only signs the release
+attachments. The PKGBUILD is published to AUR from the maintainer's machine:
+the AUR key is not in CI.
 Every release also includes the already-built package
 (`olladesk-<version>-1-any.pkg.tar.zst`, installable with `sudo pacman -U`).
 
@@ -522,7 +526,7 @@ python3 tests/companion_models_test.py  # web companion: download and delete mod
 
 CI (`.github/workflows/release.yml`) runs unit tests and offline tests on every
 push and pull request; on `v*` tags it builds tarball, `.deb`, AppImage,
-Flatpak bundle and Arch package, signs them and publishes (GitHub release and AUR). The AppImage
+Flatpak bundle and Arch package, signs them and publishes the GitHub release (the maintainer publishes AUR with `scripts/aur-release.sh`). The AppImage
 is tested with `packaging/appimage/smoke-test.sh`, which runs the offline
 tests with its Python; the Flatpak, likewise, with `packaging/flatpak/smoke-test.sh`. Details for publishers:
 [packaging/README.md](packaging/README.md).

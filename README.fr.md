@@ -106,7 +106,7 @@ gpg --import olladesk-release-key.asc   # impronta: vedi «Verifica delle firme�
 makepkg -si
 ```
 
-Depuis la 0.2.5 le PKGBUILD clone depuis GitHub le tag de la version et makepkg en vérifie la signature GPG (`?signed` et `validpgpkeys` dans le PKGBUILD) : si la clé de release n'est pas dans ton trousseau, ou est une copie antérieure au 03/10/2026 sans les nouvelles sous-clés, la build s'arrête. Importe-la (ou réimporte-la) depuis le fichier `olladesk-release-key.asc` attaché à chaque release (`gpg --import olladesk-release-key.asc`) après en avoir contrôlé l'empreinte. Chaque release inclut aussi le paquet déjà construit (`olladesk-<version>-1-any.pkg.tar.zst`, installable avec `sudo pacman -U`).
+Depuis la 0.2.5 le PKGBUILD clone depuis GitHub le tag de la version et makepkg en vérifie la signature GPG (`?signed` et `validpgpkeys` dans le PKGBUILD) : si la clé de release n'est pas dans ton trousseau, ou est une copie antérieure au 03/10/2026 sans les nouvelles sous-clés, la build s'arrête. Importe-la (ou réimporte-la) depuis le fichier `olladesk-release-key.asc` attaché à chaque release (`gpg --import olladesk-release-key.asc`) après en avoir contrôlé l'empreinte. Le `prepare()` du PKGBUILD contrôle aussi que le tag est signé par la sous-clé des tags du maintainer et non par celle de la CI, qui ne signe que les pièces jointes de la release. Le PKGBUILD est publié sur AUR depuis la machine du maintainer : la clé AUR n'est pas dans la CI. Chaque release inclut aussi le paquet déjà construit (`olladesk-<version>-1-any.pkg.tar.zst`, installable avec `sudo pacman -U`).
 
 ## AppImage (n'importe quelle distribution)
 
@@ -306,7 +306,7 @@ python3 tests/sync_test.py            # sincronizzazione telefono-PC dal vivo (s
 python3 tests/companion_models_test.py  # companion web: scarica ed elimina modelli (senza rete)
 ```
 
-La CI (`.github/workflows/release.yml`) exécute les tests unitaires et les tests hors ligne à chaque push et pull request ; sur les tags `v*` elle construit tarball, `.deb`, AppImage, bundle Flatpak et paquet Arch, les signe et les publie (release GitHub et AUR). L'AppImage se teste avec `packaging/appimage/smoke-test.sh`, qui exécute les tests hors ligne avec son Python ; le Flatpak, de même, avec `packaging/flatpak/smoke-test.sh`. Détails pour qui publie : [packaging/README.md](packaging/README.md).
+La CI (`.github/workflows/release.yml`) exécute les tests unitaires et les tests hors ligne à chaque push et pull request ; sur les tags `v*` elle construit tarball, `.deb`, AppImage, bundle Flatpak et paquet Arch, les signe et publie la release GitHub (AUR, c'est le maintainer qui le publie avec `scripts/aur-release.sh`). L'AppImage se teste avec `packaging/appimage/smoke-test.sh`, qui exécute les tests hors ligne avec son Python ; le Flatpak, de même, avec `packaging/flatpak/smoke-test.sh`. Détails pour qui publie : [packaging/README.md](packaging/README.md).
 
 Pour lire les PDF comme pièces jointes :
 

@@ -325,7 +325,7 @@ class CompanionDialog(QDialog):
         )
         if answer != QMessageBox.StandardButton.Yes:
             return
-        self._server.auth.revoke_all()
+        self._server.revoke_all()
         self._update_devices()
         self._expire(_("Dispositivi scollegati."))
 

@@ -281,6 +281,10 @@ di release non è nel tuo portachiavi, o è una copia precedente al 03/10/2026
 senza le sottochiavi nuove, la build si ferma. Importala (o reimportala) dal
 file `olladesk-release-key.asc` allegato a ogni release
 (`gpg --import olladesk-release-key.asc`) dopo averne controllato l'impronta.
+Il `prepare()` del PKGBUILD controlla anche che il tag sia firmato dalla
+sottochiave dei tag del maintainer e non da quella della CI, che firma solo
+gli allegati della release. Il PKGBUILD si pubblica su AUR dalla macchina del
+maintainer: la chiave di AUR non sta nella CI.
 Ogni release include anche il pacchetto già costruito
 (`olladesk-<versione>-1-any.pkg.tar.zst`, installabile con `sudo pacman -U`).
 
@@ -538,7 +542,7 @@ python3 tests/companion_models_test.py  # companion web: scarica ed elimina mode
 
 La CI (`.github/workflows/release.yml`) esegue unit test e test offline a ogni
 push e pull request; sui tag `v*` costruisce tarball, `.deb`, AppImage,
-bundle Flatpak e pacchetto Arch, li firma e li pubblica (release GitHub e AUR). L'AppImage si
+bundle Flatpak e pacchetto Arch, li firma e pubblica la release GitHub (AUR lo pubblica il maintainer con `scripts/aur-release.sh`). L'AppImage si
 prova con `packaging/appimage/smoke-test.sh`, che esegue i test offline con
 il suo Python; il Flatpak, allo stesso modo, con `packaging/flatpak/smoke-test.sh`. Dettagli per chi pubblica:
 [packaging/README.md](packaging/README.md).

@@ -13,6 +13,8 @@ Controlla e installa gli aggiornamenti di Ollama (il server, non OllaDesk: per q
 |---|---|---|
 | `RELEASES_URL` | `https://api.github.com/repos/ollama/ollama/releases/latest` | ultima release di Ollama |
 | `INSTALL_SCRIPT_URL` | `https://ollama.com/install.sh` | script ufficiale di installazione |
+| `INSTALL_SCRIPT_HOSTS` | `ollama.com`, `github.com`, `release-assets.githubusercontent.com`, `objects.githubusercontent.com` | host da cui può arrivare lo script, sempre in https sulla porta 443 |
+| `MAX_INSTALL_SCRIPT_BYTES` | 1 MB | dimensione massima dello script (quello vero pesa circa 16 KB) |
 | `INSTALL_CMD` | `curl -fsSL https://ollama.com/install.sh \| sh` | comando mostrato all'utente per l'aggiornamento manuale, quando `pkexec` manca o il download fallisce |
 | `_LOCAL_HOSTS` | `localhost`, `127.0.0.1`, `::1`, `0.0.0.0`, `localhost.localdomain` | nomi considerati locali |
 
@@ -52,9 +54,11 @@ Scarica `RELEASES_URL` con timeout di 10 s e intestazioni `User-Agent: olladesk`
 ### `UpdateDownloadWorker(QThread)`
 Scarica `INSTALL_SCRIPT_URL` in memoria con timeout di 30 s e `User-Agent: olladesk`. Non scrive niente su disco.
 
+I redirect si seguono solo verso `INSTALL_SCRIPT_HOSTS` in https (`_PinnedRedirects`): `ollama.com/install.sh` rimanda all'asset dell'ultima release su `github.com`, che rimanda allo storage degli asset di GitHub. Un redirect verso un altro host o in chiaro si rifiuta, perché il contenuto finisce nello stdin di `pkexec sh -s`. Si accetta solo lo stato 200 (un 206 darebbe a `sh` uno script parziale) e al massimo `MAX_INSTALL_SCRIPT_BYTES`.
+
 | Segnale | Argomento | Quando |
 |---|---|---|
 | `ready` | `bytes` | contenuto dello script |
-| `failed` | `str` | eccezione durante il download (messaggio dell'eccezione), oppure contenuto che non inizia con `#!` (`il contenuto scaricato non sembra uno script di installazione`) |
+| `failed` | `str` | eccezione durante il download (messaggio dell'eccezione, anche `redirect verso un'origine non prevista: <url>`), stato diverso da 200 (`risposta HTTP inattesa: <stato>`), script oltre il limite (`script scaricato troppo grande (oltre 1024 KB)`), oppure contenuto che non inizia con `#!` (`il contenuto scaricato non sembra uno script di installazione`) |
 
-Il controllo su `#!` è una verifica minima per scartare pagine di errore HTML o risposte vuote. Non è una verifica di integrità.
+Il controllo su `#!` è una verifica minima per scartare pagine di errore HTML o risposte vuote. Non è una verifica di integrità: Ollama non pubblica né firma né hash dello script, che resta autenticato solo dal TLS verso gli host ammessi.

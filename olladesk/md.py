@@ -26,6 +26,11 @@ _BLOCK_JOIN_RE = re.compile(
 )
 
 _MAX_CODE_LINE = 110  # lunghezza massima di una riga di codice prima dell'a-capo
+# livelli massimi di annidamento di citazioni ed elenchi: oltre, il testo resta
+# allo stesso livello. Senza limite circa 1000 «>» esaurivano la pila di Python
+# (RecursionError) e la conversazione non si poteva più mostrare
+_MAX_NEST = 20
+_PLACEHOLDER_RE = re.compile(r"\x00I(\d+)\x00")
 
 
 def _wrap_code(code: str) -> str:
@@ -91,9 +96,20 @@ def _inline(seg: str, inline_code_color: str) -> str:
     seg = html.escape(seg)
     seg = _LINK_RE.sub(_stash_link, seg)
     seg = _emphasis(seg)
-    # più passate: un link può contenere a sua volta inline code
-    while "\x00I" in seg:
-        seg = re.sub(r"\x00I(\d+)\x00", lambda m: inline[int(m.group(1))], seg)
+    # più passate: un link può contenere a sua volta inline code. Il numero di
+    # passate è comunque limitato e un indice fuori elenco si scarta: un
+    # segnaposto che rimandasse a sé stesso non deve far girare il ciclo per
+    # sempre (md_to_html toglie già i NUL dal testo, questa è una seconda difesa)
+    def _resolve(m: re.Match) -> str:
+        idx = int(m.group(1))
+        return inline[idx] if idx < len(inline) else ""
+
+    for _ in range(len(inline) + 1):
+        seg, replaced = _PLACEHOLDER_RE.subn(_resolve, seg)
+        if not replaced:
+            break
+    else:
+        seg = _PLACEHOLDER_RE.sub("", seg)
     return seg
 
 
@@ -139,15 +155,17 @@ def _list_open(kind: str, start: int | None) -> str:
 
 
 def _list_html(items: list[tuple[int, str, str, int | None]], pos: int, indent: int,
-               kind: str, inline_code_color: str) -> tuple[str, int]:
-    """Costruisce <ul>/<ol> (annidati) da [(indent, kind, testo, numero)]."""
+               kind: str, inline_code_color: str, depth: int = 0) -> tuple[str, int]:
+    """Costruisce <ul>/<ol> (annidati) da [(indent, kind, testo, numero)].
+
+    Oltre `_MAX_NEST` livelli una voce più rientrata resta al livello corrente."""
     out = [_list_open(kind, items[pos][3] if pos < len(items) else None)]
     while pos < len(items):
         ind, k, text, _num = items[pos]
         if ind < indent:
             break
-        if ind > indent:
-            sub, pos = _list_html(items, pos, ind, k, inline_code_color)
+        if ind > indent and depth < _MAX_NEST:
+            sub, pos = _list_html(items, pos, ind, k, inline_code_color, depth + 1)
             if out[-1].endswith("</li>"):
                 out[-1] = out[-1][:-5] + sub + "</li>"
             else:
@@ -155,18 +173,20 @@ def _list_html(items: list[tuple[int, str, str, int | None]], pos: int, indent: 
             continue
         if k != kind:
             # stesso livello, tipo diverso (puntato → numerato): chiude questo
-            # elenco e prosegue con un elenco fratello, che si chiude da sé
+            # elenco e ne apre uno fratello, nello stesso ciclo (con una
+            # chiamata ricorsiva una lunga alternanza di tipi esauriva la pila)
             out.append(f"</{kind}>")
-            sub, pos = _list_html(items, pos, ind, k, inline_code_color)
-            out.append(sub)
-            return "".join(out), pos
+            kind = k
+            out.append(_list_open(kind, _num))
+            continue
         out.append(f"<li>{_inline(text, inline_code_color)}</li>")
         pos += 1
     out.append(f"</{kind}>")
     return "".join(out), pos
 
 
-def _render_segment(seg: str, inline_code_color: str, header_bg: str) -> str:
+def _render_segment(seg: str, inline_code_color: str, header_bg: str,
+                    depth: int = 0) -> str:
     lines = seg.split("\n")
     parts: list[tuple[str, str]] = []   # ("h", html già pronto) | ("t", testo grezzo)
     i, n = 0, len(lines)
@@ -184,12 +204,12 @@ def _render_segment(seg: str, inline_code_color: str, header_bg: str) -> str:
             parts.append(("h", _table_html(rows, inline_code_color, header_bg)))
             continue
         # blockquote: righe consecutive che iniziano con «>»
-        if ln.lstrip().startswith(">"):
+        if depth < _MAX_NEST and ln.lstrip().startswith(">"):
             quote = []
             while i < n and lines[i].lstrip().startswith(">"):
                 quote.append(lines[i].lstrip()[1:].lstrip())
                 i += 1
-            inner = _render_segment("\n".join(quote), inline_code_color, header_bg)
+            inner = _render_segment("\n".join(quote), inline_code_color, header_bg, depth + 1)
             parts.append(("h", f"<blockquote>{inner}</blockquote>"))
             continue
         if _HR_RE.match(ln):
@@ -271,7 +291,10 @@ def md_to_html(
     il link per copiarlo; `copied` è l'indice del blocco appena copiato."""
     if not text:
         return ""
-    text = _close_fence(text)
+    # NUL non ha significato nel testo e il renderer lo usa per i segnaposto
+    # interni: un messaggio che li contenesse poteva far girare per sempre la
+    # sostituzione (CommonMark lo sostituisce con U+FFFD, come qui)
+    text = _close_fence(text.replace("\x00", "\ufffd"))
 
     parts: list[str] = []
     pos = 0

@@ -23,6 +23,18 @@ from .i18n import _
 RELEASES_URL = "https://api.github.com/repos/ollama/ollama/releases/latest"
 INSTALL_SCRIPT_URL = "https://ollama.com/install.sh"
 INSTALL_CMD = "curl -fsSL https://ollama.com/install.sh | sh"
+# host da cui può arrivare lo script, sempre in https: ollama.com rimanda
+# (307) all'asset dell'ultima release su github.com, che a sua volta rimanda
+# allo storage degli asset di GitHub. Qualunque altro redirect si rifiuta:
+# il contenuto finisce nello stdin di `pkexec sh -s`
+INSTALL_SCRIPT_HOSTS = frozenset({
+    "ollama.com",
+    "github.com",
+    "release-assets.githubusercontent.com",
+    "objects.githubusercontent.com",
+})
+# lo script vero pesa poche decine di KB
+MAX_INSTALL_SCRIPT_BYTES = 1024 * 1024
 
 _LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1", "0.0.0.0", "localhost.localdomain"}
 
@@ -126,6 +138,35 @@ class UpdateCheckWorker(QThread):
         self.ready.emit(tag.lstrip("vV"))
 
 
+def _allowed_script_url(url: str) -> bool:
+    from urllib.parse import urlsplit
+
+    try:
+        parts = urlsplit(url)
+        host = (parts.hostname or "").lower()
+        port = parts.port
+    except ValueError:
+        return False
+    return (parts.scheme == "https" and host in INSTALL_SCRIPT_HOSTS
+            and port in (None, 443))
+
+
+class _PinnedRedirects(urllib.request.HTTPRedirectHandler):
+    """Segue un redirect solo verso INSTALL_SCRIPT_HOSTS in https.
+
+    Di suo urllib segue qualunque 30x verso qualunque host, anche da https a
+    http in chiaro."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if not _allowed_script_url(newurl):
+            raise urllib.error.HTTPError(
+                newurl, code,
+                _("redirect verso un'origine non prevista: {url}").format(url=newurl),
+                headers, fp,
+            )
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
 class UpdateDownloadWorker(QThread):
     """Scarica lo script ufficiale in memoria (nessun file su disco).
 
@@ -141,10 +182,19 @@ class UpdateDownloadWorker(QThread):
             req = urllib.request.Request(
                 INSTALL_SCRIPT_URL, headers={"User-Agent": "olladesk"}
             )
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                data = resp.read()
+            opener = urllib.request.build_opener(_PinnedRedirects)
+            with opener.open(req, timeout=30) as resp:
+                # 206, 204…: uno script parziale non deve arrivare a sh
+                if resp.status != 200:
+                    self.failed.emit(_("risposta HTTP inattesa: {status}").format(status=resp.status))
+                    return
+                # un byte oltre il massimo basta a capire che è troppo lungo
+                data = resp.read(MAX_INSTALL_SCRIPT_BYTES + 1)
         except Exception as e:
             self.failed.emit(str(e))
+            return
+        if len(data) > MAX_INSTALL_SCRIPT_BYTES:
+            self.failed.emit(_("script scaricato troppo grande (oltre {size} KB)").format(size=MAX_INSTALL_SCRIPT_BYTES // 1024))
             return
         if not data.startswith(b"#!"):
             self.failed.emit(_("il contenuto scaricato non sembra uno script di installazione"))

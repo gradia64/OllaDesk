@@ -1,8 +1,9 @@
 #!/bin/bash
 # Prepara il PKGBUILD per AUR dal modello packaging/arch/PKGBUILD.in.
 #
-# Sostituisce la versione e l'impronta della primaria di rilascio
-# (RELEASE_PRIMARY in scripts/release-keys.sh). Il sorgente è il tag
+# Sostituisce la versione, l'impronta della primaria di rilascio
+# (RELEASE_PRIMARY in scripts/release-keys.sh) e le sottochiavi che possono
+# firmare i tag (TAG_SIGNING_SUBKEYS), controllate da prepare() nel PKGBUILD. Il sorgente è il tag
 # v<versione> firmato, che makepkg clona da GitHub e verifica: il tag deve
 # essere già pubblicato per costruire il pacchetto. Se makepkg è disponibile
 # genera anche .SRCINFO.
@@ -23,13 +24,24 @@ if [ -z "$VERSION" ]; then
 fi
 
 mkdir -p "$OUT"
+# («A» «B») per l'array _tag_subkeys del PKGBUILD; solo impronte esadecimali
+SUBKEYS=""
+for sub in $TAG_SIGNING_SUBKEYS; do
+    if ! [[ $sub =~ ^[0-9A-F]{40}$ ]]; then
+        echo "impronta della sottochiave dei tag non valida: $sub" >&2
+        exit 1
+    fi
+    SUBKEYS="${SUBKEYS:+$SUBKEYS }'$sub'"
+done
+[ -n "$SUBKEYS" ] || { echo "TAG_SIGNING_SUBKEYS vuoto" >&2; exit 1; }
 # solo i segnaposto del modello: @VERSION@/@DATE@ in package() appartengono
 # alla manpage e vengono sostituiti da makepkg al momento della build
 sed -e '/^#@/d' \
     -e "s/@PKGVER@/$VERSION/" \
     -e "s/@FINGERPRINT@/$RELEASE_PRIMARY/" \
+    -e "s/@TAG_SUBKEYS@/$SUBKEYS/" \
     packaging/arch/PKGBUILD.in > "$OUT/PKGBUILD"
-if grep -qE '@(PKGVER|FINGERPRINT)@' "$OUT/PKGBUILD"; then
+if grep -qE '@(PKGVER|FINGERPRINT|TAG_SUBKEYS)@' "$OUT/PKGBUILD"; then
     echo "segnaposto non sostituiti in $OUT/PKGBUILD" >&2
     exit 1
 fi

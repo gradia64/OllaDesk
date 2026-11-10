@@ -105,7 +105,7 @@ gpg --import olladesk-release-key.asc   # Fingerprint: siehe «Verifizierung der
 makepkg -si
 ```
 
-Ab 0.2.5 klont das PKGBUILD den Tag der Version von GitHub und makepkg prüft seine GPG-Signatur (`?signed` und `validpgpkeys` im PKGBUILD): fehlt die Release-Schlüssel in deinem Schlüsselbund oder ist es eine Kopie vor dem 03.10.2026 ohne die neuen Unterschlüssel, stoppt der Build. Importiere sie (oder reimportiere) aus der Datei `olladesk-release-key.asc`, die jeder Release beiliegt (`gpg --import olladesk-release-key.asc`), nachdem du den Fingerprint geprüft hast. Jede Release enthält auch das bereits gebaute Paket (`olladesk-<version>-1-any.pkg.tar.zst`, installierbar mit `sudo pacman -U`).
+Ab 0.2.5 klont das PKGBUILD den Tag der Version von GitHub und makepkg prüft seine GPG-Signatur (`?signed` und `validpgpkeys` im PKGBUILD): fehlt die Release-Schlüssel in deinem Schlüsselbund oder ist es eine Kopie vor dem 03.10.2026 ohne die neuen Unterschlüssel, stoppt der Build. Importiere sie (oder reimportiere) aus der Datei `olladesk-release-key.asc`, die jeder Release beiliegt (`gpg --import olladesk-release-key.asc`), nachdem du den Fingerprint geprüft hast. Das `prepare()` des PKGBUILD prüft außerdem, dass der Tag mit dem Tag-Unterschlüssel des Maintainers signiert ist und nicht mit dem der CI, der nur die Anhänge der Release signiert. Das PKGBUILD wird vom Rechner des Maintainers auf AUR veröffentlicht: der AUR-Schlüssel liegt nicht in der CI. Jede Release enthält auch das bereits gebaute Paket (`olladesk-<version>-1-any.pkg.tar.zst`, installierbar mit `sudo pacman -U`).
 
 ## AppImage (beliebige Distribution)
 
@@ -305,7 +305,7 @@ python3 tests/sync_test.py            # Live-Synchronisation Telefon-PC (ohne Ne
 python3 tests/companion_models_test.py  # Web-Companion: Modelle herunterladen und löschen (ohne Netz)
 ```
 
-Die CI (`.github/workflows/release.yml`) führt Unit-Tests und Offline-Tests bei jedem Push und Pull Request aus; bei Tags `v*` baut sie Tarball, `.deb`, AppImage, Flatpak-Bundle und Arch-Paket, signiert sie und veröffentlicht sie (GitHub-Release und AUR). Die AppImage wird mit `packaging/appimage/smoke-test.sh` getestet, das die Offline-Tests mit ihrem Python ausführt; das Flatpak ebenso mit `packaging/flatpak/smoke-test.sh`. Details für Veröffentlichende: [packaging/README.md](packaging/README.md).
+Die CI (`.github/workflows/release.yml`) führt Unit-Tests und Offline-Tests bei jedem Push und Pull Request aus; bei Tags `v*` baut sie Tarball, `.deb`, AppImage, Flatpak-Bundle und Arch-Paket, signiert sie und veröffentlicht die GitHub-Release (AUR veröffentlicht der Maintainer mit `scripts/aur-release.sh`). Die AppImage wird mit `packaging/appimage/smoke-test.sh` getestet, das die Offline-Tests mit ihrem Python ausführt; das Flatpak ebenso mit `packaging/flatpak/smoke-test.sh`. Details für Veröffentlichende: [packaging/README.md](packaging/README.md).
 
 Zum Lesen von PDFs als Anhänge:
 

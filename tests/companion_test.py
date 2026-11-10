@@ -303,6 +303,94 @@ companion.BRIDGE_TIMEOUT = 5.0
 wait_until(lambda: False, 100)   # smaltisce il lavoro rimasto in coda
 print("7. 503 con il thread principale bloccato OK")
 
+# ------------------------------------- 7b. revoca con uno stream SSE aperto
+
+
+def open_stream(tok):
+    """Stream /api/events in un thread: raccoglie tutto fino alla chiusura."""
+    out = {"data": b"", "closed": False}
+    s = socket.create_connection(("127.0.0.1", PORT), timeout=10)
+    s.sendall(f"GET /api/events HTTP/1.1\r\nHost: 127.0.0.1:{PORT}\r\n"
+              f"Cookie: {companion.COOKIE}={tok}\r\n\r\n".encode())
+
+    def run():
+        try:
+            while chunk := s.recv(4096):
+                out["data"] += chunk
+        except OSError:
+            pass
+        out["closed"] = True
+        s.close()
+
+    threading.Thread(target=run, daemon=True).start()
+    assert wait_until(lambda: b"event: busy" in out["data"]), out["data"][:200]
+    return out
+
+
+# revoca dal solo PairingAuth: lo stream già aperto non riceve più nulla e si
+# chiude al primo evento (prima la revoca valeva solo per le richieste nuove)
+st_out = open_stream(token)
+auth.revoke_all()
+srv.hub._push("", "chats", {})
+assert wait_until(lambda: st_out["closed"]), "stream ancora aperto dopo la revoca"
+assert b"event: chats" not in st_out["data"], "evento consegnato a un dispositivo revocato"
+# revoca dalla companion (il pulsante del dialogo): chiusura immediata,
+# anche senza eventi
+code, _ = auth.new_code()
+st, hd, _b = request("POST", "/api/pair", {"code": code})
+assert st == 200
+token = hd["Set-Cookie"].split(";")[0].split("=", 1)[1]
+st_out = open_stream(token)
+srv.revoke_all()
+assert wait_until(lambda: st_out["closed"], 2000), "stream non chiuso dalla revoca"
+print("7b. stream SSE chiusi dalla revoca OK")
+
+# ------------------------------------- 7c. connessioni lente e troppe connessioni
+
+# un client che non completa la richiesta viene chiuso dopo REQUEST_DEADLINE,
+# anche mandando un byte ogni tanto (il timeout del socket si rinnoverebbe)
+companion.REQUEST_DEADLINE = 0.6
+slow = socket.create_connection(("127.0.0.1", PORT), timeout=5)
+slow.sendall(b"GET /api/session HTTP/1.1\r\n")
+t0 = time.monotonic()
+closed = False
+try:
+    for _ in range(20):
+        slow.sendall(b"X")
+        time.sleep(0.2)
+        slow.setblocking(False)
+        try:
+            if slow.recv(1) == b"":
+                closed = True
+                break
+        except BlockingIOError:
+            pass
+        finally:
+            slow.setblocking(True)
+except OSError:
+    closed = True
+slow.close()
+assert closed and time.monotonic() - t0 < 3, "connessione lenta non chiusa"
+companion.REQUEST_DEADLINE = 15.0
+
+# tetto per indirizzo: le connessioni oltre il limite si chiudono subito
+companion.MAX_CONNECTIONS_PER_HOST = 2
+idle = [socket.create_connection(("127.0.0.1", PORT), timeout=5) for _ in range(2)]
+# entrambe prese in carico dal server prima della terza
+assert wait_until(lambda: srv._httpd._conn_by_host.get("127.0.0.1") == 2, 3000)
+extra = socket.create_connection(("127.0.0.1", PORT), timeout=5)
+try:
+    assert extra.recv(1) == b"", "connessione oltre il tetto accettata"
+except ConnectionResetError:
+    pass
+extra.close()
+for c in idle:
+    c.close()
+companion.MAX_CONNECTIONS_PER_HOST = 16
+# liberati i posti, le richieste tornano a passare
+assert wait_until(lambda: request("GET", "/api/session")[0] == 401, 3000)
+print("7c. scadenza delle richieste e tetto alle connessioni OK")
+
 # ------------------------------------------------------------- 8. revoca
 
 auth.revoke_all()
