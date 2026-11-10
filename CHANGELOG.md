@@ -8,6 +8,10 @@ Le note dettagliate di ogni rilascio sono anche in `packaging/release-notes/`. I
 
 ## [Non rilasciato]
 
+### Novità
+
+- **Solo modelli da chat nel selettore**: il selettore dei modelli, sul PC e sul telefono, elenca solo i modelli che sanno chattare. Quelli di embedding e i modelli decisionali e vocali arrivati con Ollama 0.40 restano nel gestore dei modelli, dove si possono eliminare; prima, sceglierli in chat portava all'errore «does not support chat». OllaDesk legge le capacità di ogni modello una volta sola e le richiede quando il modello viene aggiornato.
+
 ## [0.3.9] — 2026-11-09
 
 ### Novità
