@@ -26,6 +26,7 @@ Dalla revisione di sicurezza della 0.3.9.
 ### Note tecniche
 
 - **Pacchetto AUR**: il PKGBUILD accetta solo un tag firmato dalla sottochiave del maintainer, non da quella della CI, e la chiave per pubblicare su AUR non sta più nella CI.
+- **Immagini WEBP su Arch**: `qt6-imageformats` è tra le dipendenze opzionali del pacchetto AUR. Senza, Qt non sa leggere le immagini WEBP allegate.
 
 
 ## [0.3.9] — 2026-11-09

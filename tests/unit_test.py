@@ -2664,15 +2664,18 @@ def test_image_conversion_allocation_limit_and_deadline():
     t0 = _t.monotonic()
     b64, note = context.image_to_b64(gif)
     assert b64 is None and note and _t.monotonic() - t0 < 0.5
-    webp = d / "foto.webp"
+    # BMP e non WEBP: il plugin WEBP sta in qt6-imageformats, che su Arch
+    # pyside6 non porta con sé (il check() del PKGBUILD falliva lì, 0.3.10);
+    # BMP è in qt6-base e si converte allo stesso modo.
+    bmp = d / "foto.bmp"
     img = QImage(640, 480, QImage.Format.Format_RGB32)
     img.fill(0x336699)
-    assert img.save(str(webp), "WEBP")
-    b64, note = context.image_to_b64(webp)
-    assert b64 and note is None
+    assert img.save(str(bmp), "BMP"), "Qt non sa scrivere BMP"
+    b64, note = context.image_to_b64(bmp)
+    assert b64 and note is None, note
     # tempo del messaggio esaurito: le conversioni successive si saltano,
     # i formati nativi passano comunque
-    b64, note = context.image_to_b64(webp, _t.monotonic() - 1)
+    b64, note = context.image_to_b64(bmp, _t.monotonic() - 1)
     assert b64 is None and "tempo di conversione esaurito" in note
 
 
