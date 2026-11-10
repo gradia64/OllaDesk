@@ -364,12 +364,15 @@ def _task_info(t: dict | None) -> dict | None:
 
 def models_info(engine) -> dict:
     """Thread principale: modelli installati e stato del server."""
+    chat = set(engine.chat_model_names())
     return {
         "models": [
             {"name": m["name"],
              "size": m.get("size") or 0,
              "details": {k: m.get("details", {}).get(k, "")
-                         for k in ("parameter_size", "quantization_level")}}
+                         for k in ("parameter_size", "quantization_level")},
+             # il selettore della chat li salta, il gestore dei modelli no
+             "chat": m["name"] in chat}
             for m in engine.models()
         ],
         "task": _task_info(engine.model_task()),
@@ -390,7 +393,7 @@ def web_send(engine, hub, chat_id: str | None, text: str, model: str, think: boo
     busy = (409, _("occupato: il PC sta già rispondendo, riprova alla fine"), None)
     if engine.busy():
         return busy
-    if model not in engine.model_names():
+    if model not in engine.chat_model_names():
         return 400, _('modello non disponibile: {model}').format(model=model), None
     refusal = engine.send_refusal(model)
     if refusal:

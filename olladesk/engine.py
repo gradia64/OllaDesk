@@ -15,7 +15,10 @@ from PySide6.QtCore import QObject, Signal
 
 from . import config, context, secrets_store, web_search
 from .i18n import _
-from .ollama_client import ApiWorker, ChatWorker, PostWorker, PullWorker, format_stats, visible_models
+from .ollama_client import (
+    ApiWorker, CapsWorker, ChatWorker, PostWorker, PullWorker, chat_capable, format_stats,
+    visible_models,
+)
 from .workers import WorkerRegistry
 
 
@@ -37,7 +40,8 @@ class ChatEngine(QObject):
     # --- server Ollama e modelli
     status_changed = Signal(bool, str)        # online, versione
     models_loading = Signal(bool)             # elenco modelli in caricamento
-    models_changed = Signal(list)             # nomi da mostrare ([] = nessun modello)
+    models_changed = Signal(list)             # modelli da chat da mostrare ([] = nessuno)
+    caps_changed = Signal()                   # arrivate le capacità di qualche modello
     model_task_changed = Signal()             # scarica/elimina avviato, avanzato o concluso
 
     def __init__(self, settings: dict, parent=None):
@@ -62,6 +66,11 @@ class ChatEngine(QObject):
         self._status_worker: ApiWorker | None = None
         self._models_worker: ApiWorker | None = None
         self._models: list[dict] = []
+        # capacità da /api/show: nome → (digest, capacità); un modello
+        # aggiornato cambia digest e si richiede
+        self._caps: dict[str, tuple[str, list[str]]] = {}
+        self._caps_worker: CapsWorker | None = None
+        self._caps_again = False              # elenco ricaricato mentre si chiedevano
         # scarica/elimina avviato dal telefono (una sola operazione alla volta):
         # {"op": "pull"|"delete", "name", "state": "running"|"done"|"failed",
         #  "pct": int|None, "status": str, "error": str, "ended": ts (a fine operazione)}
@@ -129,6 +138,23 @@ class ChatEngine(QObject):
     def model_names(self) -> list[str]:
         return [m["name"] for m in self._models]
 
+    def model_caps(self, name: str) -> list[str] | None:
+        """Capacità di un modello installato, None se non ancora note."""
+        m = next((m for m in self._models if m["name"] == name), None)
+        got = self._caps.get(name)
+        if m is None or got is None or got[0] != m["digest"]:
+            return None
+        return got[1]
+
+    def chat_models(self) -> list[dict]:
+        """Modelli da proporre per la chat: senza quelli che non sanno
+        chattare (embedding, decisionali, vocali…). Il gestore dei modelli
+        li mostra tutti, per poterli eliminare."""
+        return [m for m in self._models if chat_capable(self.model_caps(m["name"]))]
+
+    def chat_model_names(self) -> list[str]:
+        return [m["name"] for m in self.chat_models()]
+
     def reset_status(self) -> None:
         """Host cambiato: il prossimo controllo riuscito ricarica i modelli."""
         self._online = None
@@ -182,11 +208,48 @@ class ChatEngine(QObject):
                 "name": m.get("name") or m.get("model") or "?",
                 "details": m.get("details", {}),
                 "size": m.get("size", 0),
+                "digest": m.get("digest") or "",
             }
             for m in visible_models(data.get("models"))
         ]
         self._models.sort(key=lambda m: m["name"].lower())
-        self.models_changed.emit(self.model_names())
+        self.models_changed.emit(self.chat_model_names())
+        self._fetch_caps()
+
+    def _fetch_caps(self) -> None:
+        """Chiede a /api/show le capacità dei modelli che non si conoscono."""
+        if self._closed:
+            return
+        if self._caps_worker is not None:
+            self._caps_again = True   # si riprende quando ha finito
+            return
+        want = {m["name"]: m["digest"] for m in self._models if self.model_caps(m["name"]) is None}
+        if not want:
+            return
+        w = CapsWorker(self.settings["host"], list(want), self)
+        w.ready.connect(lambda caps, want=want: self._on_caps(want, caps))
+        w.finished.connect(w.deleteLater)
+        w.finished.connect(self._workers.clear_ref(self, "_caps_worker", w))
+        w.finished.connect(self._after_caps)
+        self._caps_worker = w
+        self._workers.track(w)
+        w.start()
+
+    def _on_caps(self, want: dict, caps: dict) -> None:
+        before = self.chat_model_names()
+        for name, c in caps.items():
+            if name in want:
+                self._caps[name] = (want[name], c)
+        after = self.chat_model_names()
+        if after != before:
+            self.models_changed.emit(after)
+        self.caps_changed.emit()
+
+    def _after_caps(self) -> None:
+        # dopo clear_ref (collegato prima): _caps_worker è già None
+        if self._caps_again:
+            self._caps_again = False
+            self._fetch_caps()
 
     def _on_models_fail(self, _err: str) -> None:
         self.models_loading.emit(False)

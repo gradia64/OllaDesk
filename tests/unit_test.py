@@ -1715,6 +1715,45 @@ def test_model_lists_without_duplicates():
             dlg.deleteLater()
 
 
+def test_chat_models_skip_models_without_completion():
+    # Ollama 0.40: modelli decisionali e vocali, come quelli di embedding,
+    # non sanno chattare; il selettore li salta, il gestore no
+    from PySide6.QtWidgets import QApplication
+
+    from olladesk import config
+    from olladesk.engine import ChatEngine
+    from olladesk.ollama_client import chat_capable
+
+    assert chat_capable(None) and chat_capable([])            # ignote: si mostrano
+    assert chat_capable(["completion", "vision"])
+    for caps in (["embedding"], ["decision"], ["speech"], ["image"]):
+        assert not chat_capable(caps), caps
+
+    with _isolated_config():
+        QApplication.instance() or QApplication([])
+        engine = ChatEngine(config.load_settings())
+        engine._closed = True   # niente richieste a /api/show
+        shown: list = []
+        engine.models_changed.connect(shown.append)
+        engine._on_models({"models": [
+            {"name": "chat:1b", "digest": "a"},
+            {"name": "voce:1b", "digest": "b"},
+            {"name": "vettori:1b", "digest": "c"},
+        ]})
+        all_names = ["chat:1b", "vettori:1b", "voce:1b"]
+        assert shown[-1] == engine.chat_model_names() == all_names   # capacità ancora ignote
+        want = {"chat:1b": "a", "voce:1b": "b", "vettori:1b": "c"}
+        engine._on_caps(want, {"chat:1b": ["completion"], "voce:1b": ["speech"],
+                               "vettori:1b": ["embedding"]})
+        assert shown[-1] == engine.chat_model_names() == ["chat:1b"]
+        assert engine.model_names() == all_names
+        assert engine.model_caps("voce:1b") == ["speech"]
+        # modello aggiornato (digest nuovo): capacità di nuovo ignote, si mostra
+        engine._on_models({"models": [{"name": "voce:1b", "digest": "z"}]})
+        assert engine.model_caps("voce:1b") is None
+        assert engine.chat_model_names() == ["voce:1b"]
+
+
 def test_web_fallback_never_equals_provider():
     # collaudo 0.3.0: SearXNG con riserva SearXNG era accettato, ma la
     # ricerca ignora una riserva uguale al principale e si restava senza

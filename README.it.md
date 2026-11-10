@@ -159,7 +159,7 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   ripristina con un clic sull'icona (menu: Mostra/nascondi, Esci);
   facoltativamente la chiusura (X) riduce nella tray invece di uscire,
   così la companion web e le generazioni in corso restano attive.
-- **Scelta del modello**: all'avvio e a ogni nuova conversazione il selettore mostra «Seleziona il modello» e nessun modello è scelto; inviando senza sceglierne uno compare un avviso. Riaprire una conversazione salvata ripristina il modello con cui era nata.
+- **Scelta del modello**: all'avvio e a ogni nuova conversazione il selettore mostra «Seleziona il modello» e nessun modello è scelto; inviando senza sceglierne uno compare un avviso. Riaprire una conversazione salvata ripristina il modello con cui era nata. Il selettore, anche sul telefono, elenca solo i modelli che sanno chattare: quelli di embedding, decisionali o vocali restano nel gestore dei modelli.
 - **Capacità del modello**: accanto al selettore, dei badge mostrano se il modello scelto accetta immagini, ragiona o usa strumenti.
 - **Gestione modelli** (pulsante «Modelli» nella sidebar, Ctrl+M): elenco dei
   modelli installati con dimensione/parametri/quantizzazione, **scaricamento**

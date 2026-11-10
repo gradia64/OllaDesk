@@ -605,6 +605,8 @@ $("task-cancel").addEventListener("click", () => modelAction("/api/models/cancel
 
 async function loadModels(preferred) {
   const info = await api("/api/models");
+  // solo i modelli che sanno chattare (niente embedding, decisionali, vocali…)
+  info.models = info.models.filter((m) => m.chat !== false);
   const sel = $("model");
   sel.replaceChildren();
   for (const m of info.models) {

@@ -79,7 +79,10 @@ assert wait_until(lambda: win.engine.model_names() == MODELS)
 assert win.model_combo.isEnabled() and win.model_combo.count() == len(MODELS)
 assert win.model_combo.currentIndex() == -1 and win.current_model() is None
 assert win.model_combo.placeholderText() == "Seleziona il modello"
-assert all(b.isHidden() for b in win.cap_badges.values()) and not fake.shows
+# le capacità arrivano per tutti i modelli (servono a filtrare il
+# selettore), ma senza modello scelto non c'è nessun badge
+assert wait_until(lambda: sorted(fake.shows) == sorted(MODELS)), fake.shows
+assert all(b.isHidden() for b in win.cap_badges.values())
 # l'invio senza modello è rifiutato con un avviso, senza creare chat
 n_chats = len(win.engine.chats())
 notes = []
@@ -104,7 +107,7 @@ assert win.current_model() == MODELS[0]
 # capacità del modello scelto da /api/show: badge accanto al selettore
 assert wait_until(lambda: not win.cap_badges["vision"].isHidden())
 assert not win.cap_badges["thinking"].isHidden() and win.cap_badges["tools"].isHidden()
-assert fake.shows and fake.shows[-1] == win.model_combo.currentData()
+assert win.model_combo.currentData() in fake.shows
 h.setup(PORT, wait_until)
 TOKEN = h.pair(win._companion.auth)
 engine = win.engine

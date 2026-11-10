@@ -409,6 +409,60 @@ def visible_models(models: object) -> list[dict]:
     return out
 
 
+def chat_capable(caps: list[str] | None) -> bool:
+    """False solo se le capacità sono note e il modello non sa chattare.
+
+    Modelli di embedding, decisionali (`decision`), vocali (`speech`) o di
+    generazione di immagini non hanno `completion`: /api/chat risponde
+    «does not support chat». Capacità ignote (non ancora chieste, richiesta
+    fallita, Ollama senza il campo) non escludono il modello.
+    """
+    return not caps or "completion" in caps
+
+
+class CapsWorker(QThread):
+    """POST /api/show per ogni modello, uno dopo l'altro: le loro capacità.
+
+    `ready` porta {nome: [capacità]} con le sole risposte riuscite; un
+    modello che fallisce si richiede al prossimo ricaricamento dell'elenco.
+    """
+
+    ready = Signal(object)
+
+    def __init__(self, host: str, names: list[str], parent=None):
+        super().__init__(parent)
+        self._host = host
+        self._names = list(names)
+        self._resp = None
+        self._stopped = False
+
+    def stop(self) -> None:
+        self._stopped = True
+        abort_response(self._resp)
+
+    def run(self) -> None:
+        out: dict[str, list[str]] = {}
+        for name in self._names:
+            if self._stopped:
+                return
+            try:
+                self._resp = _open(self._host, "/api/show", {"model": name}, timeout=8)
+                data = json.loads(self._resp.read().decode("utf-8"))
+            except Exception:
+                continue
+            finally:
+                resp, self._resp = self._resp, None
+                if resp is not None:
+                    try:
+                        resp.close()
+                    except Exception:
+                        pass
+            caps = data.get("capabilities") if isinstance(data, dict) else None
+            out[name] = [c for c in caps if isinstance(c, str)] if isinstance(caps, list) else []
+        if not self._stopped:
+            self.ready.emit(out)
+
+
 def format_stats(done: dict) -> str | None:
     """Riepilogo leggibile dal payload finale di /api/chat."""
     if not isinstance(done, dict):

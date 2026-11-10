@@ -281,6 +281,28 @@ dlg.deleteLater()
 wait_until(lambda: False, 100)
 print("9. elenco del gestore aggiornato anche con una richiesta in volo OK")
 
+# ---------------- 10. modelli che non sanno chattare: fuori dal selettore
+
+fake.models.append("incorpora:1b")
+fake.model_caps["incorpora:1b"] = ["embedding"]
+engine.refresh_models()
+assert wait_until(lambda: "incorpora:1b" in engine.model_names())
+assert wait_until(lambda: engine.model_caps("incorpora:1b") == ["embedding"])
+assert "incorpora:1b" not in engine.chat_model_names()
+assert engine.chat_model_names() == [n for n in engine.model_names() if n != "incorpora:1b"]
+d = info()
+by_name = {m["name"]: m for m in d["models"]}
+# il gestore del telefono lo mostra (per eliminarlo), il selettore no
+assert by_name["incorpora:1b"]["chat"] is False and by_name[MODELS[0]]["chat"] is True
+st, res = cc.post_json("/api/send", {"text": "ciao", "model": "incorpora:1b"}, TOKEN)
+assert st == 400 and "non disponibile" in res["error"], (st, res)
+# già note: un nuovo elenco non le richiede, finché il digest non cambia
+asked = len(fake.shows)
+engine.refresh_models()
+assert wait_until(lambda: engine._models_worker is None and engine._caps_worker is None)
+assert len(fake.shows) == asked, fake.shows[asked:]
+print("10. modelli senza chat esclusi dal selettore, non dal gestore OK")
+
 srv.stop()
 wait_until(lambda: False, 200)
 fake.close()

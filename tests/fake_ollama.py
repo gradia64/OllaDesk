@@ -27,6 +27,7 @@ class FakeOllama:
         self.tags_release.set()
         self.deleted: list[str] = []
         self.capabilities = ["completion", "vision", "thinking"]   # risposta di /api/show
+        self.model_caps: dict[str, list[str]] = {}   # capacità diverse per un modello
         self.shows: list[str] = []         # modelli chiesti a /api/show
         fake = self
 
@@ -74,7 +75,8 @@ class FakeOllama:
                 if self.path == "/api/show":
                     # capacità del modello (badge accanto al selettore)
                     fake.shows.append(body.get("model"))
-                    self._json({"capabilities": list(fake.capabilities)})
+                    caps = fake.model_caps.get(body.get("model"), fake.capabilities)
+                    self._json({"capabilities": list(caps)})
                     return
                 if self.path == "/api/pull":
                     self.send_response(200)

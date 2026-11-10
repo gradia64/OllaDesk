@@ -30,7 +30,7 @@ from PySide6.QtWidgets import (
 from . import __version__, app_update, companion, config, icons, theme, updater, web_search
 from .i18n import _
 from .engine import ChatEngine
-from .ollama_client import ApiWorker, shutdown_workers
+from .ollama_client import shutdown_workers
 from .widgets.chat_area import ChatArea
 from .widgets.model_manager import ModelManagerDialog
 from .widgets.ollama_update import OllamaUpdateDialog
@@ -74,8 +74,6 @@ class MainWindow(QMainWindow):
         self._app_update_worker: app_update.AppUpdateCheckWorker | None = None
         self._ollama_update_worker: updater.UpdateCheckWorker | None = None
         self._ollama_version = ""   # versione del server, se raggiungibile
-        self._model_caps: dict[str, list[str]] = {}   # capacità per modello (/api/show)
-        self._caps_worker: ApiWorker | None = None
         self._app_update: dict | None = None   # release più recente trovata
         self._preferred_model: str | None = None
         self._workers = WorkerRegistry()
@@ -282,6 +280,7 @@ class MainWindow(QMainWindow):
         e.status_changed.connect(self._on_status_changed)
         e.models_loading.connect(self._on_models_loading)
         e.models_changed.connect(self._set_models)
+        e.caps_changed.connect(self._show_model_caps)
 
     def _shortcuts(self) -> None:
         for seq, fn in (
@@ -322,7 +321,7 @@ class MainWindow(QMainWindow):
         icons.set_icon(self.app_update_btn, "circle-arrow-up", t["accent"], 16)
         self.sidebar.apply_icons(self._resolved_theme)
         name = self.model_combo.currentData()
-        self._render_caps(self._model_caps.get(name, []) if name else [])
+        self._render_caps((self.engine.model_caps(name) or []) if name else [])
 
     def _rerender_messages(self) -> None:
         # la risposta in corso non è ancora in current_chat: dopo i messaggi
@@ -439,10 +438,9 @@ class MainWindow(QMainWindow):
     # ----------------------------------------------------------------- modelli
 
     def model_names(self) -> list[str]:
-        return self.engine.model_names()
+        return self.engine.chat_model_names()
 
     def _refresh_models(self) -> None:
-        self._model_caps.clear()   # un modello aggiornato può cambiare capacità
         self.engine.refresh_models()
 
     def _on_models_loading(self, loading: bool) -> None:
@@ -456,7 +454,7 @@ class MainWindow(QMainWindow):
             self.model_combo.setEnabled(False)
         else:
             self.model_combo.setEnabled(True)
-            for m in self.engine.models():
+            for m in self.engine.chat_models():
                 det = m.get("details", {})
                 label = m["name"]
                 extra = " · ".join(x for x in (det.get("parameter_size", ""), det.get("quantization_level", "")) if x)
@@ -484,28 +482,10 @@ class MainWindow(QMainWindow):
     _CAP_ICONS = {"vision": ("eye", "👁"), "thinking": ("brain", "🧠"), "tools": ("wrench", "🔧")}
 
     def _show_model_caps(self) -> None:
+        # capacità chieste dal motore a /api/show insieme all'elenco: finché
+        # non arrivano niente badge (caps_changed li aggiorna)
         name = self.model_combo.currentData()
-        caps = self._model_caps.get(name) if name else None
-        self._render_caps(caps or [])
-        if name and caps is None and self._caps_worker is None:
-            w = ApiWorker(self.settings["host"], "/api/show", self, payload={"model": name})
-            w.ready.connect(lambda data, n=name: self._on_model_caps(n, data))
-            # errore (server spento…): niente badge, si riprova al prossimo
-            # cambio di modello o ricaricamento dell'elenco
-            w.failed.connect(lambda _e: None)
-            w.finished.connect(w.deleteLater)
-            w.finished.connect(self._workers.clear_ref(self, "_caps_worker", w))
-            self._caps_worker = w
-            self._workers.track(w)
-            w.start()
-
-    def _on_model_caps(self, name: str, data: object) -> None:
-        caps = data.get("capabilities") if isinstance(data, dict) else None
-        # versioni di Ollama senza il campo: nessun badge, e non si richiede più
-        self._model_caps[name] = [c for c in caps if isinstance(c, str)] if isinstance(caps, list) else []
-        # il modello può essere cambiato mentre si aspettava: si ricomincia
-        # da quello scelto ora (dalla cache, o con una nuova richiesta)
-        QTimer.singleShot(0, self._show_model_caps)
+        self._render_caps((self.engine.model_caps(name) or []) if name else [])
 
     def _render_caps(self, caps: list[str]) -> None:
         t = theme.palette_for(self._resolved_theme)
