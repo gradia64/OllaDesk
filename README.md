@@ -84,7 +84,7 @@ License: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   path remains in the conversation.
 - **Reasoning (thinking)**: with models that support it (qwen3, deepseek-r1…)
   the 🧠 button in the input enables or disables reasoning, and the model's
-  thought appears in the bubble in a "💭 Thought" block in streaming,
+  thought appears in the bubble in a "💭 Thinking" block in streaming,
   collapsible when the reply arrives and saved in the conversation. While the
   model thinks, the bubble doesn't just show dots: it shows "thinking…" and
   then the reasoning text.
@@ -470,7 +470,7 @@ menu.
 
 In the "Model parameters" tab each row has a customization checkbox: **only
 checked parameters** are included in the `options` of the request to
-`/api/chat`; the others keep Ollama's defaults, so "Reset to defaults" is
+`/api/chat`; the others keep Ollama's defaults, so "Restore defaults" is
 equivalent to sending no customization anymore.
 
 Profiles are saved per-model in `~/.config/olladesk/model_params.json` and are
