@@ -59,8 +59,10 @@ probe.bind(("127.0.0.1", 0))
 PORT = probe.getsockname()[1]
 probe.close()
 s = config.load_settings()
+# niente controlli di rete (vedi companion_send_test: il worker della release
+# di Ollama, ancora vivo all'uscita, faceva abortire il processo)
 s.update(host=fake.host, companion=True, companion_port=PORT,
-         app_update_check=False, tray_icon=False)
+         app_update_check=False, ollama_update_check=False, tray_icon=False)
 config.save_settings(s)
 for cid, title in (("chat_a", "Chat A"), ("chat_b", "Chat B")):
     config.save_chat({"id": cid, "title": title, "model": "finto", "updated": 1,

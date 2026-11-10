@@ -30,7 +30,7 @@ from PySide6.QtCore import QEventLoop, QThread, QTimer, Signal
 from PySide6.QtWidgets import QApplication
 
 from fake_ollama import MODELS, FakeOllama
-from olladesk import companion, config, web_search
+from olladesk import companion, config, ollama_client, web_search
 from olladesk.engine import ChatEngine
 
 slot_errors = []
@@ -84,7 +84,12 @@ def wait_until(pred, ms=5000):
 
 
 settings = config.load_settings()
-settings.update(host=fake.host, app_update_check=False, tray_icon=False)
+# niente controlli di rete: con il finto Ollama locale e online la finestra
+# chiederebbe a GitHub l'ultima release di Ollama, e quel worker (timeout di
+# 10 s, nessuno stop) era ancora vivo all'uscita: «QThread: Destroyed while
+# thread '' is still running» e abort dopo «COMPANION SEND OK»
+settings.update(host=fake.host, app_update_check=False, ollama_update_check=False,
+                tray_icon=False)
 config.save_settings(settings)
 
 engine = ChatEngine(config.load_settings())
@@ -423,6 +428,9 @@ srv.stop()
 assert wait_until(lambda: idle.ended, 5000), "lo stream SSE non si è chiuso con il server"
 assert srv.uploads.pending() == 0 and not any(p.name.endswith("_orfano2.txt") for p in folder.iterdir())
 print("6. stream chiusi all'arresto del server OK")
+# il primo motore non serve più: come alla chiusura dell'app, i suoi worker
+# si fermano e si attendono prima che l'interprete esca
+ollama_client.shutdown_workers(engine.shutdown())
 
 # -------------------------------------------------- 7. finestra desktop
 
