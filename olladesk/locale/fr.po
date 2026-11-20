@@ -105,7 +105,7 @@ msgid "nessuno scaricamento in corso"
 msgstr "aucun téléchargement en cours"
 
 #: olladesk/companion.py:438
-#: olladesk/engine.py:370
+#: olladesk/engine.py:371
 msgid "modello non installato"
 msgstr "modèle non installé"
 
@@ -207,7 +207,7 @@ msgid "nome del modello non valido"
 msgstr "nom de modèle non valide"
 
 #: olladesk/config.py:289
-#: olladesk/engine.py:408
+#: olladesk/engine.py:409
 #: olladesk/widgets/sidebar.py:225
 #: olladesk/web/app.js:164
 #: olladesk/web/app.js:475
@@ -419,47 +419,47 @@ msgstr ""
 "\n"
 "[une recherche web a été jointe lors d'un tour précédent]"
 
-#: olladesk/engine.py:346
-#: olladesk/engine.py:366
+#: olladesk/engine.py:347
+#: olladesk/engine.py:367
 msgid "OllaDesk si sta chiudendo"
 msgstr "OllaDesk est en cours de fermeture"
 
-#: olladesk/engine.py:348
+#: olladesk/engine.py:349
 msgid "nome del modello mancante"
 msgstr "nom du modèle manquant"
 
-#: olladesk/engine.py:350
-#: olladesk/engine.py:368
+#: olladesk/engine.py:351
+#: olladesk/engine.py:369
 msgid "un'altra operazione sui modelli è già in corso"
 msgstr "une autre opération sur les modèles est déjà en cours"
 
-#: olladesk/engine.py:372
+#: olladesk/engine.py:373
 msgid "il PC sta rispondendo: riprova alla fine"
 msgstr "le PC est en train de répondre : réessayez à la fin"
 
-#: olladesk/engine.py:389
+#: olladesk/engine.py:390
 msgid "scaricamento annullato"
 msgstr "téléchargement annulé"
 
-#: olladesk/engine.py:404
+#: olladesk/engine.py:405
 msgid "⚠ Impossibile salvare la conversazione su disco: spazio esaurito o permessi mancanti?"
 msgstr "⚠ Impossible d'enregistrer la conversation sur le disque : espace épuisé ou permissions manquantes ?"
 
-#: olladesk/engine.py:483
+#: olladesk/engine.py:484
 #, python-brace-format
 msgid "il modello «{model}» è in eliminazione"
 msgstr "le modèle « {model} » est en cours de suppression"
 
-#: olladesk/engine.py:512
+#: olladesk/engine.py:513
 #, python-brace-format
 msgid "file non leggibile: {name}"
 msgstr "fichier illisible : {name}"
 
-#: olladesk/engine.py:516
+#: olladesk/engine.py:517
 msgid "Ricerca web saltata: scrivi una domanda insieme agli allegati."
 msgstr "Recherche web ignorée : écrivez une question avec les pièces jointes."
 
-#: olladesk/engine.py:614
+#: olladesk/engine.py:615
 #, python-brace-format
 msgid ""
 "⚠ Ricerca web non riuscita ({err}).\n"
@@ -468,20 +468,25 @@ msgstr ""
 "⚠ Échec de la recherche web ({err}).\n"
 "Je continue sans les résultats web."
 
-#: olladesk/engine.py:640
+#: olladesk/engine.py:641
 msgid "Allegati"
 msgstr "Pièces jointes"
 
-#: olladesk/engine.py:728
+#: olladesk/engine.py:729
 #, python-brace-format
 msgid "impossibile preparare la richiesta: {error}"
 msgstr "impossible de préparer la requête : {error}"
 
-#: olladesk/engine.py:817
+#: olladesk/engine.py:821
 msgid "Il modello ha provato a chiamare uno strumento non disponibile invece di rispondere: la chiamata è stata tolta dalla risposta."
 msgstr "Le modèle a essayé d'appeler un outil non disponible au lieu de répondre : l'appel a été retiré de la réponse."
 
-#: olladesk/engine.py:910
+#: olladesk/engine.py:920
+#, python-brace-format
+msgid "La ricerca web non risponde ({count} tentativi falliti di fila): il modello continua senza."
+msgstr "La recherche web ne répond pas ({count} tentatives échouées d'affilée) : le modèle continue sans elle."
+
+#: olladesk/engine.py:929
 #, python-brace-format
 msgid "Raggiunto il limite di {count} giri di strumenti: il modello risponde con quello che ha raccolto."
 msgstr "Limite de {count} tours d'outils atteinte : le modèle répond avec ce qu'il a recueilli."

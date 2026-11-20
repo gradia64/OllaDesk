@@ -158,6 +158,43 @@ FINAL_ANSWER_REQUEST = (
 )
 
 
+WEB_UNAVAILABLE_REQUEST = (
+    "Web search is unavailable right now: it failed twice in a row, so web_search and "
+    "fetch_page were removed for the rest of this answer. Do not try to search again: "
+    "answer with what you know or have found, and tell the user that the web search failed."
+)
+
+_WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+_MONTHS = ("January", "February", "March", "April", "May", "June", "July", "August",
+           "September", "October", "November", "December")
+
+
+def today_note(day) -> str:
+    """Data di oggi per il modello, in inglese e senza dipendere dal locale.
+
+    Con la ricerca web serve: un modello crede di vivere nell'anno del suo
+    addestramento e cerca «2024 2025», trovando notizie vecchie.
+    """
+    return (f"Today's date is {_WEEKDAYS[day.weekday()]} {day.day} {_MONTHS[day.month - 1]} "
+            f"{day.year}. Your training data may be older: for recent events, search with "
+            "this date in mind and do not assume an earlier year.")
+
+
+def failed_web_streak(rounds) -> int:
+    """Ricerche web fallite di fila, alla fine dei giri completi."""
+    streak = 0
+    for rnd in rounds or []:
+        for c in rnd.get("calls") or []:
+            if c.get("name") != "web_search":
+                continue
+            result = str(c.get("result") or "")
+            if not c.get("error"):
+                streak = 0
+            elif result.startswith(("Error: web search failed", "Error: web search is unavailable")):
+                streak += 1
+    return streak
+
+
 def leaked_call_at(text: str) -> int:
     """Posizione della prima chiamata scritta come testo, -1 se non ce n'è."""
     found = [i for i in (text.find(m) for m in LEAKED_CALL_MARKERS) if i >= 0]

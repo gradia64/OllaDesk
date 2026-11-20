@@ -3038,6 +3038,18 @@ def test_tool_rounds_repeats_and_source_cap():
     assert out[5] == out[6] == ("scritto", False)          # non di sola lettura: sempre eseguito
     assert runs == [{"n": 1}, {}, {}]
 
+    # data di oggi e ricerche fallite di fila
+    import datetime
+    assert tools.today_note(datetime.date(2026, 11, 20)).startswith(
+        "Today's date is Friday 20 November 2026.")
+    ko = {"name": "web_search", "error": True, "result": "Error: web search failed: x"}
+    no = {"name": "web_search", "error": True, "result": "Error: web search is unavailable now"}
+    ok = {"name": "web_search", "error": False, "result": "ok"}
+    other = {"name": "read_file", "error": True, "result": "Error: x"}
+    assert tools.failed_web_streak([{"calls": [ko]}, {"calls": [other, no]}]) == 2
+    assert tools.failed_web_streak([{"calls": [ko, ok]}, {"calls": [ko]}]) == 1
+    assert tools.failed_web_streak([{"calls": [{**ko, "result": "Error: Missing query."}]}]) == 0
+
     # fonti: le prime 3 per ricerca, al massimo 10 in tutto
     def search(q):
         res = [(f"{q}{i}", f"https://{q}.it/{i}", "") for i in range(5)]

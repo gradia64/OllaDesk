@@ -16,6 +16,7 @@ salvano nel messaggio dell'assistente, in "tool_rounds".
 """
 from __future__ import annotations
 
+import datetime
 import time
 from pathlib import Path
 
@@ -753,6 +754,9 @@ class ChatEngine(QObject):
         self._turn_tools = self._tools_for(chat, web=self._web_tool)
         if self._use_tools and len(self._turn_tools) and self.tools_supported(model):
             payload["tools"] = self._turn_tools.schemas()
+            if self._turn_tools.get("web_search") is not None:
+                # con la ricerca il modello deve sapere che giorno è
+                _add_system_note(messages, tools.today_note(datetime.date.today()))
 
         self._pending_stream = ""
         self._pending_think = ""
@@ -901,6 +905,21 @@ class ChatEngine(QObject):
             if c["name"] == "web_search" and not c.get("error"):
                 self._page_urls.update(web_search.page_url_key(src["url"])
                                        for src in web_search.web_sources(c["result"]))
+        if ("tools" in self._payload and len(self._rounds) < tools.MAX_ROUNDS
+                and tools.failed_web_streak(self._rounds) >= web_search.MAX_SEARCH_FAILURES
+                and any(t["function"]["name"] in WEB_TOOLS for t in self._payload["tools"])):
+            # la ricerca non risponde: i tool web escono dalla richiesta, così
+            # il modello non spreca i giri restanti a riprovarla
+            left = [t for t in self._payload["tools"] if t["function"]["name"] not in WEB_TOOLS]
+            if left:
+                self._payload["tools"] = left
+            else:
+                del self._payload["tools"]
+            self._payload["messages"].append(
+                {"role": "user", "content": tools.WEB_UNAVAILABLE_REQUEST})
+            self.notice.emit(self._active_id, "⚠ " + _(
+                'La ricerca web non risponde ({count} tentativi falliti di fila): il modello '
+                'continua senza.').format(count=web_search.MAX_SEARCH_FAILURES))
         if len(self._rounds) >= tools.MAX_ROUNDS and "tools" in self._payload:
             # senza tool il modello deve rispondere con quello che ha: glielo
             # si chiede in chiaro, o un modello piccolo ritenta una chiamata
@@ -1058,6 +1077,19 @@ def _assistant_messages(m: dict, full_results: bool) -> list[dict]:
         out.extend(results)
     out.append({"role": "assistant", "content": content[used:] if out else content})
     return out
+
+
+# tool che escono dalla richiesta quando la ricerca web non risponde
+WEB_TOOLS = ("web_search", "fetch_page")
+
+
+def _add_system_note(messages: list[dict], note: str) -> None:
+    """Aggiunge `note` al prompt di sistema (uno solo: alcuni template di
+    Ollama leggono solo il primo), creandolo se manca."""
+    if messages and messages[0].get("role") == "system":
+        messages[0] = {**messages[0], "content": messages[0]["content"] + "\n\n" + note}
+    else:
+        messages.insert(0, {"role": "system", "content": note})
 
 
 def _set_tools_flag(chat: dict, on: bool) -> None:

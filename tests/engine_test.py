@@ -586,6 +586,7 @@ print("9h. tool sui file condivisi nella chat OK")
 searches: list[str] = []
 search_gate = threading.Event()
 search_gate.set()
+search_broken = threading.Event()   # ricerca che fallisce sempre
 
 
 class FakeSearcher:
@@ -596,6 +597,8 @@ class FakeSearcher:
     def find(self, query):
         searches.append(query)
         search_gate.wait(10)
+        if search_broken.is_set():
+            raise web_search.WebSearchError("motori in timeout")
         if self.stopped:
             return [], None
         return [("Rame", "https://esempio.it/rame", "prezzo del rame")], None
@@ -615,6 +618,11 @@ assert [t["function"]["name"] for t in payloads[n0]["tools"]] == ["fetch_page", 
 assert searches == ["rame"]
 # fetch_page può aprire solo le pagine uscite dalle ricerche di questa risposta
 assert engine._page_urls == {"https://esempio.it/rame"}, engine._page_urls
+# con la ricerca il modello riceve la data di oggi nel prompt di sistema
+import datetime  # noqa: E402
+
+assert payloads[n0]["messages"][0]["role"] == "system"
+assert payloads[n0]["messages"][0]["content"].endswith(tools.today_note(datetime.date.today()))
 assert payloads[n0 + 1]["messages"][-1]["tool_name"] == "web_search"
 assert "esempio.it/rame" in payloads[n0 + 1]["messages"][-1]["content"]
 msg = config.load_chat(c9i)["messages"]
@@ -639,6 +647,23 @@ assert wait_until(lambda: searches == ["rame"])
 engine.stop()
 assert wait_until(lambda: not engine.busy()) and search_gate.is_set()
 print("9i. ricerca web come tool OK")
+
+# 9j. ricerca che non risponde: dopo 2 fallimenti i tool web escono dalla richiesta
+search_broken.set()
+searches.clear()
+events.clear()
+n0 = len(payloads)
+c9j = engine.send(None, "cerca con lo strumento infinito", "finto", web=True, tools=True)
+assert wait_until(lambda: not engine.busy(), 10000)
+sent = payloads[n0:]
+assert searches == ["rame", "rame"], searches        # niente terza ricerca
+assert len(sent) == 3 and "tools" in sent[1] and "tools" not in sent[2], len(sent)
+assert sent[2]["messages"][-1] == {"role": "user", "content": tools.WEB_UNAVAILABLE_REQUEST}
+assert any("non risponde (2 tentativi" in e[2] for e in events if e[0] == "notice")
+assert finished()[-1][1:3] == (c9j, "done")
+assert len(config.load_chat(c9j)["messages"][1]["tool_rounds"]) == 2
+search_broken.clear()
+print("9j. ricerca guasta: tool web tolti OK")
 
 # ---------------------------------------------------------------- chiusura
 

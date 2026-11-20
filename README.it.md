@@ -104,7 +104,9 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   query scritta da lui, invece della ricerca automatica prima della risposta,
   e può aprire una delle pagine trovate per leggerne il testo (solo pagine
   uscite dalle sue ricerche, mai indirizzi della rete locale); se la ricerca fallisce due volte di
-  fila non la ritenta e il modello risponde senza;
+  fila gli strumenti web vengono tolti e il modello risponde senza; con la
+  ricerca il modello riceve anche la data di oggi, per non cercare notizie
+  dell'anno sbagliato;
   con 🌐 spenta non va in rete. Al massimo 8 giri di strumenti per risposta: il
   modello sa quanti gliene restano (all'ultimo gli si chiede di rispondere), e una lettura identica a una già fatta non
   si ripete. Sa anche che i file condivisi sono in sola lettura, così non dice
