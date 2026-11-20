@@ -1,8 +1,8 @@
-# Flatpak (bundle nelle release, Flathub dopo la 0.4.0)
+# Flatpak (bundle nelle release, Flathub rimandato)
 
 Bundle Flatpak di OllaDesk, `OllaDesk-X.Y.Z.flatpak`, costruito e provato dal job
 `flatpak` di `release.yml` e allegato alle release, firmato come gli altri file.
-La consegna a Flathub è prevista dopo il rilascio della 0.4.0 (vedi «Flathub»). Primo build riuscito il 2026-10-25 (Plasma 6, Wayland):
+La consegna a Flathub è rimandata (decisione del 2026-11-20, per la policy di Flathub sul manifest): per ora il Flatpak si distribuisce solo come bundle nelle release su GitHub. Il manifest per Flathub resta pronto (vedi «Flathub»). Primo build riuscito il 2026-10-25 (Plasma 6, Wayland):
 l'app parte, PySide6 viene dalla base app, Ollama risponde dalla sandbox e il
 trascinamento da Dolphin allega file e cartelle. Restano i punti di «Cosa verificare»
 non ancora segnati ✅.
@@ -130,7 +130,7 @@ Sui tag il job `flatpak` lo genera e lo controlla con `flatpak-builder-lint` sen
 eccezioni (artefatto `flathub`). In locale: `scripts/flathub-manifest.py` e poi
 `scripts/lint-flatpak.sh --flathub-only`.
 
-Consegna (dopo la 0.4.0, con l'ok del maintainer): fork di `flathub/flathub`, ramo
+Consegna (rimandata; quando si farà, con l'ok del maintainer): fork di `flathub/flathub`, ramo
 dal ramo `new-pr`, i due file alla radice, PR verso `new-pr` con il titolo
 «Add io.github.gradia64.OllaDesk». L'ID `io.github.gradia64.*` si verifica con
 l'account GitHub `gradia64`. Dopo l'approvazione il manifest vive nel repository
