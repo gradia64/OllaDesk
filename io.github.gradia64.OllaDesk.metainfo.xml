@@ -178,6 +178,9 @@
   </languages>
 
   <releases>
+    <release version="0.4.0" date="2026-11-20">
+      <url type="details">https://github.com/gradia64/OllaDesk/releases/tag/v0.4.0</url>
+    </release>
     <release version="0.3.10" date="2026-11-10">
       <url type="details">https://github.com/gradia64/OllaDesk/releases/tag/v0.3.10</url>
     </release>
