@@ -32,6 +32,18 @@ build-options:
 # pulizia prescritta dalla base app, eseguita alla fine del build
 cleanup-commands:
   - /app/cleanup-BaseApp.sh
+  # F1: file della base app che servono solo a generare i binding o a sviluppare con
+  # Qt. Il `cleanup` più in basso non li toccherebbe: vale solo per i file installati
+  # dai moduli di questo manifest. Nessuna libreria in /app collega libLLVM o libclang
+  # (controllato con readelf); l'app importa solo QtCore, QtGui, QtWidgets e QtNetwork.
+  # Lo controlla packaging/flatpak/smoke_check.py.
+  - rm -rf /app/lib/libLLVM* /app/lib/libclang*                    # ~150 MB
+  - rm -rf /app/bin/shiboken6 /app/bin/shiboken6-genpyi
+  - rm -rf /app/lib/python3*/site-packages/shiboken6_generator /app/lib/python3*/site-packages/shiboken6_generator-*.dist-info
+  # PyOpenGL (~32 MB): OllaDesk non importa OpenGL
+  - rm -rf /app/lib/python3*/site-packages/OpenGL /app/lib/python3*/site-packages/pyopengl-*.dist-info
+  # strumenti di sviluppo di PySide6 (Designer, Assistant, lupdate, qml*, intestazioni)
+  - cd /app/lib/python3*/site-packages/PySide6 && rm -rf assistant balsam balsamui designer lrelease lupdate qmlformat qmllint qmlls qsb include typesystems glue
 
 # --- dipendenze e costruzione dell'app -------------------------------------
 modules:

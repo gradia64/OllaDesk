@@ -173,9 +173,8 @@ l'account GitHub `gradia64`. Dopo l'approvazione il manifest vive nel repository
    `setDesktopFileName` non viene chiamato e su Wayland app_id e icona sono sbagliati.
 7. ✅ **PySide6 della base app** (verificato: 6.11.2 da `/app/lib/python3.13/site-packages`) — `io.qt.PySide.BaseApp // 6.11` è PySide 6.11.2,
    allineato al pin dell'AppImage. Quando si passa a un altro runtime, `base-version`
-   e `runtime-version` vanno cambiati insieme. Dopo la pulizia restano in `/app/lib`
-   le librerie LLVM/clang della base (servono solo a generare i binding): possibile
-   risparmio di spazio da valutare dopo il primo build.
+   e `runtime-version` vanno cambiati insieme. Le librerie LLVM/clang della base
+   (servono solo a generare i binding) sono tolte dai `cleanup-commands` (vedi «Spazio»).
 
 ## Note
 
@@ -184,9 +183,13 @@ l'account GitHub `gradia64`. Dopo l'approvazione il manifest vive nel repository
   `--talk-name` per `com.canonical.AppMenu.Registrar`, `org.kde.kconfig.notify` e
   `org.kde.KGlobalSettings` (tema e colori di KDE). Controllarli con
   `flatpak info --show-permissions io.github.gradia64.OllaDesk`.
-- **Spazio:** dopo la pulizia restano in `/app/lib` circa 150 MB di librerie LLVM e
-  clang della base (`libLLVM.so.21.1`, `libclang-cpp.so.21.1`), che servono solo a
-  generare i binding.
+- **Spazio:** i `cleanup-commands` del manifest tolgono dalla base app ciò che serve
+  solo a generare i binding o a sviluppare con Qt: `libLLVM` e `libclang` (~150 MB),
+  `shiboken6_generator`, PyOpenGL (~32 MB, non usato) e gli strumenti di PySide6
+  (Designer, Assistant, lupdate, qml*, intestazioni). Il `cleanup` normale non basta:
+  vale solo per i file installati dai moduli del manifest, non per quelli della base.
+  Risultato il 2026-11-20: app installata da 320 a 119 MB, bundle da 59 a 20 MB.
+  `smoke_check.py` controlla che quei file non ci siano.
 
 - Formato YAML per i commenti; Flathub usa spesso JSON (senza commenti). Equivalenti.
 - `sources` punta a `../../` (checkout locale): in CI è il checkout del tag, già

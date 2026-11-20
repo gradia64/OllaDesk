@@ -47,4 +47,13 @@ w.write(buf)
 assert len(PdfReader(io.BytesIO(buf.getvalue())).pages) == 1
 
 import ssl  # noqa: E402,F401  ricerca web e GitHub via HTTPS
+import PySide6.QtNetwork  # noqa: E402,F401  i quattro moduli Qt che l'app importa
+
+# F1: gli strumenti per generare i binding non sono nel bundle
+import glob  # noqa: E402
+leftovers = [p for pat in ("/app/lib/libLLVM*", "/app/lib/libclang*", "/app/bin/shiboken6*",
+                           "/app/lib/python3*/site-packages/shiboken6_generator",
+                           "/app/lib/python3*/site-packages/OpenGL")
+             for p in glob.glob(pat)]
+assert not leftovers, leftovers
 print(f"Flatpak di OllaDesk {__version__}: controlli OK")
