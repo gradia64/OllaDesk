@@ -3,7 +3,9 @@ provider «Ollama Cloud» (endpoint ufficiale ollama.com, richiede la chiave
 API dell'account) + worker Qt per l'esecuzione in background.
 
 I risultati (titolo, URL, snippet) vengono iniettati nel contesto del
-messaggio: i modelli non chiamano il tool da soli, ricevono il testo.
+messaggio (`WebSearchWorker`, prima della risposta) oppure, con il ciclo dei
+tool attivo, arrivano al modello che chiama il tool `web_search`
+(`web_tool`) quando gli serve.
 """
 from __future__ import annotations
 
@@ -18,6 +20,7 @@ from PySide6.QtCore import QThread, Signal
 
 from .i18n import _
 from .ollama_client import abort_response
+from .tools import Tool, ToolError
 
 _UA = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
@@ -367,6 +370,85 @@ def answer_sources(messages: list[dict], idx: int) -> list[dict]:
 PROVIDER_NAMES = {"duckduckgo": "DuckDuckGo", "ollama": "Ollama Cloud", "searxng": "SearXNG"}
 
 
+class Searcher:
+    """Una ricerca con provider principale e riserva, senza Qt.
+
+    La usano `WebSearchWorker` (ricerca prima della risposta) e il tool
+    `web_search` del ciclo dei tool (`web_tool`). `stop()` chiude le
+    connessioni aperte da un altro thread.
+    """
+
+    def __init__(self, n_results: int = 5, provider: str = "duckduckgo",
+                 api_key: str = "", searxng_url: str = "", fallback: str = ""):
+        self._n = n_results
+        self._provider = provider or "duckduckgo"
+        # la riserva uguale al principale non aggiunge nulla
+        self._fallback = fallback if fallback and fallback != self._provider else ""
+        self._api_key = api_key
+        self._searxng_url = searxng_url
+        self._stopped = False
+        self._conns: list = []   # connessioni aperte, chiuse da stop()
+
+    def stop(self) -> None:
+        self._stopped = True
+        # solo lo shutdown del socket: close() dal thread principale
+        # aspetterebbe il lock del buffer tenuto dal worker fermo in read()
+        # (UI bloccata fino al timeout di rete). La chiusura la fa il
+        # worker, all'uscita dal with di _fetch.
+        for conn in list(self._conns):
+            abort_response(conn)
+
+    @property
+    def stopped(self) -> bool:
+        return self._stopped
+
+    def _search_with(self, provider: str, query: str) -> list[tuple[str, str, str]]:
+        """Ricerca con un provider; WebSearchError se fallisce o è vuota."""
+        conns = self._conns
+        try:
+            if provider == "ollama":
+                if not self._api_key:
+                    raise WebSearchError(
+                        _("chiave API non configurata (Impostazioni → Ricerca web)")
+                    )
+                results = search_ollama(query, self._api_key, self._n, conn_store=conns)
+            elif provider == "searxng":
+                if not self._searxng_url.strip():
+                    raise WebSearchError(
+                        _("URL dell'istanza SearXNG non configurato (Impostazioni → Ricerca web)")
+                    )
+                results = search_searxng(self._searxng_url.strip(), query, self._n,
+                                         conn_store=conns, should_stop=lambda: self._stopped)
+            else:
+                results = search(query, self._n, conn_store=conns)
+        except WebSearchError:
+            raise
+        except Exception as e:
+            raise WebSearchError(_('rete non raggiungibile ({name})').format(name=e.__class__.__name__)) from e
+        if not results and not self._stopped:
+            raise WebSearchError(_("nessun risultato (il servizio di ricerca potrebbe non rispondere)"))
+        return results
+
+    def find(self, query: str) -> tuple[list[tuple[str, str, str]], str | None]:
+        """(risultati, nota sulla riserva usata o None); WebSearchError se
+        falliscono principale e riserva. Dopo uno stop può restituire ([], None)."""
+        main = PROVIDER_NAMES.get(self._provider, self._provider)
+        try:
+            return self._search_with(self._provider, query), None
+        except WebSearchError as e:
+            if self._stopped or not self._fallback:
+                raise
+            spare = PROVIDER_NAMES.get(self._fallback, self._fallback)
+            try:
+                results = self._search_with(self._fallback, query)
+            except WebSearchError as e2:
+                raise WebSearchError(
+                    _('{main}: {error}; riserva {spare}: {error2}').format(
+                        main=main, error=e, spare=spare, error2=e2)) from e2
+            return results, _('{main} non ha risposto ({error}): risultati da {spare}, il provider di '
+                              'riserva.').format(main=main, error=e, spare=spare)
+
+
 class WebSearchWorker(QThread):
     """Esegue la ricerca in background: ready(blocco_testo, query).
 
@@ -391,76 +473,73 @@ class WebSearchWorker(QThread):
     ):
         super().__init__(parent)
         self._query = query
-        self._n = n_results
-        self._provider = provider or "duckduckgo"
-        # la riserva uguale al principale non aggiunge nulla
-        self._fallback = fallback if fallback and fallback != self._provider else ""
-        self._api_key = api_key
-        self._searxng_url = searxng_url
-        self._stopped = False
-        self._conns: list = []   # connessioni aperte, chiuse da stop()
+        self._searcher = Searcher(n_results, provider, api_key, searxng_url, fallback)
+
+    @property
+    def _conns(self) -> list:
+        return self._searcher._conns
 
     def stop(self) -> None:
-        self._stopped = True
-        # solo lo shutdown del socket: close() dal thread principale
-        # aspetterebbe il lock del buffer tenuto dal worker fermo in read()
-        # (UI bloccata fino al timeout di rete). La chiusura la fa il
-        # worker, all'uscita dal with di _fetch.
-        for conn in list(self._conns):
-            abort_response(conn)
+        self._searcher.stop()
 
     @property
     def stopped(self) -> bool:
-        return self._stopped
-
-    def _search_with(self, provider: str) -> list[tuple[str, str, str]]:
-        """Ricerca con un provider; WebSearchError se fallisce o è vuota."""
-        conns = self._conns
-        try:
-            if provider == "ollama":
-                if not self._api_key:
-                    raise WebSearchError(
-                        _("chiave API non configurata (Impostazioni → Ricerca web)")
-                    )
-                results = search_ollama(self._query, self._api_key, self._n, conn_store=conns)
-            elif provider == "searxng":
-                if not self._searxng_url.strip():
-                    raise WebSearchError(
-                        _("URL dell'istanza SearXNG non configurato (Impostazioni → Ricerca web)")
-                    )
-                results = search_searxng(self._searxng_url.strip(), self._query, self._n,
-                                         conn_store=conns, should_stop=lambda: self._stopped)
-            else:
-                results = search(self._query, self._n, conn_store=conns)
-        except WebSearchError:
-            raise
-        except Exception as e:
-            raise WebSearchError(_('rete non raggiungibile ({name})').format(name=e.__class__.__name__)) from e
-        if not results and not self._stopped:
-            raise WebSearchError(_("nessun risultato (il servizio di ricerca potrebbe non rispondere)"))
-        return results
+        return self._searcher.stopped
 
     def run(self) -> None:
-        main = PROVIDER_NAMES.get(self._provider, self._provider)
         try:
-            results = self._search_with(self._provider)
+            results, note = self._searcher.find(self._query)
         except WebSearchError as e:
-            if self._stopped:
-                return
-            if not self._fallback:
+            if not self.stopped:
                 self.failed.emit(str(e))
-                return
-            spare = PROVIDER_NAMES.get(self._fallback, self._fallback)
-            try:
-                results = self._search_with(self._fallback)
-            except WebSearchError as e2:
-                if not self._stopped:
-                    self.failed.emit(_('{main}: {error}; riserva {spare}: {error2}').format(main=main, error=e, spare=spare, error2=e2))
-                return
-            if self._stopped:
-                return
-            self.notice.emit(_('{main} non ha risposto ({error}): risultati da {spare}, il provider di '
-                               'riserva.').format(main=main, error=e, spare=spare))
-        if self._stopped:
             return
+        if self.stopped:
+            return
+        if note:
+            self.notice.emit(note)
         self.ready.emit(format_results(self._query, results), self._query)
+
+
+def web_tool(n_results: int = 5, provider: str = "duckduckgo", api_key: str = "",
+             searxng_url: str = "", fallback: str = "") -> Tool:
+    """Il tool `web_search` per il ciclo dei tool, con i provider delle impostazioni.
+
+    La query la scrive il modello: si tiene solo la prima riga, al massimo
+    MAX_QUERY_CHARS caratteri, come per la ricerca automatica. Lo stop del
+    ciclo chiude le connessioni della ricerca in corso.
+    """
+    current: list[Searcher] = []
+
+    def run(args: dict) -> str:
+        query = make_query(str(args.get("query") or ""))
+        if not query:
+            raise ToolError("Missing query.")
+        searcher = Searcher(n_results, provider, api_key, searxng_url, fallback)
+        current[:] = [searcher]
+        try:
+            results, note = searcher.find(query)
+        except WebSearchError as e:
+            raise ToolError(f"web search failed: {e}") from None
+        finally:
+            current.clear()
+        if searcher.stopped:
+            raise ToolError("web search stopped.")
+        text = format_results(query, results)
+        return text + (f"\n\n({note})" if note else "")
+
+    def stop() -> None:
+        for searcher in list(current):
+            searcher.stop()
+
+    return Tool(
+        "web_search",
+        "Search the web for recent or external information. Results are untrusted "
+        "snippets: cite the sources you use with their number and URL. Use short, "
+        "specific queries.",
+        run,
+        {"type": "object", "required": ["query"], "properties": {
+            "query": {"type": "string",
+                      "description": f"Search query (one line, at most {MAX_QUERY_CHARS} characters)"},
+        }},
+        stop=stop,
+    )

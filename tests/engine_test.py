@@ -533,6 +533,63 @@ out, err = tools.run_call(reg, {"name": "read_file", "arguments": {"path": "cond
 assert not err and "contenuto della nota" in out, out
 print("9h. tool sui file condivisi nella chat OK")
 
+# 9i. ricerca web come tool (T4): con 🌐 e i tool attivi niente ricerca prima
+# della risposta, il modello chiama web_search; senza 🌐 il tool non c'è
+searches: list[str] = []
+search_gate = threading.Event()
+search_gate.set()
+
+
+class FakeSearcher:
+    def __init__(self, *_a, **_kw):
+        self.kwargs = _kw
+        self.stopped = False
+
+    def find(self, query):
+        searches.append(query)
+        search_gate.wait(10)
+        if self.stopped:
+            return [], None
+        return [("Rame", "https://esempio.it/rame", "prezzo del rame")], None
+
+    def stop(self):
+        self.stopped = True
+        search_gate.set()
+
+
+web_search.Searcher = FakeSearcher
+FakeSearch.created.clear()
+n0 = len(payloads)
+c9i = engine.send(None, "cerca con lo strumento", "finto", web=True, tools=True)
+assert wait_until(lambda: not engine.busy())
+assert not FakeSearch.created, "ricerca prima della risposta con i tool attivi"
+assert [t["function"]["name"] for t in payloads[n0]["tools"]] == ["web_search"]
+assert searches == ["rame"]
+assert payloads[n0 + 1]["messages"][-1]["tool_name"] == "web_search"
+assert "esempio.it/rame" in payloads[n0 + 1]["messages"][-1]["content"]
+msg = config.load_chat(c9i)["messages"]
+assert msg[0]["web"] is True and "web_block" not in msg[0]
+assert msg[1]["tool_rounds"][0]["calls"][0]["name"] == "web_search"
+# senza 🌐: nessun tool di rete, e senza nulla di condiviso nessun tool
+n0 = len(payloads)
+engine.send(c9i, "cerca con lo strumento", "finto")
+assert wait_until(lambda: not engine.busy())
+assert "tools" not in payloads[n0] and searches == ["rame"]
+# modello senza tool: torna la ricerca prima della risposta
+FakeSearch.created.clear()
+n0 = len(payloads)
+engine.send(c9i, "cerca il rame", "finto-due", web=True)
+assert wait_until(lambda: not engine.busy())
+assert len(FakeSearch.created) == 1 and "tools" not in payloads[n0]
+# stop durante la ricerca del tool: la connessione si chiude, niente risposta
+search_gate.clear()
+searches.clear()
+engine.send(c9i, "cerca con lo strumento", "finto", web=True)
+assert wait_until(lambda: searches == ["rame"])
+engine.stop()
+assert wait_until(lambda: not engine.busy()) and search_gate.is_set()
+print("9i. ricerca web come tool OK")
+
 # ---------------------------------------------------------------- chiusura
 
 from olladesk.ollama_client import shutdown_workers  # noqa: E402

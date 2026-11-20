@@ -44,6 +44,9 @@ class Tool:
     run: Callable[[dict], str]
     parameters: dict = field(default_factory=lambda: {"type": "object", "properties": {}})
     read_only: bool = True
+    # interrompe da un altro thread una chiamata in corso (connessioni di
+    # rete); None = il tool finisce da solo entro i suoi tetti di tempo
+    stop: Callable[[], None] | None = None
 
     def schema(self) -> dict:
         return {
@@ -161,9 +164,17 @@ class ToolWorker(QThread):
         self._stopped = False
 
     def stop(self) -> None:
-        """Nessuna nuova chiamata; quella in corso finisce da sola (i tool
-        hanno tetti di tempo), e il motore ne scarta il risultato."""
+        """Nessuna nuova chiamata; quella in corso si interrompe se il tool
+        ha un `stop`, altrimenti finisce da sola (i tool hanno tetti di
+        tempo). Il motore ne scarta il risultato."""
         self._stopped = True
+        for name in self._registry.names():
+            tool = self._registry.get(name)
+            if tool is not None and tool.stop is not None:
+                try:
+                    tool.stop()
+                except Exception:  # noqa: BLE001 — lo stop non deve fallire
+                    pass
 
     def run(self) -> None:
         for i, call in enumerate(self._calls):

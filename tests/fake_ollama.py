@@ -9,7 +9,7 @@ Risponde a /api/version, /api/tags e /api/chat (NDJSON). La risposta di
 
 Con i tool nella richiesta e «strumento» nell'ultimo messaggio utente, il
 finto modello scrive «Controllo. » e chiama un tool: «sconosciuto» →
-`inesistente`, «rotto» → `rotto`, «lento» → `lento`, altrimenti `eco`.
+`inesistente`, «rotto» → `rotto`, «lento» → `lento`, «cerca» → `web_search` (query «rame»), altrimenti `eco`.
 Dopo i risultati (ultimo messaggio `tool`) risponde «Ho letto: <risultato>»;
 con «infinito» richiama `eco` finché la richiesta offre i tool.
 """
@@ -115,10 +115,12 @@ class FakeOllama:
                             last_role == "user" or "infinito" in user):
                         name = ("inesistente" if "sconosciuto" in user else
                                 "rotto" if "rotto" in user else
-                                "lento" if "lento" in user else "eco")
+                                "lento" if "lento" in user else
+                                "web_search" if "cerca" in user else "eco")
+                        args = {"query": "rame"} if name == "web_search" else {"testo": "ciao"}
                         self._line({"message": {"content": "Controllo. "}})
                         self._line({"message": {"content": "", "tool_calls": [
-                            {"function": {"name": name, "arguments": {"testo": "ciao"}}}]}})
+                            {"function": {"name": name, "arguments": args}}]}})
                         self._line({"done": True})
                     elif last_role == "tool":
                         self._line({"message": {"content": "Ho letto: " + last}})

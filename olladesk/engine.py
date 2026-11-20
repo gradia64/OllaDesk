@@ -79,6 +79,7 @@ class ChatEngine(QObject):
         self.tools = tools.ToolRegistry()
         self._use_tools = False
         self._turn_tools = self.tools   # registro del turno: fissi + file della chat
+        self._web_tool = False          # 🌐 come tool in questo turno
         self._tool_worker: tools.ToolWorker | None = None
         self._payload: dict | None = None
         self._rounds: list[dict] = []
@@ -186,13 +187,17 @@ class ChatEngine(QObject):
         """
         return "tools" in (self.model_caps(name) or [])
 
-    def _tools_for(self, chat: dict) -> tools.ToolRegistry:
-        """Tool del turno: quelli fissi più la lettura di ciò che la chat condivide.
+    def _tools_for(self, chat: dict, web: bool = False) -> tools.ToolRegistry:
+        """Tool del turno: quelli fissi, la lettura di ciò che la chat
+        condivide e, con 🌐 acceso nell'invio, la ricerca web.
 
         Le cartelle e i file (non immagini) allegati nella conversazione sono
         l'unica parte del disco che il modello può leggere (`file_tools`).
+        Senza 🌐 il modello non va in rete.
         """
         extra = file_tools.make_tools(file_tools.shared_from_chat(chat))
+        if web:
+            extra.append(web_search.web_tool(**self._search_settings()))
         if not extra:
             return self.tools
         return tools.ToolRegistry([*(self.tools.get(n) for n in self.tools.names()), *extra])
@@ -499,6 +504,12 @@ class ChatEngine(QObject):
         if web and not web_search.make_query(text):
             warnings.append(_("Ricerca web saltata: scrivi una domanda insieme agli allegati."))
             web = False
+        # ricerca affiancata: con i tool attivi (scelta di questo invio o
+        # quella salvata) e un modello che li supporta, il modello cerca da
+        # solo con il tool web_search invece della ricerca prima della risposta
+        saved = self.chat(chat_id)
+        tools_on = tools if tools is not None else bool(saved and saved.get("tools") is True)
+        web_tool = web and tools_on and self.tools_supported(model)
 
         self._pending_user = {
             "chat_id": chat_id,
@@ -510,13 +521,15 @@ class ChatEngine(QObject):
             "model": model,
             "think": think,
             "tools": tools,
+            "web_tool": web_tool,
         }
         self._active_id = chat_id
-        self._phase = "search" if web else "chat"
+        pre_search = web and not web_tool
+        self._phase = "search" if pre_search else "chat"
         self.busy_changed.emit(True)
         if warnings:
             self.notice.emit(chat_id, "⚠ " + "\n⚠ ".join(warnings))
-        if web:
+        if pre_search:
             # il messaggio va subito in chat: la ricerca può durare secondi
             # (prima la bolla compariva solo a ricerca finita)
             self._search_msg = self._commit_user_message(start=False)
@@ -530,22 +543,10 @@ class ChatEngine(QObject):
     def _start_web_search(self) -> None:
         self._search_stopped = False
         self.search_started.emit(self._active_id)
-        s = self.settings
-        provider = s.get("web_provider", "duckduckgo")
-        fallback = s.get("web_fallback", "")
-        # la chiave serve solo a ollama.com: leggerla dal portachiavi
-        # (KWallet, nel thread della UI) costa fino a ~200 ms per niente
-        api_key = ""
-        if "ollama" in (provider, fallback):
-            api_key = secrets_store.load_api_key() or s.get("web_api_key", "")
         w = web_search.WebSearchWorker(
             web_search.make_query(self._search_msg[1]["display"]),
-            int(s.get("web_results", 5)),
-            provider=provider,
-            fallback=fallback,
-            api_key=api_key,
-            searxng_url=s.get("web_searxng_url", ""),
             parent=self,
+            **self._search_settings(),
         )
         w.ready.connect(self._on_web_results)
         w.failed.connect(self._on_web_failed)
@@ -555,6 +556,24 @@ class ChatEngine(QObject):
         self._search_worker = w
         self._workers.track(w)
         w.start()
+
+    def _search_settings(self) -> dict:
+        """Provider, riserva, chiave e numero di risultati della ricerca web."""
+        s = self.settings
+        provider = s.get("web_provider", "duckduckgo")
+        fallback = s.get("web_fallback", "")
+        # la chiave serve solo a ollama.com: leggerla dal portachiavi
+        # (KWallet, nel thread della UI) costa fino a ~200 ms per niente
+        api_key = ""
+        if "ollama" in (provider, fallback):
+            api_key = secrets_store.load_api_key() or s.get("web_api_key", "")
+        return {
+            "n_results": int(s.get("web_results", 5)),
+            "provider": provider,
+            "fallback": fallback,
+            "api_key": api_key,
+            "searxng_url": s.get("web_searxng_url", ""),
+        }
 
     def _on_web_results(self, block: str, _query: str) -> None:
         if self._search_stopped or self.sender() is not self._search_worker:
@@ -634,6 +653,7 @@ class ChatEngine(QObject):
         if p["tools"] is not None:
             _set_tools_flag(chat, p["tools"])
         self._use_tools = chat.get("tools") is True
+        self._web_tool = bool(p.get("web_tool"))
         self.user_message_added.emit(chat_id, msg)
         self._persist(chat)
         if start:
@@ -714,7 +734,7 @@ class ChatEngine(QObject):
         if not think:
             payload["think"] = False
         self._think_off_sent = not think
-        self._turn_tools = self._tools_for(chat)
+        self._turn_tools = self._tools_for(chat, web=self._web_tool)
         if self._use_tools and len(self._turn_tools) and self.tools_supported(model):
             payload["tools"] = self._turn_tools.schemas()
 
@@ -920,6 +940,7 @@ class ChatEngine(QObject):
         self._search_msg = None
         self._think_off_sent = False
         self._use_tools = False
+        self._web_tool = False
         self._payload = None
         self._rounds = []
         self._open_round = None

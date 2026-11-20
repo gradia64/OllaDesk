@@ -99,7 +99,10 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   (anche PDF e documenti), cercare un testo nei file di testo e codice. Solo
   lettura e solo ciò che è stato allegato, con le stesse esclusioni della
   cartella come contesto (nascosti, dipendenze, `.gitignore`, credenziali,
-  collegamenti che escono); al massimo 8 giri di strumenti per risposta. La
+  collegamenti che escono). Con la ricerca web (🌐) accesa il modello cerca
+  anche sul web quando gli serve, con il provider delle impostazioni e una
+  query scritta da lui, invece della ricerca automatica prima della risposta;
+  con 🌐 spenta non va in rete. Al massimo 8 giri di strumenti per risposta. La
   scelta vale per la conversazione e il telefono la rispetta.
 - **Companion web** (voce «📱 Companion» della barra laterale, `Ctrl+D`;
   spenta di default): una
@@ -230,8 +233,9 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   chat dice quale ha risposto. Il messaggio compare in chat subito, mentre
   la ricerca è in corso.
   Come query viene usata solo la prima riga del messaggio (massimo 200
-  caratteri), non l'intero testo. Il numero di risultati è configurabile. I modelli non chiamano il tool da
-  soli: i risultati vengono iniettati nel prompt dalla GUI (verificato e2e).
+  caratteri), non l'intero testo. Il numero di risultati è configurabile. I risultati vengono iniettati nel
+  prompt dalla GUI (verificato e2e); con gli Strumenti (🔧) attivi e un modello
+  che li supporta, invece, è il modello a cercare quando gli serve (vedi sopra).
 - **Aggiornamenti Ollama**: all'avvio, al massimo una volta al giorno, l'app
   controlla l'ultima release su GitHub; se è più recente del server in uso,
   l'indicatore di stato in alto a destra mostra «⬆ versione». Un clic

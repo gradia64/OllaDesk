@@ -327,8 +327,9 @@ class ChatArea(QWidget):
         self.tools_btn.setIconSize(QSize(18, 18))
         self.tools_btn.setToolTip(
             _("Strumenti: acceso (icona colorata), il modello può leggere le cartelle e i "
-              "file allegati alla conversazione mentre risponde;\nspento (icona grigia), "
-              "risponde come sempre. Vale per questa conversazione.")
+              "file allegati alla conversazione mentre risponde e, con la ricerca web accesa, "
+              "cercare da solo sul web;\nspento (icona grigia), risponde come sempre. "
+              "Vale per questa conversazione.")
         )
         self.tools_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.tools_btn.toggled.connect(self._on_tools_toggled)

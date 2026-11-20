@@ -2884,5 +2884,39 @@ def test_file_tools_shared_folders():
         assert err, out
 
 
+def test_web_search_tool():
+    """Il tool web_search: query su una riga, errori e riserva come testo al modello."""
+    from unittest.mock import patch
+
+    from olladesk import tools, web_search
+
+    reg = tools.ToolRegistry([web_search.web_tool(3, "duckduckgo", fallback="searxng",
+                                                  searxng_url="http://127.0.0.1:1")])
+    asked: list[str] = []
+
+    def ddg(query, *_a, **_k):
+        asked.append(query)
+        raise web_search.WebSearchError("bloccato")
+
+    def sx(_url, query, *_a, **_k):
+        return [("Rame", "https://esempio.it/rame", "prezzo")]
+
+    with patch.object(web_search, "search", ddg), patch.object(web_search, "search_searxng", sx):
+        out, err = tools.run_call(reg, {"name": "web_search",
+                                        "arguments": {"query": "prezzo rame\naltro"}})
+    assert not err and asked == ["prezzo rame"], (out, asked)
+    assert "esempio.it/rame" in out and "SearXNG" in out, out
+
+    def sx_ko(*_a, **_k):
+        raise web_search.WebSearchError("spento")
+
+    with patch.object(web_search, "search", ddg), patch.object(web_search, "search_searxng", sx_ko):
+        out, err = tools.run_call(reg, {"name": "web_search", "arguments": {"query": "rame"}})
+    assert err and out.startswith("Error: web search failed:") and "spento" in out, out
+    out, err = tools.run_call(reg, {"name": "web_search", "arguments": {}})
+    assert err and "Missing query" in out, out
+    assert reg.get("web_search").stop is not None
+
+
 if __name__ == "__main__":
     sys.exit(main())
