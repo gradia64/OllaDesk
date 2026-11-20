@@ -11,7 +11,8 @@
 # installa con «flatpak install --user OllaDesk-X.Y.Z.flatpak» riceve da lì
 # il runtime KDE, se non lo ha già.
 #
-# Strumenti richiesti: flatpak, flatpak-builder.
+# Strumenti richiesti: flatpak e flatpak-builder; senza flatpak-builder di
+# sistema si usa quello di org.flatpak.Builder (Flathub), se installato.
 # Uso: scripts/build-flatpak.sh
 set -euo pipefail
 
@@ -29,9 +30,15 @@ if [ -z "$VERSION" ]; then
 fi
 BUNDLE="dist/OllaDesk-$VERSION.flatpak"
 
-for tool in flatpak flatpak-builder; do
-    command -v "$tool" >/dev/null || { echo "manca $tool" >&2; exit 1; }
-done
+command -v flatpak >/dev/null || { echo "manca flatpak" >&2; exit 1; }
+if command -v flatpak-builder >/dev/null; then
+    BUILDER=(flatpak-builder)
+elif flatpak info org.flatpak.Builder >/dev/null 2>&1; then
+    BUILDER=(flatpak run --filesystem="$ROOT" org.flatpak.Builder)
+else
+    echo "manca flatpak-builder (o l'app org.flatpak.Builder di Flathub)" >&2
+    exit 1
+fi
 
 flatpak remote-add --user --if-not-exists flathub "$FLATHUB_REPO"
 
@@ -39,7 +46,7 @@ flatpak remote-add --user --if-not-exists flathub "$FLATHUB_REPO"
 # (type: dir), e flatpak-builder salta da solo .flatpak-builder
 rm -rf build/flatpak build/flatpak-repo
 mkdir -p dist
-flatpak-builder --user --install-deps-from=flathub --force-clean --disable-rofiles-fuse \
+"${BUILDER[@]}" --user --install-deps-from=flathub --force-clean --disable-rofiles-fuse \
     --repo=build/flatpak-repo build/flatpak "$MANIFEST"
 flatpak build-bundle --runtime-repo="$FLATHUB_REPO" \
     build/flatpak-repo "$BUNDLE" "$APP_ID"

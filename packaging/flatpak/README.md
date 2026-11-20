@@ -16,6 +16,9 @@ non ancora segnati ✅.
   `sources` del modulo `python3-deps` nel manifest.
 - `smoke-test.sh`, `smoke_check.py` — prova del bundle costruito (job `flatpak` e in
   locale): installazione, controlli con il Python della sandbox, test offline, avvio.
+- `lint-exceptions.json` — eccezioni di `flatpak-builder-lint` usate da
+  `scripts/lint-flatpak.sh`, ognuna con il suo motivo: solo controlli che hanno senso
+  sull'infrastruttura di Flathub (copia degli screenshot su `dl.flathub.org/media`).
 - `fontconfig-local.conf` — installato come `/app/etc/fonts/local.conf`: esclude i
   font WOFF/WOFF2 dell'host (vedi «Font WOFF dell'host»).
 
@@ -37,7 +40,9 @@ non ancora segnati ✅.
 
 ## Come costruire
 
-Serve `flatpak-builder` (`sudo apt install flatpak-builder`). Runtime, SDK e base
+Serve `flatpak-builder` (`sudo apt install flatpak-builder`) oppure l'app
+`org.flatpak.Builder` di Flathub (`flatpak install --user flathub
+org.flatpak.Builder`), che lo script usa se il primo manca. Runtime, SDK e base
 app (`io.qt.PySide.BaseApp//6.11`) arrivano da Flathub con `--install-deps-from`.
 `scripts/build-flatpak.sh` fa tutto e scrive `dist/OllaDesk-X.Y.Z.flatpak`, con
 l'indirizzo di Flathub per il runtime; poi `packaging/flatpak/smoke-test.sh
@@ -49,6 +54,11 @@ flatpak-builder --user --install-deps-from=flathub --force-clean \
   packaging/flatpak/io.github.gradia64.OllaDesk.yaml
 flatpak build-bundle build/flatpak-repo OllaDesk.flatpak io.github.gradia64.OllaDesk
 ```
+
+Dopo la build, `scripts/lint-flatpak.sh` passa `flatpak-builder-lint` (il linter di
+Flathub, da `org.flatpak.Builder`, installato se manca) su manifest, AppStream,
+`build/flatpak` e `build/flatpak-repo`. Il job `flatpak` lo esegue con
+`--gha-format`, così gli errori diventano annotazioni.
 
 ## Dipendenze Python
 

@@ -203,6 +203,12 @@ jobs:
       - name: Bundle Flatpak
         run: scripts/build-flatpak.sh
 
+      # flatpak-builder-lint di Flathub (da org.flatpak.Builder) su manifest,
+      # AppStream, cartella di build e repository; eccezioni motivate in
+      # packaging/flatpak/lint-exceptions.json
+      - name: flatpak-builder-lint
+        run: scripts/lint-flatpak.sh --gha-format
+
       # controlli con il Python della sandbox, test offline e avvio offscreen
       - name: Prova del bundle
         run: packaging/flatpak/smoke-test.sh dist/OllaDesk-*.flatpak

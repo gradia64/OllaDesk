@@ -62,7 +62,7 @@ esegue, in ordine:
 | `verify`  | il tag è annotato e firmato dalla sottochiave dei tag (`scripts/verify-tag.sh`); tag = `__version__`; note di rilascio presenti (`scripts/release-notes.sh`) |
 | `dist`    | tarball sorgente, `.deb`, lintian. Niente firme: qui non ci sono secret |
 | `appimage` | `scripts/build-appimage.sh`, poi `packaging/appimage/smoke-test.sh`: controlli con il Python dell'AppImage, test offline, avvio offscreen e su X11 (xvfb). SHA-256 nel riepilogo del job, da confrontare con una build locale |
-| `flatpak` | `scripts/build-flatpak.sh` (runtime KDE, SDK e base app PySide da Flathub), poi `packaging/flatpak/smoke-test.sh`: bundle installato, controlli con il Python della sandbox, test offline, avvio offscreen. SHA-256 nel riepilogo del job |
+| `flatpak` | `scripts/build-flatpak.sh` (runtime KDE, SDK e base app PySide da Flathub), `scripts/lint-flatpak.sh` (`flatpak-builder-lint` di Flathub su manifest, AppStream, build e repository), poi `packaging/flatpak/smoke-test.sh`: bundle installato, controlli con il Python della sandbox, test offline, avvio offscreen. SHA-256 nel riepilogo del job |
 | `arch`    | in un container `archlinux:base-devel`: PKGBUILD che clona il tag da GitHub e ne **verifica la firma**, `check()`, namcap, installazione e avvio di prova |
 | `publish` | **attende la tua approvazione** (environment `release`), poi: firma di tutti gli artefatti con la sottochiave della CI, release GitHub con la descrizione da `packaging/release-notes/X.Y.Z.md` |
 
@@ -332,6 +332,7 @@ Tutti gli script funzionano anche in locale, con gli stessi risultati della CI.
 | `scripts/build-deb.sh` | `dist/olladesk_X.Y.Z_all.deb` (riproducibile) |
 | `scripts/build-appimage.sh [--lock]` | `dist/OllaDesk-X.Y.Z-x86_64.AppImage` (riproducibile; dipendenze in `packaging/appimage/`, `--lock` rigenera gli hash) |
 | `scripts/build-flatpak.sh` | `dist/OllaDesk-X.Y.Z.flatpak` dal manifest in `packaging/flatpak/` (prova: `packaging/flatpak/smoke-test.sh`) |
+| `scripts/lint-flatpak.sh` | `flatpak-builder-lint` dopo la build, con le eccezioni di `packaging/flatpak/lint-exceptions.json` |
 | `scripts/sign-release.sh [dir]` | firme `.sig` + `SHA256SUMS` con la sottochiave della CI; verifica con la sola chiave pubblica del repository |
 | `scripts/prepare-aur.sh` | `build/aur/PKGBUILD` da `packaging/arch/PKGBUILD.in` |
 | `scripts/build-arch.sh` | build dal tag firmato e controlli del pacchetto Arch (come root in un container Arch) |

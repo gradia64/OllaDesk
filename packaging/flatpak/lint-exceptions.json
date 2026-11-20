@@ -1,0 +1,6 @@
+{
+    "io.github.gradia64.OllaDesk": {
+        "appstream-external-screenshot-url": "Screenshots are mirrored to dl.flathub.org/media only by Flathub's own build; the bundle in the GitHub release keeps the original URLs, which work",
+        "appstream-screenshots-not-mirrored-in-ostree": "Same as above: screenshot mirroring happens on Flathub's build infrastructure"
+    }
+}
