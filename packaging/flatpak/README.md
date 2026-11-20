@@ -43,6 +43,9 @@ non ancora segnati ✅.
   aggiungono (stesso id: resta quella presente), settings/model_params/companion
   si sostituiscono, i percorsi delle immagini in `attachments/` vengono riscritti.
   Dalle Impostazioni (Info) l'import chiude l'app senza salvare lo stato in memoria.
+- **Log**: `--env=QT_LOGGING_RULES=kf.solid.backends.udisks2=false` zittisce l'avviso
+  di KIO sui dischi (udisks2 sta sul bus di sistema, fuori dalla sandbox), stampato a
+  ogni apertura della finestra di scelta file. Nessun permesso in più.
 
 ## Come costruire
 

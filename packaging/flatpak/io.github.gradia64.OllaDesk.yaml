@@ -197,6 +197,14 @@ finish-args:
   # dell'HOST (~/.config/olladesk dell'installazione nativa, con chat e token della
   # companion; tutta ~/.cache in scrittura).
 
+  # ===== Log =====
+  # La finestra di scelta file di KDE (KIO) chiede i dischi a udisks2 sul bus di
+  # sistema, che la sandbox non raggiunge: ogni apertura stampava «kf.solid.backends.
+  # udisks2: Failed to fetch all devices … Not connected to D-Bus server». Innocuo
+  # (mancano solo i dischi esterni nel pannello laterale): si zittisce quella
+  # categoria invece di aprire il bus di sistema.
+  - --env=QT_LOGGING_RULES=kf.solid.backends.udisks2=false
+
 # --- pulizia finale (riduce il bundle) -------------------------------------
 # Le .dist-info restano (piccole, utili per il debug delle dipendenze).
 cleanup:
