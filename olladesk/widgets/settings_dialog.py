@@ -10,7 +10,7 @@ from __future__ import annotations
 import html
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtCore import QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QGuiApplication, QIcon
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -90,6 +90,11 @@ class SettingsDialog(QDialog):
         lay.addLayout(body, 1)
 
         self.params_tab = ModelParamsTab(models_provider, self)
+        # altezza delle voci fissata a mano: con alcuni stili (es. Breeze sotto
+        # KDE) la dimensione calcolata ignora il padding del foglio di stile e
+        # lo sfondo della voce selezionata copre quelle vicine
+        fm = self.nav.fontMetrics()
+        row_h = max(fm.height(), 16) + 2 * 8 + 2 * 1 + 4
         for icon_name, title, widget in (
             ("settings", _("Generale"), self._build_general_page(settings)),
             ("palette", _("Aspetto"), self._build_look_page(settings)),
@@ -103,6 +108,7 @@ class SettingsDialog(QDialog):
             ic = icons.icon(icon_name, theme.palette_for(theme_name)["text"], 16)
             if ic is not None:
                 item.setIcon(ic)
+            item.setSizeHint(QSize(0, row_h))
             self.nav.addItem(item)
             self.pages.addWidget(widget)
         self.nav.currentRowChanged.connect(self.pages.setCurrentIndex)

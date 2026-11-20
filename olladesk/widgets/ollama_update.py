@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import html
 
-from PySide6.QtCore import QProcess, Signal
+from PySide6.QtCore import QProcess, Qt, Signal
 from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from .. import updater
+from .. import portal, updater
 from ..i18n import _
 from ..ollama_client import ApiWorker, shutdown_workers
 
@@ -75,10 +75,17 @@ class OllamaUpdateBox(QGroupBox):
         self.update_btn.clicked.connect(self._run_update)
         row2.addWidget(self.update_btn)
         lay.addLayout(row2)
+        # dalla sandbox Flatpak non si installa nulla sul sistema (niente
+        # pkexec): la verifica resta, l'aggiornamento si fa da terminale
+        self._sandboxed = portal.in_flatpak()
+        if self._sandboxed:
+            self.update_btn.hide()
 
         self.update_status = QLabel("", box)
         self.update_status.setObjectName("metaLabel")
         self.update_status.setWordWrap(True)
+        # il comando da terminale si deve poter copiare
+        self.update_status.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         lay.addWidget(self.update_status)
 
         self.update_log = QPlainTextEdit(box)
@@ -166,6 +173,15 @@ class OllamaUpdateBox(QGroupBox):
                     _('✦ Aggiornamento disponibile ({installed} → {latest}), '
                       'ma il server configurato non è su questa macchina: aggiorna Ollama '
                       "sull'host remoto.").format(installed=self._installed_version, latest=self._latest_version)
+                )
+                self.update_btn.setEnabled(False)
+            elif self._sandboxed:
+                self.update_status.setText(
+                    _('✦ Aggiornamento disponibile: {installed} → {latest}. OllaDesk in '
+                      'Flatpak non può aggiornare Ollama: esegui da un terminale\n    '
+                      '{command}').format(installed=self._installed_version,
+                                          latest=self._latest_version,
+                                          command=updater.INSTALL_CMD)
                 )
                 self.update_btn.setEnabled(False)
             else:

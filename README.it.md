@@ -389,7 +389,10 @@ alla prima installazione. Non è su Flathub: per aggiornare si installa allo
 stesso modo il bundle della versione nuova, che OllaDesk segnala da sola.
 
 **Da sapere.** L'app gira nella sandbox senza accesso ai tuoi file: allegati
-e cartelle passano dalla finestra di scelta del sistema o dal trascinamento.
+e cartelle passano dalla finestra di scelta del sistema o dal trascinamento,
+e restano leggibili finché OllaDesk è aperta: dopo un riavvio quelli delle chat
+precedenti vanno riallegati (anche per gli strumenti 🔧). Il pulsante
+«Aggiorna ora» di Ollama non c'è: le impostazioni mostrano il comando da terminale.
 Chat e impostazioni sono in `~/.var/app/io.github.gradia64.OllaDesk/config/olladesk`,
 separate da quelle del `.deb`, del pacchetto AUR e dell'AppImage: al primo
 avvio il profilo è vuoto. Ollama non è incluso: va installato a parte.

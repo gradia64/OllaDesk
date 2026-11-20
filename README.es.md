@@ -155,7 +155,10 @@ de la misma forma el bundle de la nueva versión, que OllaDesk avisa por sí sol
 
 **A tener en cuenta.** La aplicación funciona en la sandbox sin acceso a tus
 archivos: adjuntos y carpetas pasan por el selector de archivos del sistema o
-por arrastrar y soltar. Chats y configuración están en
+por arrastrar y soltar, y siguen legibles mientras OllaDesk está abierta: tras
+un reinicio, los de chats anteriores hay que adjuntarlos de nuevo (también para
+las herramientas 🔧). No hay botón «Actualizar ahora» para Ollama: los ajustes
+muestran el comando para el terminal. Chats y configuración están en
 `~/.var/app/io.github.gradia64.OllaDesk/config/olladesk`, separados de los del
 `.deb`, el paquete AUR y la AppImage: en el primer inicio el perfil está vacío.
 Ollama no está incluido: instálalo aparte.

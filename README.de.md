@@ -160,7 +160,11 @@ Aktualisieren installieren Sie das Bundle der neuen Version auf dieselbe Weise;
 OllaDesk weist von selbst darauf hin.
 
 **Gut zu wissen.** Die App läuft in der Sandbox ohne Zugriff auf Ihre Dateien:
-Anhänge und Ordner gehen über die Dateiauswahl des Systems oder per Drag & Drop.
+Anhänge und Ordner gehen über die Dateiauswahl des Systems oder per Drag & Drop
+und bleiben lesbar, solange OllaDesk geöffnet ist: Nach einem Neustart müssen
+die früherer Chats erneut angehängt werden (auch für die 🔧-Werkzeuge). Eine
+Schaltfläche „Jetzt aktualisieren“ für Ollama gibt es nicht: Die Einstellungen
+zeigen den Terminalbefehl.
 Chats und Einstellungen liegen in
 `~/.var/app/io.github.gradia64.OllaDesk/config/olladesk`, getrennt von `.deb`,
 AUR-Paket und AppImage: Beim ersten Start ist das Profil leer. Ollama ist nicht

@@ -162,7 +162,10 @@ OllaDesk signale d'elle-même.
 
 **À savoir.** L'application tourne dans la sandbox sans accès à tes fichiers :
 pièces jointes et dossiers passent par le sélecteur de fichiers du système ou
-par le glisser-déposer. Discussions et paramètres sont dans
+par le glisser-déposer, et restent lisibles tant qu'OllaDesk est ouverte : après
+un redémarrage, ceux des discussions précédentes sont à rejoindre de nouveau
+(aussi pour les outils 🔧). Pas de bouton « Mettre à jour » pour Ollama : les
+paramètres affichent la commande à lancer dans un terminal. Discussions et paramètres sont dans
 `~/.var/app/io.github.gradia64.OllaDesk/config/olladesk`, séparés de ceux du
 `.deb`, du paquet AUR et de l'AppImage : au premier lancement, le profil est
 vide. Ollama n'est pas inclus : installe-le à part.

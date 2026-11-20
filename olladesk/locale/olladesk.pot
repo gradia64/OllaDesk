@@ -1994,101 +1994,112 @@ msgstr ""
 msgid "Penalizza i token in base a quante volte sono già comparsi."
 msgstr ""
 
-#: olladesk/widgets/ollama_update.py:105
+#: olladesk/widgets/ollama_update.py:100
+msgid "Versione attuale non nota: avvia Ollama o premi «Verifica aggiornamenti»."
+msgstr ""
+
+#: olladesk/widgets/ollama_update.py:112
 msgid "Verifica…"
 msgstr ""
 
-#: olladesk/widgets/ollama_update.py:115
+#: olladesk/widgets/ollama_update.py:122
 msgid "Ricontatto il server Ollama e GitHub…"
-msgstr ""
-
-#: olladesk/widgets/ollama_update.py:137
-#, python-brace-format
-msgid "Versione installata: <b>{version}</b>"
 msgstr ""
 
 #: olladesk/widgets/ollama_update.py:144
 #, python-brace-format
+msgid "Versione installata: <b>{version}</b>"
+msgstr ""
+
+#: olladesk/widgets/ollama_update.py:151
+#, python-brace-format
 msgid "Ultima versione disponibile: <b>{tag}</b>"
 msgstr ""
 
-#: olladesk/widgets/ollama_update.py:160
+#: olladesk/widgets/ollama_update.py:167
 msgid "✓ Ollama è aggiornato."
-msgstr ""
-
-#: olladesk/widgets/ollama_update.py:166
-#, python-brace-format
-msgid "✦ Aggiornamento disponibile ({installed} → {latest}), ma il server configurato non è su questa macchina: aggiorna Ollama sull'host remoto."
 msgstr ""
 
 #: olladesk/widgets/ollama_update.py:173
 #, python-brace-format
+msgid "✦ Aggiornamento disponibile ({installed} → {latest}), ma il server configurato non è su questa macchina: aggiorna Ollama sull'host remoto."
+msgstr ""
+
+#: olladesk/widgets/ollama_update.py:180
+#, python-brace-format
+msgid ""
+"✦ Aggiornamento disponibile: {installed} → {latest}. OllaDesk in Flatpak non può aggiornare Ollama: esegui da un terminale\n"
+"    {command}"
+msgstr ""
+
+#: olladesk/widgets/ollama_update.py:189
+#, python-brace-format
 msgid "✦ Aggiornamento disponibile: {installed} → {latest}. Premi «Aggiorna ora» (serve la password di amministratore)."
 msgstr ""
 
-#: olladesk/widgets/ollama_update.py:179
+#: olladesk/widgets/ollama_update.py:195
 #, python-brace-format
 msgid "⚠ Verifica non riuscita: {error}"
 msgstr ""
 
-#: olladesk/widgets/ollama_update.py:183
+#: olladesk/widgets/ollama_update.py:199
 msgid "⚠ Verifica non riuscita: controlla la connessione a internet o il server Ollama."
 msgstr ""
 
-#: olladesk/widgets/ollama_update.py:189
+#: olladesk/widgets/ollama_update.py:205
 #, python-brace-format
 msgid ""
 "⚠ `pkexec` non disponibile. Aggiorna manualmente da terminale:\n"
 "    {command}"
 msgstr ""
 
-#: olladesk/widgets/ollama_update.py:195
+#: olladesk/widgets/ollama_update.py:211
 msgid "Scarico lo script ufficiale di installazione…"
 msgstr ""
 
-#: olladesk/widgets/ollama_update.py:212
+#: olladesk/widgets/ollama_update.py:228
 msgid "⚠ `pkexec` non disponibile sul sistema."
 msgstr ""
 
-#: olladesk/widgets/ollama_update.py:218
+#: olladesk/widgets/ollama_update.py:234
 #, python-brace-format
 msgid "Script ufficiale scaricato ({size} byte): passa a sh via stdin, esecuzione con privilegi di amministratore — inserisci la password quando richiesto…"
 msgstr ""
 
-#: olladesk/widgets/ollama_update.py:239
+#: olladesk/widgets/ollama_update.py:255
 #, python-brace-format
 msgid ""
 "⚠ Impossibile avviare `pkexec`. Aggiorna manualmente da terminale:\n"
 "    {command}"
 msgstr ""
 
-#: olladesk/widgets/ollama_update.py:246
+#: olladesk/widgets/ollama_update.py:262
 #, python-brace-format
 msgid ""
 "⚠ Impossibile scaricare lo script ({err}). Aggiorna manualmente da terminale:\n"
 "    {command}"
 msgstr ""
 
-#: olladesk/widgets/ollama_update.py:262
+#: olladesk/widgets/ollama_update.py:278
 msgid "✓ Aggiornamento completato. Riavvia il server Ollama per usare la nuova versione."
 msgstr ""
 
-#: olladesk/widgets/ollama_update.py:267
+#: olladesk/widgets/ollama_update.py:283
 #, python-brace-format
 msgid "⚠ Aggiornamento non riuscito (codice {code}). Vedi l'output qui sopra."
 msgstr ""
 
-#: olladesk/widgets/ollama_update.py:287
+#: olladesk/widgets/ollama_update.py:303
 msgid "Aggiornamento di Ollama"
 msgstr ""
 
-#: olladesk/widgets/ollama_update.py:304
+#: olladesk/widgets/ollama_update.py:320
 #: olladesk/widgets/settings_dialog.py:684
 #: olladesk/widgets/settings_dialog.py:730
 msgid "Aggiornamento in corso"
 msgstr ""
 
-#: olladesk/widgets/ollama_update.py:304
+#: olladesk/widgets/ollama_update.py:320
 #: olladesk/widgets/settings_dialog.py:684
 #: olladesk/widgets/settings_dialog.py:730
 msgid "Attendi la fine dell'aggiornamento."
@@ -2104,12 +2115,12 @@ msgid "Versione installata: <b>{installed}</b>"
 msgstr ""
 
 #: olladesk/widgets/ollama_update.py:59
-#: olladesk/widgets/ollama_update.py:105
+#: olladesk/widgets/ollama_update.py:112
 msgid "Verifica aggiornamenti"
 msgstr ""
 
 #: olladesk/widgets/ollama_update.py:65
-#: olladesk/widgets/ollama_update.py:150
+#: olladesk/widgets/ollama_update.py:157
 msgid "Ultima versione disponibile: —"
 msgstr ""
 
@@ -2121,12 +2132,8 @@ msgstr ""
 msgid "Esegue lo script ufficiale di installazione (richiede la password di amministratore tramite pkexec)"
 msgstr ""
 
-#: olladesk/widgets/ollama_update.py:87
+#: olladesk/widgets/ollama_update.py:94
 msgid "…output dell'aggiornamento…"
-msgstr ""
-
-#: olladesk/widgets/ollama_update.py:93
-msgid "Versione attuale non nota: avvia Ollama o premi «Verifica aggiornamenti»."
 msgstr ""
 
 #: olladesk/widgets/settings_dialog.py:113

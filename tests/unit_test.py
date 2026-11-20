@@ -3151,5 +3151,32 @@ def test_fetch_page_tool():
     assert tools.leaked_call_at("testo normale [nota]") == -1
 
 
+def test_ollama_update_hidden_in_flatpak():
+    """F3: in Flatpak niente «Aggiorna ora» (pkexec non c'è): solo il comando."""
+    from unittest.mock import patch
+
+    from PySide6.QtWidgets import QApplication
+
+    QApplication.instance() or QApplication([])
+    from olladesk import portal, updater
+    from olladesk.widgets.ollama_update import OllamaUpdateBox
+
+    def box_after_check(sandboxed):
+        with patch.object(portal, "in_flatpak", lambda: sandboxed):
+            box = OllamaUpdateBox(lambda: "http://localhost:11434", "0.40.1")
+        box._latest_version = "0.40.17"
+        box._check_pending = 1
+        box._check_step()
+        return box
+
+    box = box_after_check(True)
+    assert box.update_btn.isHidden() and not box.update_btn.isEnabled()
+    text = box.update_status.text()
+    assert "0.40.1 → 0.40.17" in text and "Flatpak" in text and updater.INSTALL_CMD in text, text
+    plain = box_after_check(False)
+    assert not plain.update_btn.isHidden() and plain.update_btn.isEnabled()
+    assert "Aggiorna ora" in plain.update_status.text()
+
+
 if __name__ == "__main__":
     sys.exit(main())

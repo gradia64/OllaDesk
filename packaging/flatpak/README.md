@@ -118,8 +118,12 @@ flatpak run --command=sh io.github.gradia64.OllaDesk -c \
    **trascinamento** dal file manager passa dal portale FileTransfer: il Qt del runtime
    KDE non lo gestisce (la chiave `application/vnd.portal.filetransfer` c'è solo in GTK3
    e SDL3), quindi lo fa l'app in `olladesk/portal.py` con `RetrieveFiles`. Da
-   sorgenti che non usano il portale l'app avvisa di allegare con 📎. Da verificare
-   al primo avvio trascinando un file e una cartella da Dolphin. Config e cache sono quelle della sandbox (`~/.var/app/<app-id>/`):
+   sorgenti che non usano il portale l'app avvisa di allegare con 📎. Provati il
+   2026-11-20 (xdg-desktop-portal 1.22): file e cartella con 📎, trascinamento da
+   Dolphin, tool 🔧 sui file e sulla cartella dentro la sandbox. I documenti del
+   portale durano quanto l'istanza dell'app: dopo un riavvio i percorsi salvati
+   nelle chat precedenti non esistono più (`file_tools.shared_from_chat` li salta),
+   e quegli allegati vanno riaggiunti. Config e cache sono quelle della sandbox (`~/.var/app/<app-id>/`):
    `--filesystem=xdg-config/…` o `xdg-cache` aprirebbero le cartelle dell'**host**.
 3. **Keyring** — `--talk-name=org.freedesktop.secrets` per KWallet (keyring usa
    D-Bus, non il portale). Senza, l'app degrada già senza errori (chiave in `settings.json`).

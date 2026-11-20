@@ -375,7 +375,10 @@ on the first install. OllaDesk is not on Flathub: to update, install the new
 version's bundle the same way. OllaDesk tells you when one is out.
 
 **Good to know.** The app runs in the sandbox without access to your files:
-attachments and folders go through the system file picker or drag and drop.
+attachments and folders go through the system file picker or drag and drop,
+and stay readable while OllaDesk is open: after a restart, those of earlier
+chats must be attached again (also for the 🔧 tools). There is no "Update now"
+button for Ollama: the settings show the terminal command instead.
 Chats and settings are in `~/.var/app/io.github.gradia64.OllaDesk/config/olladesk`,
 separate from the `.deb`, AUR package and AppImage: the first launch starts
 with an empty profile. Ollama is not included: install it separately.
