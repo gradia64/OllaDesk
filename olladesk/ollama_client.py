@@ -180,6 +180,19 @@ class ChatWorker(QThread):
         self._payload = payload
         self._resp = None
         self._stopped = False
+        # chiamate ai tool ricevute nella risposta (message.tool_calls):
+        # arrivano in `done` come "tool_calls", il motore le esegue
+        self._tool_calls: list = []
+
+    def _done_payload(self, data: dict) -> dict:
+        if not self._tool_calls:
+            return data
+        return {**data, "tool_calls": list(self._tool_calls)}
+
+    def _collect_tool_calls(self, msg: dict) -> None:
+        calls = msg.get("tool_calls")
+        if isinstance(calls, list):
+            self._tool_calls.extend(calls)
 
     def stop(self) -> None:
         """Interrompe la generazione e chiude la connessione."""
@@ -216,7 +229,8 @@ class ChatWorker(QThread):
                 content = msg.get("content", "")
                 if content:
                     self.chunk.emit(content)
-                self.done.emit(data if data.get("done") else {"done": True})
+                self._collect_tool_calls(msg)
+                self.done.emit(self._done_payload(data if data.get("done") else {"done": True}))
                 return
 
             for raw in self._resp:
@@ -232,11 +246,10 @@ class ChatWorker(QThread):
                 if data.get("error"):
                     self.failed.emit(str(data["error"]))
                     return
-                if data.get("done"):
-                    self.done.emit(data)
-                    return
                 # i modelli «thinking» (qwen3, deepseek-r1…) mandano il
-                # ragionamento in message.thinking, distinto dal contenuto
+                # ragionamento in message.thinking, distinto dal contenuto.
+                # Si legge anche nella riga finale: le chiamate ai tool
+                # possono arrivare insieme a "done"
                 msg = data.get("message") or {}
                 thinking = msg.get("thinking", "")
                 if thinking:
@@ -244,9 +257,13 @@ class ChatWorker(QThread):
                 content = msg.get("content", "")
                 if content:
                     self.chunk.emit(content)
+                self._collect_tool_calls(msg)
+                if data.get("done"):
+                    self.done.emit(self._done_payload(data))
+                    return
             # stream chiuso senza "done": consideriamo comunque concluso
             if not self._stopped:
-                self.done.emit({"done": True})
+                self.done.emit(self._done_payload({"done": True}))
         except Exception as e:
             if not self._stopped:
                 self.failed.emit(friendly_error(e, self._host))

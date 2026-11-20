@@ -557,6 +557,7 @@ olladesk/
   ollama_client.py          Ollama API client (stdlib) + QThread worker
   netinfo.py                local network addresses (for the web companion)
   engine.py                 chat engine: conversations, generation, saving
+  tools.py                  tools for the model: registry, calls, execution
   workers.py                registry of active and stopping QThread workers
   companion.py              web companion: HTTP server on LAN and pairing
   web/                      mobile companion page (HTML, CSS, JS, manifest and icons)

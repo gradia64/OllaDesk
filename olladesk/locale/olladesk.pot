@@ -101,7 +101,7 @@ msgid "nessuno scaricamento in corso"
 msgstr ""
 
 #: olladesk/companion.py:438
-#: olladesk/engine.py:313
+#: olladesk/engine.py:334
 msgid "modello non installato"
 msgstr ""
 
@@ -207,7 +207,7 @@ msgid "serve Content-Type: application/octet-stream"
 msgstr ""
 
 #: olladesk/config.py:289
-#: olladesk/engine.py:351
+#: olladesk/engine.py:372
 #: olladesk/widgets/sidebar.py:225
 #: olladesk/web/app.js:164
 #: olladesk/web/app.js:446
@@ -405,60 +405,65 @@ msgid ""
 "[una ricerca web era stata allegata in un turno precedente]"
 msgstr ""
 
-#: olladesk/engine.py:289
-#: olladesk/engine.py:309
+#: olladesk/engine.py:310
+#: olladesk/engine.py:330
 msgid "OllaDesk si sta chiudendo"
 msgstr ""
 
-#: olladesk/engine.py:291
+#: olladesk/engine.py:312
 msgid "nome del modello mancante"
 msgstr ""
 
-#: olladesk/engine.py:293
-#: olladesk/engine.py:311
+#: olladesk/engine.py:314
+#: olladesk/engine.py:332
 msgid "un'altra operazione sui modelli è già in corso"
 msgstr ""
 
-#: olladesk/engine.py:315
+#: olladesk/engine.py:336
 msgid "il PC sta rispondendo: riprova alla fine"
 msgstr ""
 
-#: olladesk/engine.py:332
+#: olladesk/engine.py:353
 msgid "scaricamento annullato"
 msgstr ""
 
-#: olladesk/engine.py:347
+#: olladesk/engine.py:368
 msgid "⚠ Impossibile salvare la conversazione su disco: spazio esaurito o permessi mancanti?"
 msgstr ""
 
-#: olladesk/engine.py:417
+#: olladesk/engine.py:438
 #, python-brace-format
 msgid "il modello «{model}» è in eliminazione"
 msgstr ""
 
-#: olladesk/engine.py:440
+#: olladesk/engine.py:463
 #, python-brace-format
 msgid "file non leggibile: {name}"
 msgstr ""
 
-#: olladesk/engine.py:444
+#: olladesk/engine.py:467
 msgid "Ricerca web saltata: scrivi una domanda insieme agli allegati."
 msgstr ""
 
-#: olladesk/engine.py:527
+#: olladesk/engine.py:551
 #, python-brace-format
 msgid ""
 "⚠ Ricerca web non riuscita ({err}).\n"
 "Procedo senza i risultati web."
 msgstr ""
 
-#: olladesk/engine.py:553
+#: olladesk/engine.py:577
 msgid "Allegati"
 msgstr ""
 
-#: olladesk/engine.py:629
+#: olladesk/engine.py:656
 #, python-brace-format
 msgid "impossibile preparare la richiesta: {error}"
+msgstr ""
+
+#: olladesk/engine.py:797
+#, python-brace-format
+msgid "Raggiunto il limite di {count} giri di strumenti: il modello risponde con quello che ha raccolto."
 msgstr ""
 
 #: olladesk/main_window.py:1003
@@ -744,7 +749,7 @@ msgstr ""
 msgid "Impossibile raggiungere il server Ollama ({host}): {reason}"
 msgstr ""
 
-#: olladesk/ollama_client.py:371
+#: olladesk/ollama_client.py:388
 msgid "scaricamento interrotto: il server ha chiuso la connessione"
 msgstr ""
 

@@ -333,6 +333,7 @@ olladesk/
   ollama_client.py          Ollama-API-Client (stdlib) + Worker QThread
   netinfo.py                lokale Netzwerkadressen (für den Web-Companion)
   engine.py                 Chat-Engine: Gespräche, Generierung, Speicherung
+  tools.py                  Werkzeuge für das Modell: Register, Aufrufe, Ausführung
   workers.py                Register der aktiven und zu beendenden QThread-Worker
   companion.py              Web-Companion: HTTP-Server im LAN und Kopplung
   web/                      mobile Seite des Companions (HTML, CSS, JS, Manifest und Icons)

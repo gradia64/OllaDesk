@@ -6,6 +6,13 @@ eventi della conversazione che sta guardando.
 
 Regola dei thread: i metodi si chiamano solo dal thread Qt principale.
 Una sola elaborazione alla volta, globale (ricerca web + generazione).
+
+Ciclo dei tool: con `send(..., tools=True)` e un registro non vuoto, una
+risposta può durare più giri. Il modello chiede dei tool, `ToolWorker` li
+esegue, i risultati tornano al modello e la generazione riprende, sempre
+nella stessa risposta (un solo generation_started/generation_finished). La
+fase resta "chat" per tutto il ciclo. Le chiamate di ogni giro completo si
+salvano nel messaggio dell'assistente, in "tool_rounds".
 """
 from __future__ import annotations
 
@@ -14,7 +21,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QObject, Signal
 
-from . import config, context, secrets_store, web_search
+from . import config, context, secrets_store, tools, web_search
 from .i18n import _
 from .ollama_client import (
     ApiWorker, CapsWorker, ChatWorker, PostWorker, PullWorker, chat_capable, format_stats,
@@ -38,6 +45,9 @@ class ChatEngine(QObject):
     # chat_id, esito ("done" | "failed" | "stopped"), statistiche, errore
     generation_finished = Signal(str, str, str, str)
     notice = Signal(str, str)                 # chat_id ("" = generale), testo di avviso
+    # chat_id, {"state": "started"|"done", "round", "index", "name",
+    # "arguments", e a fine chiamata "result", "error"}
+    tool_activity = Signal(str, dict)
     # --- server Ollama e modelli
     status_changed = Signal(bool, str)        # online, versione
     models_loading = Signal(bool)             # elenco modelli in caricamento
@@ -63,6 +73,17 @@ class ChatEngine(QObject):
         self._pending_think = ""              # ragionamento ricevuto nel turno corrente
         self._chat_stopped = False            # scarta i segnali del worker dopo uno stop
         self._search_stopped = False
+        # ciclo dei tool: registro (vuoto finché non arrivano i tool veri),
+        # scelta dell'invio in corso, richiesta del turno che cresce a ogni
+        # giro, giri completi e giro le cui chiamate sono in esecuzione
+        self.tools = tools.ToolRegistry()
+        self._use_tools = False
+        self._tool_worker: tools.ToolWorker | None = None
+        self._payload: dict | None = None
+        self._rounds: list[dict] = []
+        self._open_round: dict | None = None
+        self._stream_mark = 0                 # inizio del testo del giro in corso
+        self._think_mark = 0
         self._closed = False
         self._status_worker: ApiWorker | None = None
         self._models_worker: ApiWorker | None = None
@@ -418,12 +439,14 @@ class ChatEngine(QObject):
         return None
 
     def send(self, chat_id: str | None, text: str, model: str, *,
-             attachments=(), web: bool = False, think: bool = True) -> str | None:
+             attachments=(), web: bool = False, think: bool = True,
+             tools: bool = False) -> str | None:
         """Aggiunge un messaggio utente e avvia la risposta.
 
         `chat_id` è una conversazione esistente o un id nuovo (`new_chat_id`):
         la conversazione nasce al primo messaggio salvato. Restituisce l'id,
-        oppure None se un'altra elaborazione è già in corso.
+        oppure None se un'altra elaborazione è già in corso. Con `tools` il
+        modello riceve i tool del registro (se ce ne sono).
         """
         if self.busy() or self._closed or self.send_refusal(model):
             return None
@@ -456,6 +479,7 @@ class ChatEngine(QObject):
         }
         self._active_id = chat_id
         self._phase = "search" if web else "chat"
+        self._use_tools = bool(tools)
         self.busy_changed.emit(True)
         if warnings:
             self.notice.emit(chat_id, "⚠ " + "\n⚠ ".join(warnings))
@@ -590,9 +614,12 @@ class ChatEngine(QObject):
             messages.append({"role": "system", "content": s["system_prompt"]})
         history = context.history_window(chat["messages"], s["history_limit"])
         last_idx = len(history) - 1
+        # i risultati dei tool restano interi solo nell'ultima risposta
+        last_answer = max((i for i, m in enumerate(history) if m["role"] == "assistant"),
+                          default=-1)
         for i, m in enumerate(history):
             if m["role"] == "assistant":
-                messages.append({"role": "assistant", "content": m.get("content", "")})
+                messages.extend(_assistant_messages(m, full_results=i == last_answer))
                 continue
             # il contenuto completo di allegati/ricerca web viaggia solo con
             # l'ultimo turno utente: i precedenti lasciano un segnaposto
@@ -651,13 +678,22 @@ class ChatEngine(QObject):
         if not think:
             payload["think"] = False
         self._think_off_sent = not think
+        if self._use_tools and len(self.tools):
+            payload["tools"] = self.tools.schemas()
 
         self._pending_stream = ""
         self._pending_think = ""
         self._chat_stopped = False
+        self._payload = payload
+        self._rounds = []
+        self._open_round = None
+        self._stream_mark = self._think_mark = 0
         self.generation_started.emit(chat_id)
+        self._launch_chat()
 
-        w = ChatWorker(s["host"], payload, self)
+    def _launch_chat(self) -> None:
+        """Avvia (o riprende, dopo un giro di tool) la richiesta del turno."""
+        w = ChatWorker(self.settings["host"], self._payload, self)
         w.chunk.connect(self._on_chunk)
         w.think_chunk.connect(self._on_think_chunk)
         w.done.connect(self._on_done)
@@ -685,13 +721,97 @@ class ChatEngine(QObject):
     def _on_done(self, done: dict) -> None:
         if self._chat_stopped or self.sender() is not self._worker:
             return
+        # chiamate ai tool solo se la richiesta li offriva: un modello che le
+        # inventa senza tool ha comunque finito di rispondere
+        calls = tools.parse_calls(done.get("tool_calls")) if "tools" in self._payload else []
+        if calls:
+            self._run_tools(calls)
+            return
         self._finalize("done", format_stats(done))
 
+    # ---------------------------------------------------------------- tool
+
+    def _run_tools(self, calls: list[dict]) -> None:
+        """Il modello ha chiesto dei tool: si eseguono, poi si riprende."""
+        text = self._pending_stream[self._stream_mark:]
+        thinking = self._pending_think[self._think_mark:]
+        # la risposta del modello con le chiamate entra nella richiesta del
+        # turno; il giro diventa «completo» solo con tutti i risultati
+        echo = []
+        for c in calls:
+            entry = {"function": {"name": c["name"], "arguments": c["arguments"]}}
+            if "id" in c:
+                entry["id"] = c["id"]
+            echo.append(entry)
+        msg = {"role": "assistant", "content": text, "tool_calls": echo}
+        if thinking:
+            msg["thinking"] = thinking
+        self._payload["messages"].append(msg)
+        self._open_round = {
+            "content": text,
+            "calls": [{**c, "result": "", "error": False} for c in calls],
+        }
+        w = tools.ToolWorker(self.tools, calls, self)
+        w.call_started.connect(self._on_tool_started)
+        w.call_done.connect(self._on_tool_done)
+        w.all_done.connect(self._on_tools_finished)
+        w.finished.connect(w.deleteLater)
+        w.finished.connect(self._workers.clear_ref(self, "_tool_worker", w))
+        self._tool_worker = w
+        self._workers.track(w)
+        w.start()
+
+    def _tool_event(self, state: str, index: int, **extra) -> dict:
+        call = self._open_round["calls"][index]
+        return {"state": state, "round": len(self._rounds) + 1, "index": index,
+                "name": call["name"], "arguments": call["arguments"], **extra}
+
+    def _on_tool_started(self, index: int) -> None:
+        if self._chat_stopped or self.sender() is not self._tool_worker:
+            return
+        self.tool_activity.emit(self._active_id, self._tool_event("started", index))
+
+    def _on_tool_done(self, index: int, result: str, error: bool) -> None:
+        if self._chat_stopped or self.sender() is not self._tool_worker:
+            return
+        call = self._open_round["calls"][index]
+        call["result"], call["error"] = result, error
+        self.tool_activity.emit(self._active_id,
+                                self._tool_event("done", index, result=result, error=error))
+
+    def _on_tools_finished(self) -> None:
+        if self._chat_stopped or self.sender() is not self._tool_worker:
+            return
+        done_round, self._open_round = self._open_round, None
+        self._rounds.append(done_round)
+        for c in done_round["calls"]:
+            entry = {"role": "tool", "tool_name": c["name"], "content": c["result"]}
+            if "id" in c:
+                entry["tool_call_id"] = c["id"]
+            self._payload["messages"].append(entry)
+        self._stream_mark = len(self._pending_stream)
+        self._think_mark = len(self._pending_think)
+        if len(self._rounds) >= tools.MAX_ROUNDS and "tools" in self._payload:
+            # senza tool il modello deve rispondere con quello che ha
+            del self._payload["tools"]
+            self.notice.emit(self._active_id, "⚠ " + _(
+                'Raggiunto il limite di {count} giri di strumenti: il modello '
+                'risponde con quello che ha raccolto.').format(count=tools.MAX_ROUNDS))
+        self._launch_chat()
+
     def _save_assistant(self, stats: str | None) -> None:
-        """Salva il testo prodotto nel turno (anche parziale), se c'è."""
+        """Salva il testo prodotto nel turno (anche parziale), se c'è.
+
+        Con i tool salva anche i giri completi; un giro interrotto da uno
+        stop non entra: senza tutti i risultati, alla richiesta successiva
+        Ollama riceverebbe chiamate senza risposta.
+        """
         text, thinking = self._pending_stream, self._pending_think
+        rounds = self._rounds
         self._pending_stream = ""
         self._pending_think = ""
+        self._rounds = []
+        self._open_round = None
         chat = self.chat(self._active_id)
         if text and chat is not None:
             msg = {"role": "assistant", "content": text, "ts": config.now()}
@@ -699,6 +819,8 @@ class ChatEngine(QObject):
                 msg["thinking"] = thinking
             if stats:
                 msg["stats"] = stats
+            if rounds:
+                msg["tool_rounds"] = rounds
             chat["messages"].append(msg)
             chat["updated"] = config.now()
             self._persist(chat)
@@ -737,6 +859,12 @@ class ChatEngine(QObject):
             self._worker.stop()   # chiude la connessione: il worker termina subito
             self._workers.retire(self._worker)
             self._worker = None
+        if self._tool_worker is not None:
+            # la chiamata in corso finisce da sola; il suo risultato si scarta
+            self._chat_stopped = True
+            self._tool_worker.stop()
+            self._workers.retire(self._tool_worker)
+            self._tool_worker = None
         if self._phase is None:
             return
         if self._pending_stream:
@@ -754,6 +882,10 @@ class ChatEngine(QObject):
         self._phase = None
         self._search_msg = None
         self._think_off_sent = False
+        self._use_tools = False
+        self._payload = None
+        self._rounds = []
+        self._open_round = None
         self.busy_changed.emit(False)
 
     # ---------------------------------------------------------------- chiusura
@@ -764,3 +896,48 @@ class ChatEngine(QObject):
         self._chat_stopped = True
         self._search_stopped = True
         return self._workers.all()
+
+
+def _assistant_messages(m: dict, full_results: bool) -> list[dict]:
+    """Una risposta salvata, come messaggi per Ollama.
+
+    Senza tool è un solo messaggio. Con i tool ogni giro diventa la risposta
+    con le chiamate più un messaggio `tool` per risultato, poi il testo
+    finale. `content` è il testo di tutti i giri di seguito (come lo vede
+    l'utente): il finale è quello che resta dopo i testi dei giri. Con
+    `full_results=False` i risultati si accorciano. I file delle chat si
+    possono modificare a mano: un giro malformato si salta.
+    """
+    content = m.get("content", "")
+    if not isinstance(content, str):
+        content = ""
+    rounds = m.get("tool_rounds")
+    if not isinstance(rounds, list) or not rounds:
+        return [{"role": "assistant", "content": content}]
+    out: list[dict] = []
+    used = 0
+    for r in rounds:
+        calls = r.get("calls") if isinstance(r, dict) else None
+        if not isinstance(calls, list):
+            continue
+        calls = [c for c in calls if isinstance(c, dict) and isinstance(c.get("name"), str)]
+        if not calls:
+            continue
+        text = r.get("content") if isinstance(r.get("content"), str) else ""
+        used += len(text)
+        echo, results = [], []
+        for c in calls:
+            args = c.get("arguments") if isinstance(c.get("arguments"), dict) else {}
+            entry = {"function": {"name": c["name"], "arguments": args}}
+            result = c.get("result") if isinstance(c.get("result"), str) else ""
+            if not full_results:
+                result = tools.shorten(result, tools.OLD_RESULT_CHARS)
+            tool_msg = {"role": "tool", "tool_name": c["name"], "content": result}
+            if isinstance(c.get("id"), str):
+                entry["id"] = tool_msg["tool_call_id"] = c["id"]
+            echo.append(entry)
+            results.append(tool_msg)
+        out.append({"role": "assistant", "content": text, "tool_calls": echo})
+        out.extend(results)
+    out.append({"role": "assistant", "content": content[used:] if out else content})
+    return out

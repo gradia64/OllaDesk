@@ -2764,5 +2764,40 @@ def test_save_failure_notice_has_no_path():
     assert str(config.config_dir()) not in seen[0] and "/" not in seen[0], seen
 
 
+def test_tool_calls_parsing_and_execution():
+    """Chiamate di Ollama normalizzate; errori dei tool restituiti al modello."""
+    from olladesk import tools
+
+    raw = [
+        {"function": {"name": "leggi", "arguments": {"path": "a.txt"}}},
+        {"function": {"name": "cerca", "arguments": '{"q": "num_ctx"}'}, "id": "c1"},
+        {"function": {"name": "rotto", "arguments": "{non json"}},
+        {"function": {"arguments": {}}},          # senza nome: scartata
+        "spazzatura",
+    ]
+    calls = tools.parse_calls(raw)
+    assert calls == [
+        {"name": "leggi", "arguments": {"path": "a.txt"}},
+        {"name": "cerca", "arguments": {"q": "num_ctx"}, "id": "c1"},
+        {"name": "rotto", "arguments": {"_raw": "{non json"}},
+    ]
+    assert tools.parse_calls(None) == [] and tools.parse_calls({}) == []
+
+    reg = tools.ToolRegistry([
+        tools.Tool("leggi", "legge", lambda a: "x" * (tools.MAX_RESULT_CHARS + 10)),
+        tools.Tool("conta", "conta", lambda a: {"n": 3}),
+        tools.Tool("rotto", "fallisce", lambda a: 1 / 0),
+    ])
+    text, err = tools.run_call(reg, calls[0])
+    assert not err and "truncated: 10 more characters" in text
+    assert tools.run_call(reg, {"name": "conta", "arguments": {}}) == ('{"n": 3}', False)
+    text, err = tools.run_call(reg, {"name": "rotto", "arguments": {}})
+    assert err and text.startswith("Error: ZeroDivisionError")
+    text, err = tools.run_call(reg, {"name": "boh", "arguments": {}})
+    assert err and "Available tools: conta, leggi, rotto" in text
+    assert [s["function"]["name"] for s in reg.schemas()] == ["conta", "leggi", "rotto"]
+    assert len(tools.ToolRegistry()) == 0
+
+
 if __name__ == "__main__":
     sys.exit(main())

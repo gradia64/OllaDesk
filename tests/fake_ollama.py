@@ -6,6 +6,12 @@ Risponde a /api/version, /api/tags e /api/chat (NDJSON). La risposta di
   «pensa»   → solo ragionamento, poi attende `release`
   «errore»  → un frammento, poi un errore
   altro     → ragionamento, «Ciao, mondo» e statistiche
+
+Con i tool nella richiesta e «strumento» nell'ultimo messaggio utente, il
+finto modello scrive «Controllo. » e chiama un tool: «sconosciuto» →
+`inesistente`, «rotto» → `rotto`, «lento» → `lento`, altrimenti `eco`.
+Dopo i risultati (ultimo messaggio `tool`) risponde «Ho letto: <risultato>»;
+con «infinito» richiama `eco` finché la richiesta offre i tool.
 """
 import json
 import threading
@@ -97,11 +103,28 @@ class FakeOllama:
                     return
                 fake.payloads.append(body)
                 last = body["messages"][-1]["content"]
+                last_role = body["messages"][-1]["role"]
+                user = next((m["content"] for m in reversed(body["messages"])
+                             if m["role"] == "user"), "")
+                offers = "tools" in body
                 self.send_response(200)
                 self.send_header("Content-Type", "application/x-ndjson")
                 self.end_headers()
                 try:
-                    if "lento" in last:
+                    if "strumento" in user and offers and (
+                            last_role == "user" or "infinito" in user):
+                        name = ("inesistente" if "sconosciuto" in user else
+                                "rotto" if "rotto" in user else
+                                "lento" if "lento" in user else "eco")
+                        self._line({"message": {"content": "Controllo. "}})
+                        self._line({"message": {"content": "", "tool_calls": [
+                            {"function": {"name": name, "arguments": {"testo": "ciao"}}}]}})
+                        self._line({"done": True})
+                    elif last_role == "tool":
+                        self._line({"message": {"content": "Ho letto: " + last}})
+                        self._line({"done": True, "eval_count": 5,
+                                    "eval_duration": 1_000_000_000})
+                    elif "lento" in last:
                         self._line({"message": {"content": "parziale "}})
                         fake.release.wait(10)
                         self._line({"message": {"content": "e finale"}})

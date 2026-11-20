@@ -342,6 +342,142 @@ assert config.load_chat(cid) is None and engine.chat(cid) is None
 assert cid not in [c["id"] for c in engine.chats()]
 print("8. avvisi, rinomina ed eliminazione OK")
 
+# ------------------------------------------------------- 9. ciclo dei tool
+
+import threading  # noqa: E402
+
+from olladesk import tools  # noqa: E402
+
+tool_gate = threading.Event()   # trattiene il tool «lento»
+tool_runs: list[dict] = []
+
+
+def _eco(args):
+    tool_runs.append(args)
+    return "eco: " + args.get("testo", "")
+
+
+def _rotto(_args):
+    raise ValueError("disco sparito")
+
+
+def _lento(_args):
+    tool_gate.wait(10)
+    return "arrivato tardi"
+
+
+engine.tools = tools.ToolRegistry([
+    tools.Tool("eco", "Ripete il testo", _eco,
+               {"type": "object", "properties": {"testo": {"type": "string"}}}),
+    tools.Tool("rotto", "Fallisce sempre", _rotto),
+    tools.Tool("lento", "Aspetta", _lento),
+])
+activity: list[tuple] = []
+engine.tool_activity.connect(lambda cid_, ev: activity.append((cid_, ev)))
+
+# 9a. senza tools=True la richiesta resta quella di sempre
+engine.send(None, "usa lo strumento", "finto")
+assert wait_until(lambda: not engine.busy())
+assert "tools" not in payloads[-1] and not tool_runs
+
+# 9b. un giro: chiamata, risultato al modello, risposta finale nella stessa bolla
+events.clear()
+activity.clear()
+n0 = len(payloads)
+c9 = engine.send(None, "usa lo strumento", "finto", tools=True)
+assert wait_until(lambda: not engine.busy())
+assert len(payloads) == n0 + 2, len(payloads) - n0
+first, second = payloads[n0], payloads[n0 + 1]
+assert [t["function"]["name"] for t in first["tools"]] == ["eco", "lento", "rotto"]
+assert tool_runs == [{"testo": "ciao"}]
+assert second["messages"][-2] == {
+    "role": "assistant", "content": "Controllo. ",
+    "tool_calls": [{"function": {"name": "eco", "arguments": {"testo": "ciao"}}}]}
+assert second["messages"][-1] == {"role": "tool", "tool_name": "eco", "content": "eco: ciao"}
+assert names().count("generation_started") == 1 and len(finished()) == 1
+assert finished()[-1][1:3] == (c9, "done") and finished()[-1][3], finished()
+assert "".join(e[2] for e in events if e[0] == "text_chunk") == "Controllo. Ho letto: eco: ciao"
+assert [(a[0], a[1]["state"], a[1]["name"]) for a in activity] == [
+    (c9, "started", "eco"), (c9, "done", "eco")]
+assert activity[-1][1]["result"] == "eco: ciao" and activity[-1][1]["error"] is False
+saved = config.load_chat(c9)["messages"]
+assert [m["role"] for m in saved] == ["user", "assistant"]
+assert saved[1]["content"] == "Controllo. Ho letto: eco: ciao"
+assert saved[1]["tool_rounds"] == [{"content": "Controllo. ", "calls": [
+    {"name": "eco", "arguments": {"testo": "ciao"}, "result": "eco: ciao", "error": False}]}]
+print("9b. un giro di tool nella stessa risposta, salvato OK")
+
+# 9c. turno successivo: la cronologia ricostruisce chiamate e risultati
+engine.send(c9, "e adesso?", "finto", tools=True)
+assert wait_until(lambda: not engine.busy())
+hist = payloads[-1]["messages"]
+assert [m["role"] for m in hist] == ["system", "user", "assistant", "tool", "assistant", "user"]
+assert hist[2]["content"] == "Controllo. " and hist[2]["tool_calls"][0]["function"]["name"] == "eco"
+assert hist[3]["content"] == "eco: ciao" and hist[4]["content"] == "Ho letto: eco: ciao"
+
+# i risultati restano interi solo nell'ultima risposta, prima si accorciano
+lungo = "x" * (tools.OLD_RESULT_CHARS + 500)
+chat9 = engine.chat(c9)
+chat9["messages"][1]["tool_rounds"][0]["calls"][0]["result"] = lungo
+chat9["messages"].append({"role": "assistant", "content": "ultima", "tool_rounds": [
+    {"content": "", "calls": [{"name": "eco", "arguments": {}, "result": lungo}]}]})
+chat9["messages"].append({"role": "user", "display": "domanda"})
+built, _w = engine._build_messages(chat9)
+tool_contents = [m["content"] for m in built if m["role"] == "tool"]
+assert len(tool_contents[0]) < len(lungo) and "truncated" in tool_contents[0]
+assert tool_contents[-1] == lungo
+# giri malformati (file modificato a mano) non rompono la richiesta
+chat9["messages"].insert(1, {"role": "assistant", "content": "a mano",
+                             "tool_rounds": [None, {"calls": "rotto"}, {"calls": [{"x": 1}]}]})
+built, _w = engine._build_messages(chat9)
+assert {"role": "assistant", "content": "a mano"} in built
+engine.chat(c9)["messages"][1:] = config.load_chat(c9)["messages"][1:]   # ripristina
+print("9c. cronologia con i tool e risultati vecchi accorciati OK")
+
+# 9d. tool che fallisce e tool inventato: errore al modello, l'app va avanti
+for text, expect in (("strumento rotto", "Error: ValueError: disco sparito"),
+                     ("strumento sconosciuto", "Error: unknown tool 'inesistente'")):
+    engine.send(None, text, "finto", tools=True)
+    assert wait_until(lambda: not engine.busy())
+    assert payloads[-1]["messages"][-1]["content"].startswith(expect), payloads[-1]["messages"][-1]
+assert "Available tools: eco, lento, rotto" in payloads[-1]["messages"][-1]["content"]
+assert activity[-1][1]["error"] is True
+print("9d. errori dei tool restituiti al modello OK")
+
+# 9e. tetto dei giri: dopo MAX_ROUNDS la richiesta parte senza tool
+events.clear()
+n0 = len(payloads)
+tool_runs.clear()
+c9e = engine.send(None, "strumento infinito", "finto", tools=True)
+assert wait_until(lambda: not engine.busy(), 10000)
+sent = payloads[n0:]
+assert len(sent) == tools.MAX_ROUNDS + 1, len(sent)
+assert all("tools" in p for p in sent[:-1]) and "tools" not in sent[-1]
+assert len(tool_runs) == tools.MAX_ROUNDS
+assert any("limite di 8 giri" in e[2] for e in events if e[0] == "notice")
+assert finished()[-1][1:3] == (c9e, "done")
+assert len(config.load_chat(c9e)["messages"][1]["tool_rounds"]) == tools.MAX_ROUNDS
+print("9e. tetto di 8 giri OK")
+
+# 9f. stop mentre un tool lavora: nessuna richiesta dopo, giro incompleto scartato
+events.clear()
+tool_gate.clear()
+n0 = len(payloads)
+c9f = engine.send(None, "strumento lento", "finto", tools=True)
+assert wait_until(lambda: any(a[1]["state"] == "started" and a[1]["name"] == "lento"
+                              for a in activity[-1:]))
+t0 = time.monotonic()
+engine.stop()
+assert time.monotonic() - t0 < 1.0, "lo stop ha atteso il tool"
+assert not engine.busy() and finished()[-1][1:3] == (c9f, "stopped")
+tool_gate.set()
+assert wait_until(lambda: False, 300) is False   # il risultato tardivo arriva e si scarta
+assert len(payloads) == n0 + 1, "richiesta partita dopo lo stop"
+saved = config.load_chat(c9f)["messages"]
+assert saved[-1]["content"] == "Controllo. " and "tool_rounds" not in saved[-1]
+assert not any(a[1].get("result") == "arrivato tardi" for a in activity)
+print("9f. stop durante un tool OK")
+
 # ---------------------------------------------------------------- chiusura
 
 from olladesk.ollama_client import shutdown_workers  # noqa: E402
