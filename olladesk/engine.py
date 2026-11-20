@@ -142,6 +142,11 @@ class ChatEngine(QObject):
         """Testo e ragionamento già ricevuti nella risposta in corso."""
         return self._pending_stream, self._pending_think
 
+    def partial_tools(self) -> list[dict]:
+        """Chiamate dei tool della risposta in corso (`tools.calls_view`):
+        per ridisegnare la bolla riaprendo la chat e per le fonti alla fine."""
+        return tools.calls_view(self._rounds, self._open_round)
+
     def think_off_sent(self) -> bool:
         """True se la generazione in corso ha inviato "think": false."""
         return self._think_off_sent
@@ -832,7 +837,7 @@ class ChatEngine(QObject):
         if self._chat_stopped or self.sender() is not self._tool_worker:
             return
         call = self._open_round["calls"][index]
-        call["result"], call["error"] = result, error
+        call["result"], call["error"], call["done"] = result, error, True
         self.tool_activity.emit(self._active_id,
                                 self._tool_event("done", index, result=result, error=error))
 
@@ -840,6 +845,8 @@ class ChatEngine(QObject):
         if self._chat_stopped or self.sender() is not self._tool_worker:
             return
         done_round, self._open_round = self._open_round, None
+        for c in done_round["calls"]:
+            c.pop("done", None)   # serve solo alla vista del giro in corso
         self._rounds.append(done_round)
         for c in done_round["calls"]:
             entry = {"role": "tool", "tool_name": c["name"], "content": c["result"]}

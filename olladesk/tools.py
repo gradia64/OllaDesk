@@ -187,3 +187,48 @@ class ToolWorker(QThread):
             self.call_done.emit(i, text, error)
         if not self._stopped:
             self.all_done.emit()
+
+
+# --------------------------------------------------------- vista delle chiamate
+
+def calls_view(rounds, open_round: dict | None = None) -> list[dict]:
+    """Chiamate di una risposta, in ordine, per l'interfaccia e la companion.
+
+    [{"name", "arguments", "result", "error", "state"}] con state "done"
+    per i giri completi (`tool_rounds`) e, per il giro in corso, "running"
+    finché non arriva il risultato. Giri malformati (chat modificate a mano)
+    si saltano.
+    """
+    out: list[dict] = []
+    sources = [(r, "done") for r in (rounds or [])]
+    if open_round:
+        sources.append((open_round, "open"))
+    for rnd, kind in sources:
+        calls = rnd.get("calls") if isinstance(rnd, dict) else None
+        if not isinstance(calls, list):
+            continue
+        for c in calls:
+            if not isinstance(c, dict) or not isinstance(c.get("name"), str):
+                continue
+            state = "done" if kind == "done" or c.get("done") else "running"
+            args = c.get("arguments")
+            out.append({
+                "name": c["name"],
+                "arguments": args if isinstance(args, dict) else {},
+                "result": str(c.get("result") or ""),
+                "error": bool(c.get("error")),
+                "state": state,
+            })
+    return out
+
+
+def arguments_summary(args: dict, limit: int = 80) -> str:
+    """Argomenti su una riga: `path=progetto/a.py, start_line=10`."""
+    parts = []
+    for k, v in (args or {}).items():
+        text = v if isinstance(v, str) else json.dumps(v, ensure_ascii=False)
+        text = " ".join(str(text).split())
+        if len(text) > limit:
+            text = text[:limit - 1] + "…"
+        parts.append(f"{k}={text}")
+    return ", ".join(parts)

@@ -20,7 +20,7 @@ from PySide6.QtCore import QThread, Signal
 
 from .i18n import _
 from .ollama_client import abort_response
-from .tools import Tool, ToolError
+from .tools import Tool, ToolError, calls_view
 
 _UA = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
@@ -354,9 +354,28 @@ def web_sources(web_block: str) -> list[dict]:
     return out
 
 
+def tool_sources(calls: list[dict]) -> list[dict]:
+    """Fonti delle chiamate a `web_search` riuscite (`tools.calls_view`).
+
+    Ogni ricerca numera da 1 i suoi risultati, come li ha visti il modello;
+    un indirizzo già elencato non si ripete.
+    """
+    out: list[dict] = []
+    seen: set[str] = set()
+    for c in calls or []:
+        if c.get("name") != "web_search" or c.get("error") or c.get("state") != "done":
+            continue
+        for src in web_sources(c.get("result", "")):
+            if src["url"] not in seen:
+                seen.add(src["url"])
+                out.append(src)
+    return out
+
+
 def answer_sources(messages: list[dict], idx: int) -> list[dict]:
     """Fonti della risposta in posizione `idx`: i risultati web del messaggio
-    dell'utente che la precede (vuoto se non c'è stata ricerca)."""
+    dell'utente che la precede (vuoto se non c'è stata ricerca) e, se la
+    risposta è già in `messages`, quelli delle sue chiamate a `web_search`."""
     if idx <= 0 or idx > len(messages):
         return []
     prev = messages[idx - 1]
@@ -364,7 +383,12 @@ def answer_sources(messages: list[dict], idx: int) -> list[dict]:
     if not isinstance(prev, dict) or prev.get("role") != "user":
         return []
     block = prev.get("web_block")
-    return web_sources(block) if isinstance(block, str) else []
+    found = web_sources(block) if isinstance(block, str) else []
+    answer = messages[idx] if idx < len(messages) else None
+    if isinstance(answer, dict) and answer.get("tool_rounds"):
+        found += [src for src in tool_sources(calls_view(answer["tool_rounds"]))
+                  if src["url"] not in {f["url"] for f in found}]
+    return found
 
 
 PROVIDER_NAMES = {"duckduckgo": "DuckDuckGo", "ollama": "Ollama Cloud", "searxng": "SearXNG"}

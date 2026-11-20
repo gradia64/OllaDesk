@@ -508,10 +508,11 @@ class ChatArea(QWidget):
         stats: str | None = None,
         thinking: str = "",
         sources: list[dict] | None = None,
+        tool_calls: list[dict] | None = None,
     ) -> MessageWidget:
         w = MessageWidget(
             role, text, ts, self.show_ts, self.theme_name, attachments, web, self,
-            thinking=thinking, sources=sources,
+            thinking=thinking, sources=sources, tool_calls=tool_calls,
         )
         if stats:
             w.set_stats(stats)
@@ -553,6 +554,12 @@ class ChatArea(QWidget):
             n = len(self._think_buffer)
             self._think_timer.setInterval(min(400, 70 + n // 100))
             self._think_timer.start()
+
+    def stream_tool_calls(self, calls: list[dict]) -> None:
+        """Chiamate dei tool della risposta in corso (elenco completo)."""
+        if self._stream_widget is not None:
+            self._stream_widget.set_tool_calls(calls)
+            QTimer.singleShot(0, self, self._follow_stream)
 
     def _flush_stream(self) -> None:
         if self._stream_widget is not None and self._stream_buffer:

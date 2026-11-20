@@ -300,6 +300,26 @@ assert wait_until(lambda: not engine.busy())
 cid7 = win._view_id
 assert "tools" in fake.payloads[n0] and fake.payloads[n0]["model"] == "finto-due"
 assert config.load_chat(cid7)["tools"] is True
+
+
+def last_answer():
+    row = win.chat_area.msgs.itemAt(bubbles()).widget()
+    return win.chat_area._row_widget(row)
+
+
+# T5: la bolla mostra le chiamate, richiuse; riaprendo la chat restano
+ans = last_answer()
+assert not ans.tools_btn.isHidden() and ans.tools_label.isHidden()
+assert "Strumenti usati (1)" in ans.tools_btn.text(), ans.tools_btn.text()
+ans.tools_btn.click()
+assert not ans.tools_label.isHidden() and "✓ eco(testo=ciao)" in ans.tools_label.text()
+win._open_chat("chat_a")
+win._open_chat(cid7)
+assert "Strumenti usati (1)" in last_answer().tools_btn.text()
+# il telefono le vede nella conversazione (solo testo, già ridotte)
+st, snap = h.get_json(f"/api/chats/{cid7}", TOKEN)
+assert st == 200 and snap["messages"][-1]["tools"] == [
+    {"name": "eco", "args": "testo=ciao", "result": "eco", "error": False, "running": False}]
 # stesso chat con un modello senza tool: pulsante nascosto, scelta salvata, niente tool
 win.model_combo.setCurrentIndex(win.model_combo.findData("finto"))
 assert btn.isHidden() and btn.isChecked()
@@ -313,12 +333,20 @@ assert not btn.isChecked()
 win._open_chat(cid7)
 assert btn.isChecked()
 # dal telefono (senza interruttore) vale la scelta salvata nella chat
+st, snap = h.get_json(f"/api/chats/{cid7}", TOKEN)
+phone = h.SSE(f"/api/chats/{cid7}/events?after={snap['seq']}", TOKEN)
+assert wait_until(lambda: phone.of("busy"))
 n0 = len(fake.payloads)
 st, res = h.post_json("/api/send", {"text": "usa lo strumento", "model": "finto-due",
                                     "chat_id": cid7}, TOKEN)
 assert st == 200, res
 assert wait_until(lambda: not engine.busy() and len(fake.payloads) > n0)
 assert "tools" in fake.payloads[n0]
+# T5 in diretta: le chiamate arrivano con la risposta e nel «done»
+assert wait_until(lambda: "done" in phone.kinds())
+assert any(a.get("tools") for a in phone.of("answer")), phone.of("answer")
+assert phone.of("done")[-1]["tools"][0]["name"] == "eco"
+phone.close()
 # spegnerlo in una chat salvata vale subito, anche senza inviare
 win.model_combo.setCurrentIndex(win.model_combo.findData("finto-due"))
 btn.click()

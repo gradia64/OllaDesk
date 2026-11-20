@@ -102,8 +102,12 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   collegamenti che escono). Con la ricerca web (🌐) accesa il modello cerca
   anche sul web quando gli serve, con il provider delle impostazioni e una
   query scritta da lui, invece della ricerca automatica prima della risposta;
-  con 🌐 spenta non va in rete. Al massimo 8 giri di strumenti per risposta. La
-  scelta vale per la conversazione e il telefono la rispetta.
+  con 🌐 spenta non va in rete. Al massimo 8 giri di strumenti per risposta. Le
+  chiamate compaiono nella bolla in un blocco «🔧 Strumenti usati» richiudibile,
+  con argomenti e inizio del risultato (durante la risposta mostra lo strumento
+  in corso), e le fonti delle ricerche finiscono in «🌐 Fonti». La scelta vale
+  per la conversazione e il telefono la rispetta; la companion mostra le
+  chiamate, senza poterle comandare.
 - **Companion web** (voce «📱 Companion» della barra laterale, `Ctrl+D`;
   spenta di default): una
   pagina per smartphone e tablet nella rete locale, con le stesse

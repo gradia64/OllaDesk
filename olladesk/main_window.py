@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from . import __version__, app_update, companion, config, icons, theme, updater, web_search
+from . import __version__, app_update, companion, config, icons, theme, tools, updater, web_search
 from .i18n import _
 from .engine import ChatEngine
 from .ollama_client import shutdown_workers
@@ -276,6 +276,7 @@ class MainWindow(QMainWindow):
         e.generation_started.connect(self._on_generation_started)
         e.text_chunk.connect(self._on_text_chunk)
         e.think_chunk.connect(self._on_think_chunk)
+        e.tool_activity.connect(self._on_tool_activity)
         e.generation_finished.connect(self._on_generation_finished)
         e.notice.connect(self._on_notice)
         e.status_changed.connect(self._on_status_changed)
@@ -536,11 +537,13 @@ class MainWindow(QMainWindow):
         self.chat_area.set_tools(chat.get("tools") is True)
         msgs = chat["messages"]
         for i, m in enumerate(msgs):
-            sources = web_search.answer_sources(msgs, i) if m["role"] == "assistant" else None
+            is_answer = m["role"] == "assistant"
+            sources = web_search.answer_sources(msgs, i) if is_answer else None
+            calls = tools.calls_view(m.get("tool_rounds")) if is_answer else None
             self.chat_area.add_message(
                 m["role"], m.get("display", m.get("content", "")), m.get("ts"),
                 m.get("attachments"), bool(m.get("web")), m.get("stats"),
-                thinking=m.get("thinking", ""), sources=sources,
+                thinking=m.get("thinking", ""), sources=sources, tool_calls=calls,
             )
 
     # durante una generazione si può navigare: la risposta continua in
@@ -643,6 +646,9 @@ class MainWindow(QMainWindow):
         text, think = self.engine.partial()
         if think:
             self.chat_area.stream_thinking(think)
+        calls = self.engine.partial_tools()
+        if calls:
+            self.chat_area.stream_tool_calls(calls)
         if text:
             self.chat_area.stream_text(text)
 
@@ -734,6 +740,10 @@ class MainWindow(QMainWindow):
         if self._viewing(chat_id):
             self.chat_area.stream_text(chunk)
 
+    def _on_tool_activity(self, chat_id: str, _event: dict) -> None:
+        if self._viewing(chat_id):
+            self.chat_area.stream_tool_calls(self.engine.partial_tools())
+
     def _on_think_chunk(self, chat_id: str, chunk: str) -> None:
         if self._viewing(chat_id):
             self.chat_area.stream_thinking(chunk)
@@ -746,6 +756,14 @@ class MainWindow(QMainWindow):
         chat = self.engine.chat(chat_id)
         msgs = chat["messages"] if chat else []
         sources = web_search.answer_sources(msgs, len(msgs))
+        calls = self.engine.partial_tools()
+        if outcome != "done":
+            # un giro interrotto non viene salvato: la bolla mostra solo i completi
+            calls = [c for c in calls if c["state"] == "done"]
+        if calls:
+            self.chat_area.stream_tool_calls(calls)
+            urls = {s["url"] for s in sources}
+            sources += [s for s in web_search.tool_sources(calls) if s["url"] not in urls]
         if outcome == "done":
             self.chat_area.end_stream(stats or None, sources=sources)
             return

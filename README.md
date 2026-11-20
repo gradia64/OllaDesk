@@ -98,8 +98,12 @@ License: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   the folder). With web search (🌐) on, the model also searches the web when
   it needs to, with the provider from the settings and a query it writes
   itself, instead of the automatic search before the answer; with 🌐 off it
-  does not go online. At most 8 tool rounds per answer. The choice applies to
-  the conversation and the phone follows it.
+  does not go online. At most 8 tool rounds per answer. Calls appear in the
+  bubble in a collapsible "🔧 Tools used" block, with arguments and the start
+  of the result (while answering it shows the tool in progress), and the
+  sources of the searches go into "🌐 Sources". The choice applies to the
+  conversation and the phone follows it; the companion shows the calls,
+  without controlling them.
 - **Web companion** ("📱 Companion" item in the sidebar, `Ctrl+D`; off by
   default): a page for smartphones and tablets on the local network, with the
   same conversations as the PC. From the phone you read chats, open a new one

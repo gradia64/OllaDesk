@@ -411,6 +411,7 @@ assert [m["role"] for m in saved] == ["user", "assistant"]
 assert saved[1]["content"] == "Controllo. Ho letto: eco: ciao"
 assert saved[1]["tool_rounds"] == [{"content": "Controllo. ", "calls": [
     {"name": "eco", "arguments": {"testo": "ciao"}, "result": "eco: ciao", "error": False}]}]
+assert engine.partial_tools() == []   # fuori da una risposta: nessuna chiamata
 print("9b. un giro di tool nella stessa risposta, salvato OK")
 
 # 9c. turno successivo: la cronologia ricostruisce chiamate e risultati
@@ -472,6 +473,9 @@ n0 = len(payloads)
 c9f = engine.send(None, "strumento lento", "finto", tools=True)
 assert wait_until(lambda: any(a[1]["state"] == "started" and a[1]["name"] == "lento"
                               for a in activity[-1:]))
+# T5: la vista del giro in corso (bolla riaperta, telefono) mostra il tool attivo
+assert engine.partial_tools() == [{"name": "lento", "arguments": {"testo": "ciao"},
+                                   "result": "", "error": False, "state": "running"}]
 t0 = time.monotonic()
 engine.stop()
 assert time.monotonic() - t0 < 1.0, "lo stop ha atteso il tool"

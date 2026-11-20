@@ -35,7 +35,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QObject, Qt, Signal
 
-from . import __version__, config, context, netinfo, web_search
+from . import __version__, config, context, netinfo, tools, web_search
 from . import i18n
 from .i18n import _
 from .md import md_to_html
@@ -470,6 +470,24 @@ def web_stop(engine, chat_id: str) -> bool:
     return False
 
 
+PHONE_TOOL_RESULT_CHARS = 300   # anteprima del risultato di un tool sul telefono
+
+
+def phone_tools(calls: list[dict]) -> list[dict]:
+    """Chiamate dei tool per il telefono (`tools.calls_view`), già ridotte:
+    argomenti su una riga e solo l'inizio del risultato. Solo testo: la
+    pagina li mostra senza innerHTML."""
+    out = []
+    for c in calls or []:
+        result = (c.get("result") or "").strip()
+        if len(result) > PHONE_TOOL_RESULT_CHARS:
+            result = result[:PHONE_TOOL_RESULT_CHARS] + "…"
+        out.append({"name": c["name"], "args": tools.arguments_summary(c.get("arguments") or {}),
+                    "result": result, "error": bool(c.get("error")),
+                    "running": c.get("state") == "running"})
+    return out
+
+
 def render_message(m: dict, sources: list[dict] | None = None) -> dict | None:
     """Messaggio per il browser, con il Markdown già reso.
 
@@ -497,6 +515,9 @@ def render_message(m: dict, sources: list[dict] | None = None) -> dict | None:
             out["stats"] = m["stats"]
         if sources:
             out["sources"] = sources
+        calls = phone_tools(tools.calls_view(m.get("tool_rounds")))
+        if calls:
+            out["tools"] = calls
     return out
 
 
@@ -545,6 +566,8 @@ class EventHub(QObject):
         e.generation_started.connect(lambda cid: self._push(cid, "start", {}))
         e.text_chunk.connect(lambda cid, t: self._push(cid, "text", t))
         e.think_chunk.connect(lambda cid, t: self._push(cid, "think", t))
+        e.tool_activity.connect(
+            lambda cid, _ev: self._push(cid, "tools", phone_tools(engine.partial_tools())))
         e.generation_finished.connect(self._on_finished)
         e.notice.connect(lambda cid, text: self._push(cid, "notice", {"text": text}))
         e.chats_changed.connect(lambda: self._push("", "chats", {}))
@@ -554,9 +577,16 @@ class EventHub(QObject):
         # ancora quello dell'utente, con i risultati della ricerca web
         chat = self._engine.chat(chat_id)
         msgs = chat["messages"] if chat else []
+        sources = web_search.answer_sources(msgs, len(msgs))
+        calls = self._engine.partial_tools()
+        if outcome != "done":
+            # un giro interrotto non viene salvato: come sul PC, solo i completi
+            calls = [c for c in calls if c["state"] == "done"]
+        urls = {s["url"] for s in sources}
+        sources += [s for s in web_search.tool_sources(calls) if s["url"] not in urls]
         self._push(chat_id, "done", {
             "outcome": outcome, "stats": stats, "error": err, "ts": config.now(),
-            "sources": web_search.answer_sources(msgs, len(msgs)),
+            "sources": sources, "tools": phone_tools(calls),
         })
 
     def _on_busy(self, busy: bool) -> None:
@@ -607,6 +637,7 @@ class _StreamState:
         self.active = False
         self.text = ""
         self.think = ""
+        self.tools: list[dict] = []
         self.dirty = False
         self.last_sent = 0.0
 
@@ -1030,6 +1061,8 @@ class _Handler(BaseHTTPRequestHandler):
         data = {"html": md_to_html(st.text, *_MD_COLORS), "text": st.text}
         if st.think:
             data["thinking_html"] = md_to_html(st.think, *_MD_COLORS)
+        if st.tools:
+            data["tools"] = st.tools
         self._sse("answer", data)
         st.dirty = False
         st.last_sent = time.monotonic()
@@ -1048,12 +1081,20 @@ class _Handler(BaseHTTPRequestHandler):
                     st.think += data
                 st.dirty = True
             return
+        if kind == "tools":
+            # elenco completo a ogni evento: basta l'ultimo, come per il testo
+            if st.active:
+                st.tools = data
+                st.dirty = True
+            return
         if kind == "start":
             st.active, st.text, st.think, st.dirty = True, "", "", False
+            st.tools = []
         elif kind == "done":
             if new and st.active and st.dirty:
                 self._flush_answer(st)
             st.active, st.text, st.think, st.dirty = False, "", "", False
+            st.tools = []
         if not new:
             if kind == "notice" and notices_after is not None and seq > notices_after:
                 # avviso del proprio invio, che la copia della chat non contiene.

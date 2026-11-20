@@ -236,6 +236,31 @@ function setThinking(target, html) {
   target.thinkBody.innerHTML = html;
 }
 
+// chiamate dei tool della risposta (solo visualizzazione), richiuse come il
+// pensiero; nomi, argomenti e risultati sono solo testo (mai innerHTML)
+function setTools(target, calls) {
+  if (!calls || !calls.length) return;
+  if (!target.tools) {
+    target.tools = el("details", "tools");
+    target.toolsHead = el("summary", "");
+    target.toolsList = el("div", "list");
+    target.tools.append(target.toolsHead, target.toolsList);
+    target.box.insertBefore(target.tools, target.body);
+  }
+  const running = calls.find((c) => c.running);
+  target.toolsHead.textContent = running
+    ? "🔧 " + trf("{name} in corso…", { name: running.name })
+    : "🔧 " + trf("Strumenti usati ({n})", { n: calls.length });
+  const rows = calls.map((c) => {
+    const row = el("div", "call" + (c.error ? " error" : ""));
+    const mark = c.running ? "…" : (c.error ? "✗" : "✓");
+    row.append(el("div", "head", mark + " " + c.name + "(" + (c.args || "") + ")"));
+    if (c.result) row.append(el("pre", "result", c.result));
+    return row;
+  });
+  target.toolsList.replaceChildren(...rows);
+}
+
 function renderMessage(m) {
   const box = el("div", "msg " + m.role);
   const chips = [];
@@ -249,7 +274,9 @@ function renderMessage(m) {
   const body = el("div", "body");
   body.innerHTML = m.html;
   box.append(body);
-  setThinking({ box, body }, m.thinking_html);
+  const parts = { box, body };
+  setThinking(parts, m.thinking_html);
+  setTools(parts, m.tools);
   addSources(box, m.sources);
   addFoot(box, () => m.text, [fmtTime(m.ts), m.stats].filter(Boolean).join(" · "));
   return box;
@@ -358,7 +385,7 @@ function startPending(status) {
   body.append(el("span", "muted typing", status || ""));
   box.append(body);
   $("messages").append(box);
-  pending = { box, body, think: null, thinkBody: null, hasText: false, raw: "" };
+  pending = { box, body, think: null, thinkBody: null, tools: null, hasText: false, raw: "" };
   scrollToEnd();
   return pending;
 }
@@ -370,6 +397,7 @@ function finishPending(d) {
   if (!p.hasText && d.outcome !== "done") {
     p.box.remove();     // interrotta o fallita prima di ogni testo
   } else {
+    if (d.tools) setTools(p, d.tools);
     addSources(p.box, d.sources);
     addFoot(p.box, () => p.raw,
       [fmtTime(d.ts || Date.now() / 1000), d.stats].filter(Boolean).join(" · "));
@@ -425,6 +453,7 @@ function openStream(id, after, noticesAfter) {
     p.raw = d.text || "";
     p.hasText = !!d.html;
     setThinking(p, d.thinking_html);
+    setTools(p, d.tools);
     if (!p.hasText && d.thinking_html) {
       p.body.replaceChildren(el("span", "muted typing", tr("sta pensando")));
     }

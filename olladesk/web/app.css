@@ -254,6 +254,23 @@ details.think {
 
 details.think summary { cursor: pointer; }
 
+details.tools {
+  margin-bottom: 8px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+details.tools summary { cursor: pointer; }
+details.tools .call { margin-top: 6px; }
+details.tools .head { font-family: monospace; overflow-wrap: anywhere; }
+details.tools .call.error .head { color: var(--error); }
+details.tools pre.result {
+  margin: 2px 0 0 14px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+
 details.sources {
   margin-top: 8px;
   font-size: 14px;

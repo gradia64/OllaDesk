@@ -20,8 +20,11 @@ from PySide6.QtWidgets import (
 from ..md import COPY_LINK, code_blocks, md_to_html
 from .. import icons, theme
 from ..i18n import _
+from ..tools import arguments_summary
 
 _ANIM_FRAMES = ["·", "··", "···"]
+TOOL_PREVIEW_LINES = 6       # righe del risultato di un tool mostrate nella bolla
+TOOL_PREVIEW_CHARS = 500
 
 
 class MessageWidget(QFrame):
@@ -37,6 +40,7 @@ class MessageWidget(QFrame):
         parent=None,
         thinking: str = "",
         sources: list[dict] | None = None,
+        tool_calls: list[dict] | None = None,
     ):
         super().__init__(parent)
         self.role = role
@@ -86,6 +90,26 @@ class MessageWidget(QFrame):
             # riapertura di una conversazione salvata: blocco già richiuso
             self.think_btn.show()
             self._sync_think_widgets()
+
+        # -- chiamate dei tool, richiudibili (tra pensiero e contenuto) --
+        self._tool_calls: list[dict] = []
+        self._tools_expanded = False
+        self.tools_btn = QToolButton(self)
+        self.tools_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.tools_btn.clicked.connect(self._on_tools_toggle)
+        self.tools_btn.hide()
+        self.tools_label = QLabel(self)
+        self.tools_label.setTextFormat(Qt.TextFormat.PlainText)
+        self.tools_label.setWordWrap(True)
+        self.tools_label.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+        )
+        self.tools_label.hide()
+        self._style_tools()
+        inner.addWidget(self.tools_btn, 0, Qt.AlignmentFlag.AlignLeft)
+        inner.addWidget(self.tools_label)
+        if tool_calls:
+            self.set_tool_calls(tool_calls)
 
         chips = []
         if role == "user" and web:
@@ -286,6 +310,64 @@ class MessageWidget(QFrame):
         self._stats = stats
         self._update_meta(show_ts, stats)
 
+    # ------------------------------------------------------------ strumenti
+
+    def set_tool_calls(self, calls: list[dict]) -> None:
+        """Chiamate dei tool della risposta (`tools.calls_view`), richiuse.
+
+        Durante la risposta il chiamante passa ogni volta l'elenco completo:
+        l'intestazione mostra il tool in corso, il blocco resta come
+        l'utente l'ha lasciato (aperto o chiuso).
+        """
+        self._tool_calls = list(calls or [])
+        if not self._tool_calls:
+            self.tools_btn.hide()
+            self.tools_label.hide()
+            return
+        self.tools_btn.show()
+        self._sync_tools_widgets()
+
+    def _sync_tools_widgets(self) -> None:
+        arrow = "▾" if self._tools_expanded else "▸"
+        running = [c for c in self._tool_calls if c.get("state") == "running"]
+        if running:
+            head = _('{name} in corso…').format(name=running[0]["name"])
+        else:
+            head = _('Strumenti usati ({n})').format(n=len(self._tool_calls))
+        self.tools_btn.setText(f"🔧 {head} {arrow}")
+        if self._tools_expanded:
+            self.tools_label.setText(self._tools_text())
+        self.tools_label.setVisible(self._tools_expanded)
+
+    def _tools_text(self) -> str:
+        blocks = []
+        for c in self._tool_calls:
+            mark = "…" if c.get("state") == "running" else ("✗" if c.get("error") else "✓")
+            lines = [f"{mark} {c['name']}({arguments_summary(c.get('arguments') or {})})"]
+            result = (c.get("result") or "").strip()
+            if result:
+                preview = result[:TOOL_PREVIEW_CHARS].splitlines()[:TOOL_PREVIEW_LINES]
+                more = len(result) > TOOL_PREVIEW_CHARS or \
+                    len(result.splitlines()) > TOOL_PREVIEW_LINES
+                lines += ["    " + ln for ln in preview]
+                if more:
+                    lines.append("    …")
+            blocks.append("\n".join(lines))
+        return "\n\n".join(blocks)
+
+    def _on_tools_toggle(self) -> None:
+        self._tools_expanded = not self._tools_expanded
+        self._sync_tools_widgets()
+
+    def _style_tools(self) -> None:
+        self.tools_btn.setStyleSheet(
+            "QToolButton { border: none; background: transparent; "
+            f"color: {self._think_color}; padding: 0; }}"
+        )
+        self.tools_label.setStyleSheet(
+            f"color: {self._think_color}; font-family: monospace;"
+        )
+
     def set_sources(self, sources: list[dict]) -> None:
         """Fonti della ricerca web (web_search.web_sources), richiuse."""
         self._sources = list(sources or [])
@@ -336,6 +418,7 @@ class MessageWidget(QFrame):
             "QToolButton { border: none; background: transparent; "
             f"color: {self._think_color}; padding: 0; }}"
         )
+        self._style_tools()
         if self._sources:
             expanded = self._sources_expanded
             self.set_sources(self._sources)   # riscrive il colore del dominio

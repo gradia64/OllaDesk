@@ -2918,5 +2918,66 @@ def test_web_search_tool():
     assert reg.get("web_search").stop is not None
 
 
+def test_tool_calls_view_sources_and_bubble():
+    """T5: vista delle chiamate, fonti dalle ricerche come tool, bolla e telefono."""
+    from PySide6.QtWidgets import QApplication
+
+    QApplication.instance() or QApplication([])
+    from olladesk import companion, tools, web_search
+    from olladesk.widgets.message import MessageWidget
+
+    block = web_search.format_results("rame", [("Rame", "https://esempio.it/rame", "prezzo")])
+    rounds = [
+        {"content": "Cerco. ", "calls": [
+            {"name": "web_search", "arguments": {"query": "rame"}, "result": block, "error": False},
+            {"name": "read_file", "arguments": {"path": "p/a.py", "start_line": 3},
+             "result": "Error: 'p/a.py' does not exist.", "error": True}]},
+        "rotto", {"calls": "no"}, {"calls": [{"arguments": {}}, {"name": "eco"}]},
+    ]
+    calls = tools.calls_view(rounds)
+    assert [c["name"] for c in calls] == ["web_search", "read_file", "eco"], calls
+    assert all(c["state"] == "done" for c in calls) and calls[1]["error"] is True
+    assert calls[2]["arguments"] == {} and calls[2]["result"] == ""
+    open_round = {"calls": [{"name": "eco", "arguments": {}, "result": "", "error": False},
+                            {"name": "lento", "arguments": {}, "result": "x", "error": False,
+                             "done": True}]}
+    assert [c["state"] for c in tools.calls_view([], open_round)] == ["running", "done"]
+    assert tools.arguments_summary({"path": "a\nb", "n": 3, "q": "x" * 200}, 10) == \
+        "path=a b, n=3, q=xxxxxxxxx…"
+
+    # fonti: solo web_search riuscite e completate, senza doppioni
+    assert [s["url"] for s in web_search.tool_sources(calls + calls)] == ["https://esempio.it/rame"]
+    running = [{**calls[0], "state": "running"}]
+    assert web_search.tool_sources(running) == []
+    msgs = [{"role": "user", "display": "rame"},
+            {"role": "assistant", "content": "ok", "tool_rounds": rounds}]
+    assert [s["host"] for s in web_search.answer_sources(msgs, 1)] == ["esempio.it"]
+    assert web_search.answer_sources(msgs, 2) == []
+
+    # bolla: richiusa, intestazione col conteggio o col tool in corso
+    w = MessageWidget("assistant", "ok", tool_calls=calls)
+    assert not w.tools_btn.isHidden() and w.tools_label.isHidden()
+    assert "Strumenti usati (3)" in w.tools_btn.text()
+    w.tools_btn.click()
+    text = w.tools_label.text()
+    assert "✓ web_search(query=rame)" in text and "✗ read_file(path=p/a.py, start_line=3)" in text
+    assert "    Error: 'p/a.py' does not exist." in text
+    w.set_tool_calls([{**calls[0], "state": "running"}])
+    assert "web_search in corso…" in w.tools_btn.text() and not w.tools_label.isHidden()
+    w.set_tool_calls([])
+    assert w.tools_btn.isHidden() and w.tools_label.isHidden()
+    plain = MessageWidget("assistant", "ok")
+    assert plain.tools_btn.isHidden()
+
+    # telefono: argomenti su una riga, risultato accorciato
+    phone = companion.phone_tools([{**calls[0], "result": "y" * 1000}])
+    assert phone[0]["args"] == "query=rame" and phone[0]["running"] is False
+    assert len(phone[0]["result"]) == companion.PHONE_TOOL_RESULT_CHARS + 1
+    out = companion.render_message(msgs[1], web_search.answer_sources(msgs, 1))
+    assert [c["name"] for c in out["tools"]] == ["web_search", "read_file"] + ["eco"]
+    assert out["sources"][0]["url"] == "https://esempio.it/rame"
+    assert "tools" not in companion.render_message({"role": "assistant", "content": "x"})
+
+
 if __name__ == "__main__":
     sys.exit(main())
