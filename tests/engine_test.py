@@ -506,6 +506,33 @@ assert "tools" not in payloads[n0] and "tools" not in config.load_chat(c9g)
 engine.set_chat_tools("non-esiste", True)                       # nessun errore
 print("9g. interruttore dei tool per chat OK")
 
+# 9h. tool sui file (T3): offerti solo se la chat condivide cartelle o file,
+# anche con il registro fisso vuoto; si leggono dal disco nel giro dei tool
+from pathlib import Path  # noqa: E402
+
+engine.tools = tools.ToolRegistry()
+shared_dir = Path(tempfile.mkdtemp()) / "condivisa"
+shared_dir.mkdir()
+(shared_dir / "nota.txt").write_text("contenuto della nota\n")
+n0 = len(payloads)
+c9h = engine.send(None, "ciao", "finto", tools=True)             # niente condiviso
+assert wait_until(lambda: not engine.busy())
+assert "tools" not in payloads[n0]
+n0 = len(payloads)
+engine.send(c9h, "guarda la cartella", "finto", tools=True,
+            attachments=[{"path": str(shared_dir), "name": "condivisa/", "kind": "folder"}])
+assert wait_until(lambda: not engine.busy())
+assert [t["function"]["name"] for t in payloads[n0]["tools"]] == [
+    "list_files", "read_file", "search_text"]
+n0 = len(payloads)
+engine.send(c9h, "e adesso?", "finto")                           # la cartella resta
+assert wait_until(lambda: not engine.busy())
+assert "list_files" in str(payloads[n0]["tools"])
+reg = engine._tools_for(config.load_chat(c9h))
+out, err = tools.run_call(reg, {"name": "read_file", "arguments": {"path": "condivisa/nota.txt"}})
+assert not err and "contenuto della nota" in out, out
+print("9h. tool sui file condivisi nella chat OK")
+
 # ---------------------------------------------------------------- chiusura
 
 from olladesk.ollama_client import shutdown_workers  # noqa: E402

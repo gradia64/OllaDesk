@@ -21,7 +21,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QObject, Signal
 
-from . import config, context, secrets_store, tools, web_search
+from . import config, context, file_tools, secrets_store, tools, web_search
 from .i18n import _
 from .ollama_client import (
     ApiWorker, CapsWorker, ChatWorker, PostWorker, PullWorker, chat_capable, format_stats,
@@ -78,6 +78,7 @@ class ChatEngine(QObject):
         # giro, giri completi e giro le cui chiamate sono in esecuzione
         self.tools = tools.ToolRegistry()
         self._use_tools = False
+        self._turn_tools = self.tools   # registro del turno: fissi + file della chat
         self._tool_worker: tools.ToolWorker | None = None
         self._payload: dict | None = None
         self._rounds: list[dict] = []
@@ -184,6 +185,17 @@ class ChatEngine(QObject):
         rispondono con un errore se la richiesta porta `tools`.
         """
         return "tools" in (self.model_caps(name) or [])
+
+    def _tools_for(self, chat: dict) -> tools.ToolRegistry:
+        """Tool del turno: quelli fissi più la lettura di ciò che la chat condivide.
+
+        Le cartelle e i file (non immagini) allegati nella conversazione sono
+        l'unica parte del disco che il modello può leggere (`file_tools`).
+        """
+        extra = file_tools.make_tools(file_tools.shared_from_chat(chat))
+        if not extra:
+            return self.tools
+        return tools.ToolRegistry([*(self.tools.get(n) for n in self.tools.names()), *extra])
 
     def reset_status(self) -> None:
         """Host cambiato: il prossimo controllo riuscito ricarica i modelli."""
@@ -702,8 +714,9 @@ class ChatEngine(QObject):
         if not think:
             payload["think"] = False
         self._think_off_sent = not think
-        if self._use_tools and len(self.tools) and self.tools_supported(model):
-            payload["tools"] = self.tools.schemas()
+        self._turn_tools = self._tools_for(chat)
+        if self._use_tools and len(self._turn_tools) and self.tools_supported(model):
+            payload["tools"] = self._turn_tools.schemas()
 
         self._pending_stream = ""
         self._pending_think = ""
@@ -775,7 +788,7 @@ class ChatEngine(QObject):
             "content": text,
             "calls": [{**c, "result": "", "error": False} for c in calls],
         }
-        w = tools.ToolWorker(self.tools, calls, self)
+        w = tools.ToolWorker(self._turn_tools, calls, self)
         w.call_started.connect(self._on_tool_started)
         w.call_done.connect(self._on_tool_done)
         w.all_done.connect(self._on_tools_finished)

@@ -326,9 +326,9 @@ class ChatArea(QWidget):
         self.tools_btn.setCheckable(True)
         self.tools_btn.setIconSize(QSize(18, 18))
         self.tools_btn.setToolTip(
-            _("Strumenti: acceso (icona colorata), il modello può usare gli strumenti "
-              "di OllaDesk mentre risponde;\nspento (icona grigia), risponde come sempre. "
-              "Vale per questa conversazione.")
+            _("Strumenti: acceso (icona colorata), il modello può leggere le cartelle e i "
+              "file allegati alla conversazione mentre risponde;\nspento (icona grigia), "
+              "risponde come sempre. Vale per questa conversazione.")
         )
         self.tools_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.tools_btn.toggled.connect(self._on_tools_toggled)

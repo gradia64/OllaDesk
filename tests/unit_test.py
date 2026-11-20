@@ -2799,5 +2799,90 @@ def test_tool_calls_parsing_and_execution():
     assert len(tools.ToolRegistry()) == 0
 
 
+def test_file_tools_shared_folders():
+    """Tool di lettura: solo ciò che la chat condivide, con le regole degli allegati."""
+    from olladesk import file_tools, tools
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp) / "progetto"
+        (root / "src").mkdir(parents=True)
+        (root / "node_modules" / "x").mkdir(parents=True)
+        (root / "generati").mkdir()
+        (root / "src" / "main.py").write_text(
+            "".join(f"riga {i}\n" for i in range(1, 501)) + "AGO nel pagliaio\n")
+        (root / "README.md").write_text("Progetto di prova\n")
+        (root / ".env").write_text("SEGRETO=1\n")
+        (root / "id_rsa").write_text("chiave\n")
+        (root / ".gitignore").write_text("generati/\n")
+        (root / "generati" / "out.txt").write_text("AGO generato\n")
+        (root / "node_modules" / "x" / "i.js").write_text("AGO dipendenza\n")
+        fuori = Path(tmp) / "fuori.txt"
+        fuori.write_text("AGO segreto fuori\n")
+        (root / "link.txt").symlink_to(fuori)
+        solo = Path(tmp) / "id_rsa.txt"
+        solo.write_text("allegato da solo\n")
+        immagine = Path(tmp) / "foto.png"
+        immagine.write_bytes(b"x")
+
+        chat = {"messages": [
+            {"role": "user", "attachments_meta": [
+                {"path": str(root), "name": "progetto", "kind": "folder"},
+                {"path": str(immagine), "name": "foto.png", "kind": "image"}]},
+            {"role": "assistant", "content": "ok"},
+            {"role": "user", "attachments_meta": [
+                {"path": str(root), "name": "progetto", "kind": "folder"},
+                {"path": str(solo), "name": "id_rsa.txt", "kind": "text"},
+                {"path": str(Path(tmp) / "sparito"), "name": "sparito", "kind": "text"}]},
+        ]}
+        shared = file_tools.shared_from_chat(chat)
+        assert [s.label for s in shared] == ["progetto", "id_rsa.txt"], shared
+        assert file_tools.make_tools([]) == []
+        reg = tools.ToolRegistry(file_tools.make_tools(shared))
+        assert reg.names() == ["list_files", "read_file", "search_text"]
+
+        def call(name, **args):
+            return tools.run_call(reg, {"name": name, "arguments": args})
+
+        out, err = call("list_files")
+        assert not err and "progetto/" in out and "id_rsa.txt" in out, out
+        out, err = call("list_files", path="progetto")
+        assert not err and "src/" in out and "README.md" in out, out
+        for nascosto in (".env", "id_rsa\n", "node_modules", "generati/", "link.txt", ".gitignore"):
+            assert nascosto not in out, (nascosto, out)
+        assert "hidden, ignored or credential entries not shown" in out
+
+        out, err = call("read_file", path="progetto/src/main.py")
+        assert not err and "lines 1-400 of 501" in out and "start_line=401" in out, out
+        out, err = call("read_file", path="progetto/src/main.py", start_line=500, max_lines=5)
+        assert not err and "lines 500-501 of 501" in out and "AGO nel pagliaio" in out, out
+        out, err = call("read_file", path="id_rsa.txt")        # allegato da solo: si legge
+        assert not err and "allegato da solo" in out, out
+
+        rifiuti = {
+            "progetto/../fuori.txt": "'..'",
+            "progetto/link.txt": "outside",
+            "progetto/.env": "hidden",
+            "progetto/id_rsa": "credentials",
+            "progetto/generati/out.txt": ".gitignore",
+            "progetto/node_modules/x/i.js": "dependency",
+            "altro/x.txt": "not shared",
+            "progetto/manca.txt": "does not exist",
+            "id_rsa.txt/x": "is a file",
+            "": "Missing path",
+        }
+        for path, atteso in rifiuti.items():
+            out, err = call("read_file", path=path)
+            assert err and out.startswith("Error: ") and atteso in out, (path, out)
+            assert "ToolError" not in out, out
+
+        out, err = call("search_text", query="ago")
+        assert not err and "progetto/src/main.py:501: AGO nel pagliaio" in out, out
+        assert "generato" not in out and "dipendenza" not in out and "fuori" not in out, out
+        out, err = call("search_text", query="riga 1", path="progetto/src")
+        assert not err and "progetto/src/main.py:1:" in out, out
+        out, err = call("search_text", query="  ")
+        assert err, out
+
+
 if __name__ == "__main__":
     sys.exit(main())

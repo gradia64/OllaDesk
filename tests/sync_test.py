@@ -286,9 +286,7 @@ from olladesk import tools as tools_mod  # noqa: E402
 
 btn = win.chat_area.tools_btn
 win._new_chat()
-# senza tool nel registro il pulsante non compare, nemmeno con un modello adatto
-win.model_combo.setCurrentIndex(win.model_combo.findData("finto-due"))
-assert wait_until(lambda: engine.tools_supported("finto-due")) and btn.isHidden()
+# il pulsante dipende solo dal modello: i tool sui file condivisi ci sono sempre
 engine.tools = tools_mod.ToolRegistry([tools_mod.Tool("eco", "Ripete", lambda a: "eco")])
 win.model_combo.setCurrentIndex(win.model_combo.findData("finto"))
 assert btn.isHidden() and not btn.isChecked()        # modello senza tool: niente pulsante

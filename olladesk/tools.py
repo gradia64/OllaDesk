@@ -56,6 +56,11 @@ class Tool:
         }
 
 
+class ToolError(Exception):
+    """Errore previsto di un tool (percorso fuori, file assente…): il modello
+    legge il messaggio così com'è, senza il nome dell'eccezione."""
+
+
 class ToolRegistry:
     """Tool disponibili, per nome. Vuoto = nessun tool nella richiesta."""
 
@@ -133,6 +138,8 @@ def run_call(registry: ToolRegistry, call: dict) -> tuple[str, bool]:
     args = call.get("arguments") if isinstance(call.get("arguments"), dict) else {}
     try:
         result = tool.run(args)
+    except ToolError as e:
+        return shorten(f"Error: {e}", MAX_RESULT_CHARS), True
     except Exception as e:  # noqa: BLE001 — l'errore va al modello, non all'app
         return shorten(f"Error: {type(e).__name__}: {e}", MAX_RESULT_CHARS), True
     if not isinstance(result, str):

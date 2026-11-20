@@ -101,7 +101,7 @@ msgid "nessuno scaricamento in corso"
 msgstr "ninguna descarga en curso"
 
 #: olladesk/companion.py:438
-#: olladesk/engine.py:342
+#: olladesk/engine.py:354
 msgid "modello non installato"
 msgstr "modelo no instalado"
 
@@ -207,7 +207,7 @@ msgid "serve Content-Type: application/octet-stream"
 msgstr "se requiere Content-Type: application/octet-stream"
 
 #: olladesk/config.py:289
-#: olladesk/engine.py:380
+#: olladesk/engine.py:392
 #: olladesk/widgets/sidebar.py:225
 #: olladesk/web/app.js:164
 #: olladesk/web/app.js:446
@@ -419,47 +419,47 @@ msgstr ""
 "\n"
 "[se adjuntó una búsqueda web en un turno anterior]"
 
-#: olladesk/engine.py:318
-#: olladesk/engine.py:338
+#: olladesk/engine.py:330
+#: olladesk/engine.py:350
 msgid "OllaDesk si sta chiudendo"
 msgstr "OllaDesk se está cerrando"
 
-#: olladesk/engine.py:320
+#: olladesk/engine.py:332
 msgid "nome del modello mancante"
 msgstr "falta el nombre del modelo"
 
-#: olladesk/engine.py:322
-#: olladesk/engine.py:340
+#: olladesk/engine.py:334
+#: olladesk/engine.py:352
 msgid "un'altra operazione sui modelli è già in corso"
 msgstr "ya hay otra operación con modelos en curso"
 
-#: olladesk/engine.py:344
+#: olladesk/engine.py:356
 msgid "il PC sta rispondendo: riprova alla fine"
 msgstr "el PC está respondiendo: inténtalo cuando termine"
 
-#: olladesk/engine.py:361
+#: olladesk/engine.py:373
 msgid "scaricamento annullato"
 msgstr "descarga cancelada"
 
-#: olladesk/engine.py:376
+#: olladesk/engine.py:388
 msgid "⚠ Impossibile salvare la conversazione su disco: spazio esaurito o permessi mancanti?"
 msgstr "⚠ No se pudo guardar la conversación en el disco: ¿espacio agotado o faltan permisos?"
 
-#: olladesk/engine.py:455
+#: olladesk/engine.py:467
 #, python-brace-format
 msgid "il modello «{model}» è in eliminazione"
 msgstr "el modelo «{model}» se está eliminando"
 
-#: olladesk/engine.py:484
+#: olladesk/engine.py:496
 #, python-brace-format
 msgid "file non leggibile: {name}"
 msgstr "archivo no legible: {name}"
 
-#: olladesk/engine.py:488
+#: olladesk/engine.py:500
 msgid "Ricerca web saltata: scrivi una domanda insieme agli allegati."
 msgstr "Búsqueda web omitida: escribe una pregunta junto con los adjuntos."
 
-#: olladesk/engine.py:572
+#: olladesk/engine.py:584
 #, python-brace-format
 msgid ""
 "⚠ Ricerca web non riuscita ({err}).\n"
@@ -468,21 +468,21 @@ msgstr ""
 "⚠ La búsqueda web falló ({err}).\n"
 "Sigo sin los resultados web."
 
-#: olladesk/engine.py:598
+#: olladesk/engine.py:610
 msgid "Allegati"
 msgstr "Adjuntos"
 
-#: olladesk/engine.py:680
+#: olladesk/engine.py:692
 #, python-brace-format
 msgid "impossibile preparare la richiesta: {error}"
 msgstr "no se puede preparar la solicitud: {error}"
 
-#: olladesk/engine.py:821
+#: olladesk/engine.py:834
 #, python-brace-format
 msgid "Raggiunto il limite di {count} giri di strumenti: il modello risponde con quello che ha raccolto."
 msgstr "Se alcanzó el límite de {count} rondas de herramientas: el modelo responde con lo que ha reunido."
 
-#: olladesk/main_window.py:1020
+#: olladesk/main_window.py:1022
 msgid "Resta attivo nella tray: clic sull'icona per mostrare o nascondere la finestra, «Esci» dal menu per chiudere."
 msgstr "Sigue activo en la bandeja del sistema: haz clic en el icono para mostrar u ocultar la ventana, «Salir» en el menú para cerrar."
 
@@ -568,28 +568,28 @@ msgstr "Dirección del servidor…"
 msgid "— nessun modello —"
 msgstr "— ningún modelo —"
 
-#: olladesk/main_window.py:510
+#: olladesk/main_window.py:512
 msgid "Attendi la fine della risposta (o premi ■ per interrompere) prima di gestire i modelli."
 msgstr "Espera a que termine la respuesta (o pulsa ■ para detenerla) antes de gestionar los modelos."
 
-#: olladesk/main_window.py:571
+#: olladesk/main_window.py:573
 msgid "⚠ Conversazione non leggibile dal disco: rimossa dall'elenco."
 msgstr "⚠ Conversación no legible desde el disco: eliminada de la lista."
 
-#: olladesk/main_window.py:638
-#: olladesk/main_window.py:721
+#: olladesk/main_window.py:640
+#: olladesk/main_window.py:723
 msgid "🌐 Ricerca web in corso…"
 msgstr "🌐 Buscando en la web…"
 
-#: olladesk/main_window.py:651
+#: olladesk/main_window.py:653
 msgid "Il PC sta già rispondendo in un'altra conversazione (forse dal telefono): attendi la fine oppure aprila e premi ■."
 msgstr "El PC ya está respondiendo en otra conversación (quizá desde el teléfono): espera a que termine o ábrela y pulsa ■."
 
-#: olladesk/main_window.py:659
+#: olladesk/main_window.py:661
 msgid "Nessun modello selezionato: scegline uno dal selettore in alto, poi invia di nuovo."
 msgstr "Ningún modelo seleccionado: elige uno en el selector de arriba y vuelve a enviar."
 
-#: olladesk/main_window.py:665
+#: olladesk/main_window.py:667
 msgid ""
 "Nessun modello disponibile.\n"
 "Scaricalo dalla sezione «Modelli» (Ctrl+M) o controlla che Ollama sia avviato."
@@ -597,12 +597,12 @@ msgstr ""
 "No hay modelos disponibles.\n"
 "Descarga uno desde la sección «Modelos» (Ctrl+M) o comprueba que Ollama esté en ejecución."
 
-#: olladesk/main_window.py:671
+#: olladesk/main_window.py:673
 #, python-brace-format
 msgid "Invio non possibile: {refusal}."
 msgstr "No se puede enviar: {refusal}."
 
-#: olladesk/main_window.py:759
+#: olladesk/main_window.py:761
 msgid ""
 "\n"
 "\n"
@@ -612,7 +612,7 @@ msgstr ""
 "\n"
 "Sugerencia: puede que el modelo no acepte el campo «think»: vuelve a activar el botón 🧠 del campo de texto."
 
-#: olladesk/main_window.py:764
+#: olladesk/main_window.py:766
 msgid ""
 "\n"
 "\n"
@@ -622,15 +622,15 @@ msgstr ""
 "\n"
 "Sugerencia: inicia Ollama con `ollama serve` y comprueba la URL en los ajustes (Ctrl+,)."
 
-#: olladesk/main_window.py:803
+#: olladesk/main_window.py:805
 msgid "Mostra / nascondi"
 msgstr "Mostrar / ocultar"
 
-#: olladesk/main_window.py:807
+#: olladesk/main_window.py:809
 msgid "Esci"
 msgstr "Salir"
 
-#: olladesk/main_window.py:840
+#: olladesk/main_window.py:842
 #, python-brace-format
 msgid ""
 "⚠ Il file delle impostazioni era illeggibile (non è JSON valido): OllaDesk è ripartito dalle impostazioni predefinite. Il file com'era è conservato in:\n"
@@ -639,7 +639,7 @@ msgstr ""
 "⚠ El archivo de ajustes no se podía leer (no es JSON válido): OllaDesk ha vuelto a los ajustes predeterminados. El archivo tal como estaba se conserva en:\n"
 "{path}"
 
-#: olladesk/main_window.py:849
+#: olladesk/main_window.py:851
 #, python-brace-format
 msgid ""
 "\n"
@@ -648,15 +648,15 @@ msgstr ""
 "\n"
 "El campo «Servidor Ollama» apuntaba al puerto {port}, el de la instancia que iniciaba el uso compartido: se ha restablecido a {host}. Si tu Ollama usa otra dirección, cámbiala en los ajustes (Ctrl+,)."
 
-#: olladesk/main_window.py:855
+#: olladesk/main_window.py:857
 msgid "ℹ La condivisione dell'API Ollama in rete è stata rimossa: per usare OllaDesk dal telefono attiva la «Companion web» (voce «📱 Companion» della barra laterale, Ctrl+D), che chiede un abbinamento. Per i client di terze parti vedi il README (OLLAMA_HOST nel servizio di sistema)."
 msgstr "ℹ Se ha eliminado el uso compartido de la API de Ollama en la red: para usar OllaDesk desde el teléfono activa el «Companion web» (entrada «📱 Companion» de la barra lateral, Ctrl+D), que requiere un emparejamiento. Para clientes de terceros consulta el README (OLLAMA_HOST en el servicio del sistema)."
 
-#: olladesk/main_window.py:874
+#: olladesk/main_window.py:876
 msgid "(nessun indirizzo di rete trovato)"
 msgstr "(no se encontró ninguna dirección de red)"
 
-#: olladesk/main_window.py:876
+#: olladesk/main_window.py:878
 #, python-brace-format
 msgid ""
 "Companion web attiva, sul telefono apri:\n"
@@ -667,7 +667,7 @@ msgstr ""
 "  {where}\n"
 "Haz clic para emparejar un dispositivo (Ctrl+D)"
 
-#: olladesk/main_window.py:883
+#: olladesk/main_window.py:885
 #, python-brace-format
 msgid ""
 "⚠ Companion web non avviata: {detail}.\n"
@@ -676,33 +676,33 @@ msgstr ""
 "⚠ Companion web no iniciado: {detail}.\n"
 "Elige otro puerto en la ventana «Companion» (Ctrl+D)."
 
-#: olladesk/main_window.py:935
+#: olladesk/main_window.py:937
 #, python-brace-format
 msgid "È disponibile OllaDesk {new} (in uso: {current})"
 msgstr "OllaDesk {new} está disponible (en uso: {current})"
 
-#: olladesk/main_window.py:945
+#: olladesk/main_window.py:947
 msgid "Aggiornamento di OllaDesk"
 msgstr "Actualización de OllaDesk"
 
-#: olladesk/main_window.py:948
+#: olladesk/main_window.py:950
 #, python-brace-format
 msgid "È disponibile OllaDesk {new} (in uso: {current})."
 msgstr "OllaDesk {new} está disponible (en uso: {current})."
 
-#: olladesk/main_window.py:951
+#: olladesk/main_window.py:953
 msgid "Apri la pagina di download"
 msgstr "Abrir la página de descarga"
 
-#: olladesk/main_window.py:952
+#: olladesk/main_window.py:954
 msgid "Salta questa versione"
 msgstr "Omitir esta versión"
 
-#: olladesk/main_window.py:953
+#: olladesk/main_window.py:955
 msgid "Più tardi"
 msgstr "Más tarde"
 
-#: olladesk/main_window.py:971
+#: olladesk/main_window.py:973
 msgid "Attendi la fine della risposta (o premi ■ per interrompere) prima di aprire le impostazioni."
 msgstr "Espera a que termine la respuesta (o pulsa ■ para detenerla) antes de abrir los ajustes."
 
@@ -1394,11 +1394,11 @@ msgstr ""
 
 #: olladesk/widgets/chat_area.py:329
 msgid ""
-"Strumenti: acceso (icona colorata), il modello può usare gli strumenti di OllaDesk mentre risponde;\n"
+"Strumenti: acceso (icona colorata), il modello può leggere le cartelle e i file allegati alla conversazione mentre risponde;\n"
 "spento (icona grigia), risponde come sempre. Vale per questa conversazione."
 msgstr ""
-"Herramientas: activadas (icono de color), el modelo puede usar las herramientas de OllaDesk mientras responde;\n"
-"desactivadas (icono gris), responde como siempre. Se aplica a esta conversación."
+"Herramientas: activado (icono de color), el modelo puede leer las carpetas y archivos adjuntos a la conversación mientras responde;\n"
+"desactivado (icono gris), responde como siempre. Se aplica a esta conversación."
 
 #: olladesk/widgets/chat_area.py:349
 #: olladesk/widgets/chat_area.py:828

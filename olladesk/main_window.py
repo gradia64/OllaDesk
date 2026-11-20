@@ -490,7 +490,7 @@ class MainWindow(QMainWindow):
         # pulsante dei tool solo con un modello che sa usarli, e se c'è
         # almeno un tool (con il registro vuoto non farebbe nulla)
         self.chat_area.set_tools_available(
-            bool(name) and len(self.engine.tools) > 0 and self.engine.tools_supported(name))
+            bool(name) and self.engine.tools_supported(name))
 
     def _render_caps(self, caps: list[str]) -> None:
         t = theme.palette_for(self._resolved_theme)

@@ -88,6 +88,15 @@ License: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   collapsible when the reply arrives and saved in the conversation. While the
   model thinks, the bubble doesn't just show dots: it shows "thinking…" and
   then the reasoning text.
+- **Tools (🔧, off by default)**: with models that can call tools (🔧 badge
+  next to the selector) the 🔧 button in the input lets the model read, on
+  its own while it answers, the folders and files attached to the
+  conversation: list a folder, read a file in chunks of 400 lines (PDFs and
+  documents too), search text in text and code files. Read-only and limited
+  to what was attached, with the same exclusions as a folder as context
+  (hidden files, dependencies, `.gitignore`, credentials, links that leave
+  the folder); at most 8 tool rounds per answer. The choice applies to the
+  conversation and the phone follows it.
 - **Web companion** ("📱 Companion" item in the sidebar, `Ctrl+D`; off by
   default): a page for smartphones and tablets on the local network, with the
   same conversations as the PC. From the phone you read chats, open a new one
@@ -558,6 +567,7 @@ olladesk/
   netinfo.py                local network addresses (for the web companion)
   engine.py                 chat engine: conversations, generation, saving
   tools.py                  tools for the model: registry, calls, execution
+  file_tools.py             read-only tools on the folders and files attached to the chat
   workers.py                registry of active and stopping QThread workers
   companion.py              web companion: HTTP server on LAN and pairing
   web/                      mobile companion page (HTML, CSS, JS, manifest and icons)
