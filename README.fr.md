@@ -167,8 +167,12 @@ un redémarrage, ceux des discussions précédentes sont à rejoindre de nouveau
 (aussi pour les outils 🔧). Pas de bouton « Mettre à jour » pour Ollama : les
 paramètres affichent la commande à lancer dans un terminal. Discussions et paramètres sont dans
 `~/.var/app/io.github.gradia64.OllaDesk/config/olladesk`, séparés de ceux du
-`.deb`, du paquet AUR et de l'AppImage : au premier lancement, le profil est
-vide. Ollama n'est pas inclus : installe-le à part.
+`.deb`, du paquet AUR et de l'AppImage. Au premier lancement, OllaDesk propose
+de les importer : dans le sélecteur de fichiers, ouvrez `~/.config/olladesk`
+(Ctrl+H affiche les dossiers cachés) et les discussions, paramètres, paramètres
+des modèles, téléphones associés et images collées sont copiés. Vous pouvez le
+refaire plus tard depuis Paramètres → Info → « Importer les données d'une autre
+installation… ». Ollama n'est pas inclus : installez-le à part.
 
 ## Installation sur Debian
 
@@ -332,6 +336,7 @@ olladesk/
   context.py                pièces jointes : texte/PDF/images comme contexte
   office.py                 texte des .docx/.doc/.xlsx/.xls/.odt/.ods
   portal.py                 portail FileTransfer pour le glisser-déposer dans Flatpak
+  migrate.py                import des données d'une autre installation (Flatpak)
   web_search.py             recherche web (DuckDuckGo/Ollama Cloud/SearXNG) + worker, outils web_search et fetch_page
   updater.py                mises à jour d'Ollama (release GitHub + pkexec)
   app_update.py             mises à jour d'OllaDesk (contrôle et avis seulement)
@@ -354,6 +359,7 @@ olladesk/
     steppers.py             champs numériques avec boutons ronds −/+
     model_manager.py        dialogue téléchargement/suppression des modèles
     ollama_update.py        mise à jour d'Ollama (paramètres et indicateur d'état)
+    profile_import.py       fenêtres de l'import et proposition au premier lancement
     settings_dialog.py      fenêtre des réglages (2 onglets + mises à jour)
     companion_dialog.py     fenêtre du companion : service, association, appareils
 tests/gui_smoke.py          test automatique offscreen (base)

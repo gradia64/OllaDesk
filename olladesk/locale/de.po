@@ -206,7 +206,7 @@ msgstr "„archived“ muss true oder false sein"
 msgid "nome del modello non valido"
 msgstr "ungültiger Modellname"
 
-#: olladesk/config.py:289
+#: olladesk/config.py:292
 #: olladesk/engine.py:409
 #: olladesk/widgets/sidebar.py:225
 #: olladesk/web/app.js:164
@@ -491,7 +491,7 @@ msgstr "Die Websuche antwortet nicht ({count} fehlgeschlagene Versuche hinterein
 msgid "Raggiunto il limite di {count} giri di strumenti: il modello risponde con quello che ha raccolto."
 msgstr "Grenze von {count} Werkzeugrunden erreicht: Das Modell antwortet mit dem, was es gesammelt hat."
 
-#: olladesk/main_window.py:1040
+#: olladesk/main_window.py:1045
 msgid "Resta attivo nella tray: clic sull'icona per mostrare o nascondere la finestra, «Esci» dal menu per chiudere."
 msgstr "Läuft im Systemabschnitt weiter: klicken Sie auf das Symbol, um das Fenster ein- oder auszublenden, „Beenden“ im Menü zum Schließen."
 
@@ -1165,8 +1165,8 @@ msgid "Il globo nell'input allega al prossimo messaggio i risultati di una ricer
 msgstr "Der Globus im Eingabefeld hängt der nächsten Nachricht die Ergebnisse einer Online-Suche an. Der Dienst (DuckDuckGo, Ollama Cloud oder eine eigene SearXNG-Instanz) wird in Einstellungen → Websuche gewählt; die Quellen erscheinen unter der Antwort."
 
 #: olladesk/widgets/about.py:101
-#: olladesk/widgets/settings_dialog.py:299
-#: olladesk/widgets/settings_dialog.py:96
+#: olladesk/widgets/settings_dialog.py:305
+#: olladesk/widgets/settings_dialog.py:101
 #: olladesk/web/index.html:91
 msgid "Ricerca web"
 msgstr "Websuche"
@@ -1247,7 +1247,7 @@ msgid "Companion web"
 msgstr "Web-Companion"
 
 #: olladesk/widgets/about.py:135
-#: olladesk/widgets/settings_dialog.py:709
+#: olladesk/widgets/settings_dialog.py:735
 #: olladesk/widgets/sidebar.py:164
 msgid "Impostazioni"
 msgstr "Einstellungen"
@@ -1602,7 +1602,7 @@ msgstr "Schließen"
 
 #: olladesk/widgets/companion_dialog.py:217
 #: olladesk/widgets/message.py:208
-#: olladesk/widgets/settings_dialog.py:455
+#: olladesk/widgets/settings_dialog.py:481
 msgid "Copiato ✓"
 msgstr "Kopiert ✓"
 
@@ -2169,14 +2169,14 @@ msgid "Aggiornamento di Ollama"
 msgstr "Ollama-Aktualisierung"
 
 #: olladesk/widgets/ollama_update.py:320
-#: olladesk/widgets/settings_dialog.py:684
-#: olladesk/widgets/settings_dialog.py:730
+#: olladesk/widgets/settings_dialog.py:710
+#: olladesk/widgets/settings_dialog.py:756
 msgid "Aggiornamento in corso"
 msgstr "Aktualisierung läuft"
 
 #: olladesk/widgets/ollama_update.py:320
-#: olladesk/widgets/settings_dialog.py:684
-#: olladesk/widgets/settings_dialog.py:730
+#: olladesk/widgets/settings_dialog.py:710
+#: olladesk/widgets/settings_dialog.py:756
 msgid "Attendi la fine dell'aggiornamento."
 msgstr "Warten Sie, bis die Aktualisierung abgeschlossen ist."
 
@@ -2211,82 +2211,166 @@ msgstr "Führt das offizielle Installationsskript aus (erfordert das Administrat
 msgid "…output dell'aggiornamento…"
 msgstr "…Ausgabe der Aktualisierung…"
 
-#: olladesk/widgets/settings_dialog.py:113
+#: olladesk/widgets/profile_import.py:107
+msgid "OllaDesk ora si chiude: riaprilo."
+msgstr "OllaDesk wird jetzt geschlossen: Öffnen Sie es erneut."
+
+#: olladesk/widgets/profile_import.py:29
+msgid "Cartella dei dati di OllaDesk (~/.config/olladesk)"
+msgstr "Datenordner von OllaDesk (~/.config/olladesk)"
+
+#: olladesk/widgets/profile_import.py:38
+#, python-brace-format
+msgid "In «{path}» non ci sono dati di OllaDesk. Scegli la cartella olladesk dentro ~/.config (Ctrl+H mostra le cartelle nascoste)."
+msgstr "„{path}“ enthält keine OllaDesk-Daten. Wählen Sie den Ordner olladesk in ~/.config (Strg+H zeigt versteckte Ordner)."
+
+#: olladesk/widgets/profile_import.py:47
+#, python-brace-format
+msgid "Conversazioni importate: {count}"
+msgstr "Importierte Unterhaltungen: {count}"
+
+#: olladesk/widgets/profile_import.py:49
+#, python-brace-format
+msgid "Già presenti, lasciate com'erano: {count}"
+msgstr "Bereits vorhanden, unverändert gelassen: {count}"
+
+#: olladesk/widgets/profile_import.py:52
+#, python-brace-format
+msgid "Immagini allegate copiate: {count}"
+msgstr "Angehängte Bilder kopiert: {count}"
+
+#: olladesk/widgets/profile_import.py:54
+msgid "Impostazioni importate."
+msgstr "Einstellungen importiert."
+
+#: olladesk/widgets/profile_import.py:56
+msgid "Parametri dei modelli importati."
+msgstr "Modellparameter importiert."
+
+#: olladesk/widgets/profile_import.py:58
+msgid "Telefoni abbinati alla companion importati."
+msgstr "Mit der Companion gekoppelte Telefone importiert."
+
+#: olladesk/widgets/profile_import.py:66
+msgid "Benvenuto in OllaDesk"
+msgstr "Willkommen bei OllaDesk"
+
+#: olladesk/widgets/profile_import.py:66
+msgid ""
+"Hai già usato OllaDesk installato in un altro modo (.deb, AUR, AppImage)? Nel Flatpak i dati stanno in una cartella separata: puoi importare conversazioni, impostazioni e telefoni abbinati.\n"
+"\n"
+"Nella finestra che si apre scegli la cartella olladesk dentro ~/.config (Ctrl+H mostra le cartelle nascoste)."
+msgstr ""
+"Haben Sie OllaDesk schon in einer anderen Installation verwendet (.deb, AUR, AppImage)? Im Flatpak liegen die Daten in einem eigenen Ordner: Sie können Unterhaltungen, Einstellungen und gekoppelte Telefone importieren.\n"
+"\n"
+"Wählen Sie im folgenden Fenster den Ordner olladesk in ~/.config (Strg+H zeigt versteckte Ordner)."
+
+#: olladesk/widgets/profile_import.py:72
+msgid "Importa dati…"
+msgstr "Daten importieren…"
+
+#: olladesk/widgets/profile_import.py:73
+msgid "Inizia da zero"
+msgstr "Neu beginnen"
+
+#: olladesk/widgets/profile_import.py:84
+#: olladesk/widgets/profile_import.py:93
+#: olladesk/widgets/profile_import.py:106
+#: olladesk/widgets/profile_import.py:37
+msgid "Importa dati"
+msgstr "Daten importieren"
+
+#: olladesk/widgets/profile_import.py:94
+msgid ""
+"Le conversazioni della cartella scelta si aggiungono a quelle presenti; impostazioni, parametri dei modelli e telefoni abbinati sostituiscono quelli attuali.\n"
+"\n"
+"Alla fine OllaDesk si chiude: riaprilo per vedere i dati importati. Continuare?"
+msgstr ""
+"Die Unterhaltungen aus dem gewählten Ordner kommen zu den vorhandenen hinzu; Einstellungen, Modellparameter und gekoppelte Telefone ersetzen die aktuellen.\n"
+"\n"
+"Am Ende wird OllaDesk geschlossen: Öffnen Sie es erneut, um die importierten Daten zu sehen. Fortfahren?"
+
+#: olladesk/widgets/settings_dialog.py:102
+#: olladesk/widgets/settings_dialog.py:102
+msgid "Parametri modelli"
+msgstr "Modellparameter"
+
+#: olladesk/widgets/settings_dialog.py:119
 #: olladesk/web/index.html:71
 msgid "Annulla"
 msgstr "Abbrechen"
 
-#: olladesk/widgets/settings_dialog.py:116
+#: olladesk/widgets/settings_dialog.py:122
 msgid "Salva"
 msgstr "Speichern"
 
-#: olladesk/widgets/settings_dialog.py:185
-#: olladesk/widgets/settings_dialog.py:94
+#: olladesk/widgets/settings_dialog.py:191
+#: olladesk/widgets/settings_dialog.py:99
 msgid "Generale"
 msgstr "Allgemein"
 
-#: olladesk/widgets/settings_dialog.py:185
+#: olladesk/widgets/settings_dialog.py:191
 msgid "Server Ollama, lingua, invio dei messaggi e comportamento della finestra."
 msgstr "Ollama-Server, Sprache, Senden von Nachrichten und Fensterverhalten."
 
-#: olladesk/widgets/settings_dialog.py:191
+#: olladesk/widgets/settings_dialog.py:197
 msgid "URL del server Ollama (API locale)"
 msgstr "URL des Ollama-Servers (lokale API)"
 
-#: olladesk/widgets/settings_dialog.py:192
-#: olladesk/widgets/settings_dialog.py:414
+#: olladesk/widgets/settings_dialog.py:198
+#: olladesk/widgets/settings_dialog.py:426
 msgid "Server Ollama:"
 msgstr "Ollama-Server:"
 
-#: olladesk/widgets/settings_dialog.py:195
+#: olladesk/widgets/settings_dialog.py:201
 msgid "Automatica (lingua del sistema)"
 msgstr "Automatisch (Systemsprache)"
 
-#: olladesk/widgets/settings_dialog.py:201
+#: olladesk/widgets/settings_dialog.py:207
 msgid "La nuova lingua vale dal prossimo avvio di OllaDesk"
 msgstr "Die neue Sprache gilt ab dem nächsten Start von OllaDesk"
 
-#: olladesk/widgets/settings_dialog.py:202
+#: olladesk/widgets/settings_dialog.py:208
 msgid "Lingua:"
 msgstr "Sprache:"
 
-#: olladesk/widgets/settings_dialog.py:204
+#: olladesk/widgets/settings_dialog.py:210
 msgid "Invia il messaggio con il tasto Invio"
 msgstr "Nachricht mit der Eingabetaste senden"
 
-#: olladesk/widgets/settings_dialog.py:206
+#: olladesk/widgets/settings_dialog.py:212
 msgid "Invio rapido:"
 msgstr "Schnell senden:"
 
-#: olladesk/widgets/settings_dialog.py:208
+#: olladesk/widgets/settings_dialog.py:214
 msgid "Mostra la risposta token per token"
 msgstr "Antwort Token für Token anzeigen"
 
-#: olladesk/widgets/settings_dialog.py:210
+#: olladesk/widgets/settings_dialog.py:216
 msgid "Streaming:"
 msgstr "Streaming:"
 
-#: olladesk/widgets/settings_dialog.py:215
+#: olladesk/widgets/settings_dialog.py:221
 msgid " messaggi"
 msgstr " Nachrichten"
 
-#: olladesk/widgets/settings_dialog.py:216
+#: olladesk/widgets/settings_dialog.py:222
 msgid "Quanti messaggi precedenti vengono inviati al modello come contesto"
 msgstr "Wie viele vorherige Nachrichten als Kontext an das Modell gesendet werden"
 
-#: olladesk/widgets/settings_dialog.py:217
+#: olladesk/widgets/settings_dialog.py:223
 msgid "Contesto inviato al modello:"
 msgstr "An das Modell gesendeter Kontext:"
 
-#: olladesk/widgets/settings_dialog.py:226
+#: olladesk/widgets/settings_dialog.py:232
 msgid " giorni"
 msgstr " Tage"
 
-#: olladesk/widgets/settings_dialog.py:227
+#: olladesk/widgets/settings_dialog.py:233
 msgid "mai"
 msgstr "nie"
 
-#: olladesk/widgets/settings_dialog.py:229
+#: olladesk/widgets/settings_dialog.py:235
 msgid ""
 "Le conversazioni senza messaggi da questo numero di giorni vanno\n"
 "nell'archivio (in fondo alla colonna di sinistra), all'avvio.\n"
@@ -2296,39 +2380,39 @@ msgstr ""
 "beim Start ins Archiv (unten in der linken Spalte).\n"
 "Sie werden nicht gelöscht. „nie“: nur manuell archivieren (Rechtsklick)."
 
-#: olladesk/widgets/settings_dialog.py:233
+#: olladesk/widgets/settings_dialog.py:239
 msgid "Archivia le chat inattive dopo:"
 msgstr "Inaktive Chats archivieren nach:"
 
-#: olladesk/widgets/settings_dialog.py:237
+#: olladesk/widgets/settings_dialog.py:243
 msgid "(vuoto = nessun prompt di sistema)"
 msgstr "(leer = kein Systemprompt)"
 
-#: olladesk/widgets/settings_dialog.py:240
+#: olladesk/widgets/settings_dialog.py:246
 msgid "Prompt di sistema inviato a Ollama con ogni richiesta (vale per tutte le conversazioni)"
 msgstr "Systemprompt, der bei jeder Anfrage an Ollama gesendet wird (gilt für alle Unterhaltungen)"
 
-#: olladesk/widgets/settings_dialog.py:242
+#: olladesk/widgets/settings_dialog.py:248
 msgid "Prompt di sistema:"
 msgstr "Systemprompt:"
 
-#: olladesk/widgets/settings_dialog.py:245
+#: olladesk/widgets/settings_dialog.py:251
 msgid "Mostra l'icona di OllaDesk nell'area di notifica (tray)"
 msgstr "OllaDesk-Symbol im Systemabschnitt anzeigen"
 
-#: olladesk/widgets/settings_dialog.py:249
+#: olladesk/widgets/settings_dialog.py:255
 msgid "L'icona nella tray permette di mostrare/nascondere la finestra con un clic."
 msgstr "Mit dem Symbol im Systemabschnitt blenden Sie das Fenster per Klick ein und aus."
 
-#: olladesk/widgets/settings_dialog.py:251
+#: olladesk/widgets/settings_dialog.py:257
 msgid "Tray:"
 msgstr "Systemabschnitt:"
 
-#: olladesk/widgets/settings_dialog.py:254
+#: olladesk/widgets/settings_dialog.py:260
 msgid "La chiusura (X) riduce nella tray invece di uscire"
 msgstr "Schließen (X) minimiert in den Systemabschnitt"
 
-#: olladesk/widgets/settings_dialog.py:258
+#: olladesk/widgets/settings_dialog.py:264
 msgid ""
 "Per uscire davvero: icona nella tray → tasto destro → «Esci».\n"
 "Con la finestra nascosta la companion web resta attiva."
@@ -2336,84 +2420,84 @@ msgstr ""
 "Zum wirklichen Beenden: Symbol im Systemabschnitt → Rechtsklick → „Beenden“.\n"
 "Bei ausgeblendetem Fenster bleibt der Web-Companion aktiv."
 
-#: olladesk/widgets/settings_dialog.py:272
-#: olladesk/widgets/settings_dialog.py:95
+#: olladesk/widgets/settings_dialog.py:278
+#: olladesk/widgets/settings_dialog.py:100
 msgid "Aspetto"
 msgstr "Erscheinungsbild"
 
-#: olladesk/widgets/settings_dialog.py:272
+#: olladesk/widgets/settings_dialog.py:278
 msgid "Tema, dimensione del carattere e orario dei messaggi."
 msgstr "Design, Schriftgröße und Uhrzeit der Nachrichten."
 
-#: olladesk/widgets/settings_dialog.py:276
+#: olladesk/widgets/settings_dialog.py:282
 msgid "Sistema (come KDE Plasma)"
 msgstr "System (wie KDE Plasma)"
 
-#: olladesk/widgets/settings_dialog.py:277
+#: olladesk/widgets/settings_dialog.py:283
 msgid "Scuro"
 msgstr "Dunkel"
 
-#: olladesk/widgets/settings_dialog.py:278
+#: olladesk/widgets/settings_dialog.py:284
 msgid "Chiaro"
 msgstr "Hell"
 
-#: olladesk/widgets/settings_dialog.py:281
+#: olladesk/widgets/settings_dialog.py:287
 msgid "Tema:"
 msgstr "Design:"
 
-#: olladesk/widgets/settings_dialog.py:287
+#: olladesk/widgets/settings_dialog.py:293
 msgid "Dimensione carattere:"
 msgstr "Schriftgröße:"
 
-#: olladesk/widgets/settings_dialog.py:290
+#: olladesk/widgets/settings_dialog.py:296
 msgid "Mostra l'orario accanto ai messaggi"
 msgstr "Uhrzeit neben den Nachrichten anzeigen"
 
-#: olladesk/widgets/settings_dialog.py:292
+#: olladesk/widgets/settings_dialog.py:298
 msgid "Orario:"
 msgstr "Uhrzeit:"
 
-#: olladesk/widgets/settings_dialog.py:299
+#: olladesk/widgets/settings_dialog.py:305
 msgid "Servizio usato quando la ricerca web è attiva nell'input, riserva e numero di risultati."
 msgstr "Dienst für die Websuche, wenn sie im Eingabefeld aktiv ist, Ausweichdienst und Anzahl der Ergebnisse."
 
-#: olladesk/widgets/settings_dialog.py:307
+#: olladesk/widgets/settings_dialog.py:313
 msgid " risultati"
 msgstr " Ergebnisse"
 
-#: olladesk/widgets/settings_dialog.py:308
+#: olladesk/widgets/settings_dialog.py:314
 msgid "Numero di risultati web allegati quando la ricerca web è attiva (🌐)"
 msgstr "Anzahl der angehängten Webergebnisse bei aktiver Websuche (🌐)"
 
-#: olladesk/widgets/settings_dialog.py:309
+#: olladesk/widgets/settings_dialog.py:315
 msgid "Risultati ricerca web:"
 msgstr "Websuche-Ergebnisse:"
 
-#: olladesk/widgets/settings_dialog.py:312
+#: olladesk/widgets/settings_dialog.py:318
 msgid "DuckDuckGo (senza chiave API)"
 msgstr "DuckDuckGo (ohne API-Schlüssel)"
 
-#: olladesk/widgets/settings_dialog.py:313
+#: olladesk/widgets/settings_dialog.py:319
 msgid "Ollama Cloud — ollama.com (chiave API)"
 msgstr "Ollama Cloud — ollama.com (API-Schlüssel)"
 
-#: olladesk/widgets/settings_dialog.py:314
+#: olladesk/widgets/settings_dialog.py:320
 msgid "SearXNG (istanza personale)"
 msgstr "SearXNG (eigene Instanz)"
 
-#: olladesk/widgets/settings_dialog.py:320
+#: olladesk/widgets/settings_dialog.py:326
 msgid "Provider ricerca web:"
 msgstr "Websuche-Anbieter:"
 
-#: olladesk/widgets/settings_dialog.py:323
+#: olladesk/widgets/settings_dialog.py:329
 msgid "Nessuno"
 msgstr "Keiner"
 
-#: olladesk/widgets/settings_dialog.py:325
+#: olladesk/widgets/settings_dialog.py:331
 msgid "Ollama Cloud — ollama.com"
 msgstr "Ollama Cloud — ollama.com"
 
-#: olladesk/widgets/settings_dialog.py:330
+#: olladesk/widgets/settings_dialog.py:336
 msgid ""
 "Provider da provare se il principale fallisce (blocco anti-bot, nessun\n"
 "risultato, rete): una nota in chat dice quale ha risposto. «Nessuno»\n"
@@ -2423,23 +2507,23 @@ msgstr ""
 "Ergebnisse, Netzwerk): ein Hinweis im Chat nennt den, der geantwortet hat. „Keiner“\n"
 "sendet die Frage nie an einen anderen als den gewählten Dienst."
 
-#: olladesk/widgets/settings_dialog.py:338
+#: olladesk/widgets/settings_dialog.py:344
 msgid "Provider di riserva:"
 msgstr "Ersatzanbieter:"
 
-#: olladesk/widgets/settings_dialog.py:350
+#: olladesk/widgets/settings_dialog.py:356
 msgid "lascia vuoto per mantenere quella nel portachiavi di KDE"
 msgstr "leer lassen, um den in der KDE-Brieftasche zu behalten"
 
-#: olladesk/widgets/settings_dialog.py:351
+#: olladesk/widgets/settings_dialog.py:357
 msgid " (nessuna chiave salvata)"
 msgstr " (kein Schlüssel gespeichert)"
 
-#: olladesk/widgets/settings_dialog.py:351
+#: olladesk/widgets/settings_dialog.py:357
 msgid " (una chiave è già salvata)"
 msgstr " (ein Schlüssel ist bereits gespeichert)"
 
-#: olladesk/widgets/settings_dialog.py:354
+#: olladesk/widgets/settings_dialog.py:360
 msgid ""
 "Chiave creabile su ollama.com → Impostazioni → API Keys.\n"
 "Viene salvata nel portachiavi di sistema (KWallet), mai nei file di configurazione."
@@ -2447,11 +2531,11 @@ msgstr ""
 "Schlüssel erstellen unter ollama.com → Settings → API Keys.\n"
 "Er wird im Systemschlüsselbund (KWallet) gespeichert, nie in den Konfigurationsdateien."
 
-#: olladesk/widgets/settings_dialog.py:359
+#: olladesk/widgets/settings_dialog.py:365
 msgid "chiave API dell'account ollama.com"
 msgstr "API-Schlüssel des ollama.com-Kontos"
 
-#: olladesk/widgets/settings_dialog.py:361
+#: olladesk/widgets/settings_dialog.py:367
 msgid ""
 "Chiave creabile su ollama.com → Impostazioni → API Keys.\n"
 "Portachiavi non disponibile: la chiave resta in settings.json (file protetto con permessi 600). Installa `keyring` per salvarla in KWallet."
@@ -2459,19 +2543,19 @@ msgstr ""
 "Schlüssel erstellen unter ollama.com → Settings → API Keys.\n"
 "Schlüsselbund nicht verfügbar: der Schlüssel bleibt in settings.json (Datei mit Berechtigungen 600 geschützt). Installieren Sie `keyring`, um ihn in KWallet zu speichern."
 
-#: olladesk/widgets/settings_dialog.py:368
+#: olladesk/widgets/settings_dialog.py:374
 msgid "Rimuovi"
 msgstr "Entfernen"
 
-#: olladesk/widgets/settings_dialog.py:369
+#: olladesk/widgets/settings_dialog.py:375
 msgid "Elimina la chiave API salvata"
 msgstr "Gespeicherten API-Schlüssel löschen"
 
-#: olladesk/widgets/settings_dialog.py:375
+#: olladesk/widgets/settings_dialog.py:381
 msgid "Chiave API:"
 msgstr "API-Schlüssel:"
 
-#: olladesk/widgets/settings_dialog.py:380
+#: olladesk/widgets/settings_dialog.py:386
 msgid ""
 "URL base della tua istanza SearXNG (deve accettare format=json)\n"
 "es. `searxng-run` in Docker: docker run -p 8888:8080 searxng/searxng"
@@ -2479,125 +2563,133 @@ msgstr ""
 "Basis-URL Ihrer SearXNG-Instanz (muss format=json akzeptieren)\n"
 "z. B. `searxng-run` in Docker: docker run -p 8888:8080 searxng/searxng"
 
-#: olladesk/widgets/settings_dialog.py:383
+#: olladesk/widgets/settings_dialog.py:389
 msgid "SearXNG — URL:"
 msgstr "SearXNG — URL:"
 
-#: olladesk/widgets/settings_dialog.py:392
-#: olladesk/widgets/settings_dialog.py:100
+#: olladesk/widgets/settings_dialog.py:404
+#: olladesk/widgets/settings_dialog.py:105
 msgid "Info"
 msgstr "Info"
 
-#: olladesk/widgets/settings_dialog.py:392
+#: olladesk/widgets/settings_dialog.py:404
 msgid "Versioni, licenza, collegamenti e informazioni da allegare a una segnalazione."
 msgstr "Versionen, Lizenz, Links und Informationen für eine Fehlermeldung."
 
-#: olladesk/widgets/settings_dialog.py:407
+#: olladesk/widgets/settings_dialog.py:419
 msgid "Client desktop per Ollama, i modelli di linguaggio in locale"
 msgstr "Desktop-Client für Ollama, lokale Sprachmodelle"
 
-#: olladesk/widgets/settings_dialog.py:413
+#: olladesk/widgets/settings_dialog.py:425
 msgid "Installata come:"
 msgstr "Installiert als:"
 
-#: olladesk/widgets/settings_dialog.py:415
+#: olladesk/widgets/settings_dialog.py:427
 msgid "non raggiungibile"
 msgstr "nicht erreichbar"
 
-#: olladesk/widgets/settings_dialog.py:416
+#: olladesk/widgets/settings_dialog.py:428
 msgid "Componenti:"
 msgstr "Komponenten:"
 
-#: olladesk/widgets/settings_dialog.py:417
+#: olladesk/widgets/settings_dialog.py:429
 msgid "Maintainer:"
 msgstr "Maintainer:"
 
-#: olladesk/widgets/settings_dialog.py:418
+#: olladesk/widgets/settings_dialog.py:430
 msgid "Licenza:"
 msgstr "Lizenz:"
 
-#: olladesk/widgets/settings_dialog.py:421
+#: olladesk/widgets/settings_dialog.py:433
 msgid "Impronta della chiave che firma tag e allegati delle release (README, «Verifica delle firme»)"
 msgstr "Fingerabdruck des Schlüssels, der Tags und Dateien der Releases signiert (README, «Überprüfung der Signaturen»)"
 
-#: olladesk/widgets/settings_dialog.py:423
+#: olladesk/widgets/settings_dialog.py:435
 msgid "Chiave di firma:"
 msgstr "Signaturschlüssel:"
 
-#: olladesk/widgets/settings_dialog.py:424
+#: olladesk/widgets/settings_dialog.py:436
 msgid "Icone:"
 msgstr "Symbole:"
 
-#: olladesk/widgets/settings_dialog.py:428
+#: olladesk/widgets/settings_dialog.py:440
 msgid "Impostazioni, parametri e conversazioni sono salvati qui"
 msgstr "Einstellungen, Parameter und Unterhaltungen werden hier gespeichert"
 
-#: olladesk/widgets/settings_dialog.py:429
+#: olladesk/widgets/settings_dialog.py:441
 msgid "Configurazione:"
 msgstr "Konfiguration:"
 
-#: olladesk/widgets/settings_dialog.py:441
-#: olladesk/widgets/settings_dialog.py:456
+#: olladesk/widgets/settings_dialog.py:449
+msgid "Importa dati da un'altra installazione…"
+msgstr "Daten aus einer anderen Installation importieren…"
+
+#: olladesk/widgets/settings_dialog.py:450
+msgid "Conversazioni, impostazioni e telefoni abbinati di OllaDesk installato come .deb, AUR o AppImage"
+msgstr "Unterhaltungen, Einstellungen und gekoppelte Telefone von OllaDesk als .deb, AUR oder AppImage"
+
+#: olladesk/widgets/settings_dialog.py:467
+#: olladesk/widgets/settings_dialog.py:482
 msgid "Copia informazioni di sistema"
 msgstr "Systeminformationen kopieren"
 
-#: olladesk/widgets/settings_dialog.py:442
+#: olladesk/widgets/settings_dialog.py:468
 msgid "Versioni di OllaDesk, Qt, Python e Ollama, sistema e desktop: da incollare in una segnalazione. Niente dati personali."
 msgstr "Versionen von OllaDesk, Qt, Python und Ollama, System und Desktop: zum Einfügen in eine Fehlermeldung. Keine persönlichen Daten."
 
-#: olladesk/widgets/settings_dialog.py:459
-#: olladesk/widgets/settings_dialog.py:99
+#: olladesk/widgets/settings_dialog.py:485
+#: olladesk/widgets/settings_dialog.py:104
 msgid "Aiuto"
 msgstr "Hilfe"
 
-#: olladesk/widgets/settings_dialog.py:459
+#: olladesk/widgets/settings_dialog.py:485
 msgid "Le funzioni principali di OllaDesk. La guida completa è nel README su GitHub."
 msgstr "Die wichtigsten Funktionen von OllaDesk. Die vollständige Anleitung steht im README auf GitHub."
 
-#: olladesk/widgets/settings_dialog.py:472
+#: olladesk/widgets/settings_dialog.py:498
 msgid "Scorciatoie da tastiera"
 msgstr "Tastenkürzel"
 
-#: olladesk/widgets/settings_dialog.py:484
+#: olladesk/widgets/settings_dialog.py:510
 msgid "Guida completa (README)"
 msgstr "Vollständige Anleitung (README)"
 
-#: olladesk/widgets/settings_dialog.py:491
-#: olladesk/widgets/settings_dialog.py:98
+#: olladesk/widgets/settings_dialog.py:517
+#: olladesk/widgets/settings_dialog.py:103
 msgid "Aggiornamenti"
 msgstr "Aktualisierungen"
 
-#: olladesk/widgets/settings_dialog.py:491
+#: olladesk/widgets/settings_dialog.py:517
 msgid "Nuove versioni di OllaDesk e di Ollama."
 msgstr "Neue Versionen von OllaDesk und Ollama."
 
-#: olladesk/widgets/settings_dialog.py:497
-#: olladesk/widgets/settings_dialog.py:571
+#: olladesk/widgets/settings_dialog.py:523
+#: olladesk/widgets/settings_dialog.py:597
 msgid "Controlla automaticamente all'avvio (al massimo una volta al giorno)"
 msgstr "Beim Start automatisch prüfen (höchstens einmal am Tag)"
 
-#: olladesk/widgets/settings_dialog.py:501
+#: olladesk/widgets/settings_dialog.py:527
 msgid "Contatta solo api.github.com per leggere l'ultima versione di Ollama: se è più recente, l'indicatore in alto a destra lo segnala. Nessuna installazione automatica."
 msgstr "Kontaktiert nur api.github.com, um die neueste Ollama-Version zu lesen: Ist sie neuer, zeigt es die Anzeige oben rechts an. Keine automatische Installation."
 
-#: olladesk/widgets/settings_dialog.py:551
+#: olladesk/widgets/settings_dialog.py:577
 msgid "la chiave verrà rimossa al salvataggio"
 msgstr "der Schlüssel wird beim Speichern entfernt"
 
-#: olladesk/widgets/settings_dialog.py:556
+#: olladesk/widgets/settings_dialog.py:582
 msgid "Aggiornamenti OllaDesk"
 msgstr "OllaDesk-Aktualisierungen"
 
-#: olladesk/widgets/settings_dialog.py:563
+#: olladesk/widgets/settings_dialog.py:589
 #, python-brace-format
 msgid "Versione in uso: <b>{version}</b> ({method_label})"
 msgstr "Verwendete Version: <b>{version}</b> ({method_label})"
 
-#: olladesk/widgets/settings_dialog.py:565
+#: olladesk/widgets/settings_dialog.py:591
 msgid "Verifica ora"
 msgstr "Jetzt prüfen"
 
-#: olladesk/widgets/settings_dialog.py:575
+#: olladesk/widgets/settings_dialog.py:601
 msgid ""
 "Contatta solo api.github.com per leggere il numero dell'ultima release.\n"
 "Nessun download né installazione automatica: solo un avviso."
@@ -2605,52 +2697,52 @@ msgstr ""
 "Kontaktiert nur api.github.com, um die Nummer des neuesten Releases zu lesen.\n"
 "Kein automatischer Download und keine Installation: nur ein Hinweis."
 
-#: olladesk/widgets/settings_dialog.py:592
+#: olladesk/widgets/settings_dialog.py:618
 msgid "Controllo l'ultima release su GitHub…"
 msgstr "Neuestes Release auf GitHub wird geprüft…"
-
-#: olladesk/widgets/settings_dialog.py:610
-msgid "Nessuna release pubblica trovata su GitHub (repository privato o senza release)."
-msgstr "Kein öffentliches Release auf GitHub gefunden (privates Repository oder keine Releases)."
-
-#: olladesk/widgets/settings_dialog.py:614
-#, python-brace-format
-msgid "✓ OllaDesk è aggiornato (ultima release: {version})."
-msgstr "✓ OllaDesk ist aktuell (neuestes Release: {version})."
-
-#: olladesk/widgets/settings_dialog.py:620
-#, python-brace-format
-msgid "✦ Disponibile OllaDesk <b>{version}</b>. {hint}<br><a href=\"{url}\">Apri la pagina di download</a>"
-msgstr "✦ OllaDesk <b>{version}</b> ist verfügbar. {hint}<br><a href=\"{url}\">Download-Seite öffnen</a>"
-
-#: olladesk/widgets/settings_dialog.py:626
-#, python-brace-format
-msgid "⚠ Verifica non riuscita: {err}"
-msgstr "⚠ Prüfung fehlgeschlagen: {err}"
 
 #: olladesk/widgets/settings_dialog.py:63
 msgid "Impostazioni — OllaDesk"
 msgstr "Einstellungen — OllaDesk"
 
-#: olladesk/widgets/settings_dialog.py:699
+#: olladesk/widgets/settings_dialog.py:636
+msgid "Nessuna release pubblica trovata su GitHub (repository privato o senza release)."
+msgstr "Kein öffentliches Release auf GitHub gefunden (privates Repository oder keine Releases)."
+
+#: olladesk/widgets/settings_dialog.py:640
+#, python-brace-format
+msgid "✓ OllaDesk è aggiornato (ultima release: {version})."
+msgstr "✓ OllaDesk ist aktuell (neuestes Release: {version})."
+
+#: olladesk/widgets/settings_dialog.py:646
+#, python-brace-format
+msgid "✦ Disponibile OllaDesk <b>{version}</b>. {hint}<br><a href=\"{url}\">Apri la pagina di download</a>"
+msgstr "✦ OllaDesk <b>{version}</b> ist verfügbar. {hint}<br><a href=\"{url}\">Download-Seite öffnen</a>"
+
+#: olladesk/widgets/settings_dialog.py:652
+#, python-brace-format
+msgid "⚠ Verifica non riuscita: {err}"
+msgstr "⚠ Prüfung fehlgeschlagen: {err}"
+
+#: olladesk/widgets/settings_dialog.py:725
 msgid "Portachiavi non disponibile"
 msgstr "Schlüsselbund nicht verfügbar"
 
-#: olladesk/widgets/settings_dialog.py:700
+#: olladesk/widgets/settings_dialog.py:726
 msgid ""
 "Non è stato possibile aggiornare la chiave nel portachiavi di KDE.\n"
 msgstr ""
 "Der Schlüssel konnte in der KDE-Brieftasche nicht aktualisiert werden.\n"
 
-#: olladesk/widgets/settings_dialog.py:701
+#: olladesk/widgets/settings_dialog.py:727
 msgid "La chiave è stata salvata in settings.json (permessi 600)."
 msgstr "Der Schlüssel wurde in settings.json gespeichert (Berechtigungen 600)."
 
-#: olladesk/widgets/settings_dialog.py:702
+#: olladesk/widgets/settings_dialog.py:728
 msgid "La chiave precedente potrebbe essere ancora salvata."
 msgstr "Der vorherige Schlüssel ist möglicherweise noch gespeichert."
 
-#: olladesk/widgets/settings_dialog.py:710
+#: olladesk/widgets/settings_dialog.py:736
 #, python-brace-format
 msgid ""
 "Impossibile scrivere le impostazioni in {path}.\n"
@@ -2659,18 +2751,13 @@ msgstr ""
 "Die Einstellungen konnten nicht in {path} geschrieben werden.\n"
 "Änderungen gelten nur bis zum Schließen der App."
 
-#: olladesk/widgets/settings_dialog.py:715
+#: olladesk/widgets/settings_dialog.py:741
 msgid "Lingua"
 msgstr "Sprache"
 
-#: olladesk/widgets/settings_dialog.py:716
+#: olladesk/widgets/settings_dialog.py:742
 msgid "La nuova lingua sarà usata al prossimo avvio di OllaDesk."
 msgstr "Die neue Sprache wird beim nächsten Start von OllaDesk verwendet."
-
-#: olladesk/widgets/settings_dialog.py:97
-#: olladesk/widgets/settings_dialog.py:97
-msgid "Parametri modelli"
-msgstr "Modellparameter"
 
 #: olladesk/widgets/sidebar.py:100
 msgid "Nuova chat"

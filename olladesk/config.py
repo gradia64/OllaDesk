@@ -56,6 +56,9 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     # archivio: le chat senza messaggi da N giorni vanno nell'archivio
     # all'avvio (0 = mai, solo a mano)
     "archive_after_days": 0,
+    # Flatpak: proposta di importare i dati di un'altra installazione già
+    # fatta al primo avvio (F4, olladesk/migrate.py)
+    "profile_import_offered": False,
 }
 
 

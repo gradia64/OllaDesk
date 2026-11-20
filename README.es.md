@@ -160,8 +160,12 @@ un reinicio, los de chats anteriores hay que adjuntarlos de nuevo (también para
 las herramientas 🔧). No hay botón «Actualizar ahora» para Ollama: los ajustes
 muestran el comando para el terminal. Chats y configuración están en
 `~/.var/app/io.github.gradia64.OllaDesk/config/olladesk`, separados de los del
-`.deb`, el paquete AUR y la AppImage: en el primer inicio el perfil está vacío.
-Ollama no está incluido: instálalo aparte.
+`.deb`, el paquete AUR y la AppImage. En el primer inicio OllaDesk propone
+importarlos: en el selector de archivos abre `~/.config/olladesk` (Ctrl+H
+muestra las carpetas ocultas) y se copian conversaciones, ajustes, parámetros
+de los modelos, teléfonos vinculados e imágenes pegadas. Puedes repetirlo más
+tarde desde Ajustes → Info → «Importar datos de otra instalación…». Ollama no
+está incluido: instálalo aparte.
 
 ## Instalación en Debian
 
@@ -325,6 +329,7 @@ olladesk/
   context.py                adjuntos: texto/PDF/imágenes como contexto
   office.py                 texto de .docx/.doc/.xlsx/.xls/.odt/.ods
   portal.py                 portal FileTransfer para arrastrar y soltar en Flatpak
+  migrate.py                importación de datos de otra instalación (Flatpak)
   web_search.py             búsqueda web (DuckDuckGo/Ollama Cloud/SearXNG) + worker, herramientas web_search y fetch_page
   updater.py                actualizaciones de Ollama (release GitHub + pkexec)
   app_update.py             actualizaciones de OllaDesk (solo control y aviso)
@@ -347,6 +352,7 @@ olladesk/
     steppers.py             campos numéricos con botones redondos −/+
     model_manager.py        diálogo de descarga/eliminación de modelos
     ollama_update.py        actualización de Ollama (configuración e indicador de estado)
+    profile_import.py       ventanas de la importación y propuesta en el primer inicio
     settings_dialog.py      ventana de configuración (2 pestañas + actualizaciones)
     companion_dialog.py     ventana de la companion: servicio, emparejamiento, dispositivos
 tests/gui_smoke.py          prueba automática offscreen (base)

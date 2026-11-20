@@ -35,8 +35,14 @@ non ancora segnati ✅.
   di flatpak-builder non ha rete), installate con `pip --no-index --require-hashes`.
 - **Dati**: `XDG_CONFIG_HOME` in sandbox → `~/.var/app/io.github.gradia64.OllaDesk/config`.
   L'app ci scrive sotto `.../config/olladesk` (settings, chat, allegati, companion).
-  La migrazione da `ollama-gui` e dalle altre installazioni **non** attraversa
-  (percorsi diversi): primo avvio Flatpak = profilo pulito.
+  La migrazione automatica da `ollama-gui` non attraversa la sandbox (percorsi
+  diversi). Al primo avvio con profilo vuoto `widgets/profile_import.py` propone
+  di importare i dati di un'altra installazione dalla cartella scelta col portale
+  FileChooser (nessun permesso `--filesystem`); la copia la fa `migrate.py`
+  subito, perché il documento del portale vale solo per l'istanza. Le chat si
+  aggiungono (stesso id: resta quella presente), settings/model_params/companion
+  si sostituiscono, i percorsi delle immagini in `attachments/` vengono riscritti.
+  Dalle Impostazioni (Info) l'import chiude l'app senza salvare lo stato in memoria.
 
 ## Come costruire
 

@@ -1000,7 +1000,12 @@ class MainWindow(QMainWindow):
         if page == "help":
             dlg.show_page(dlg.help_page)
         dlg.exec()
+        quit_now = dlg.quit_requested
         dlg.deleteLater()
+        if quit_now:
+            # dati importati (F4): si esce senza salvare lo stato in memoria
+            self._really_quit = True
+            self.close()
 
     def _apply_settings(self, s: dict) -> None:
         self.settings = dict(s)

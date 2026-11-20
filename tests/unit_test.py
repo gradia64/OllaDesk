@@ -3178,5 +3178,85 @@ def test_ollama_update_hidden_in_flatpak():
     assert "Aggiorna ora" in plain.update_status.text()
 
 
+def test_profile_import():
+    """F4: dati di un'altra installazione copiati dalla cartella scelta."""
+    from unittest.mock import patch
+
+    from olladesk import config, migrate, portal
+    from olladesk.widgets import profile_import
+
+    old_env = os.environ["XDG_CONFIG_HOME"]
+    os.environ["XDG_CONFIG_HOME"] = tempfile.mkdtemp(prefix="olladesk_import_dest_")
+    try:
+        host = Path(tempfile.mkdtemp(prefix="olladesk_import_src_"))
+        src = host / "olladesk"
+        (src / "chats").mkdir(parents=True)
+        (src / "attachments" / "companion").mkdir(parents=True)
+        (src / "attachments" / "incollato-1.png").write_bytes(b"png")
+        (src / "attachments" / "companion" / "foto.jpg").write_bytes(b"jpg")
+        os.symlink("/etc/passwd", src / "attachments" / "link.txt")
+        (src / "settings.json").write_text(json.dumps({"theme": "light", "font_size": 13}))
+        (src / "model_params.json").write_text(json.dumps({"m": {"temperature": 0.3}}))
+        (src / "companion.json").write_text(json.dumps({"devices": [{"name": "tel"}]}))
+        old_root = "/home/altro/.config/olladesk/attachments"
+        chat = {"id": "abc123abc123", "title": "Vecchia", "updated": 5, "messages": [
+            {"role": "user", "content": "ciao", "attachments": [
+                f"{old_root}/incollato-1.png", f"{old_root}/companion/foto.jpg",
+                f"{old_root}/manca.png", "/home/altro/Documenti/a.txt",
+                f"{old_root}/../../settings.json"]}]}
+        (src / "chats" / "abc123abc123.json").write_text(json.dumps(chat))
+        (src / "chats" / "index.json").write_text("[]")
+        (src / "chats" / "dup000dup000.json").write_text(json.dumps(
+            {"id": "dup000dup000", "title": "Dal vecchio", "messages": []}))
+        (src / "chats" / "rotto.json").write_text("{")
+
+        # profilo vuoto: la proposta compare una volta sola
+        assert migrate.profile_is_empty()
+        assert profile_import.should_offer(config.load_settings())
+        assert not profile_import.should_offer({"profile_import_offered": True})
+        config.save_chat({"id": "dup000dup000", "title": "Già qui", "messages": []})
+        assert not migrate.profile_is_empty()
+
+        assert migrate.find_profile(host) == src and migrate.find_profile(src) == src
+        assert migrate.find_profile(Path(tempfile.mkdtemp())) is None
+        assert migrate.import_profile(config.config_dir()) is None   # la cartella in uso
+
+        res = migrate.import_profile(host)   # anche scegliendo ~/.config
+        assert res is not None
+        assert (res.chats, res.skipped_chats, res.attachments) == (1, 1, 2), res
+        assert set(res.files) == {"settings.json", "model_params.json", "companion.json"}
+        att = config.attachments_dir()
+        assert not (att / "link.txt").exists()
+        s = config.load_settings()
+        assert s["theme"] == "light" and s["font_size"] == 13
+        assert config.load_model_params() == {"m": {"temperature": 0.3}}
+        assert config.load_companion()["devices"][0]["name"] == "tel"
+        ids = {c["id"]: c for c in config.load_chats()}
+        assert set(ids) == {"abc123abc123", "dup000dup000"}
+        assert ids["dup000dup000"]["title"] == "Già qui"   # non sovrascritta
+        paths = config.load_chat("abc123abc123")["messages"][0]["attachments"]
+        assert paths[0] == str(att / "incollato-1.png")
+        assert paths[1] == str(att / "companion" / "foto.jpg")
+        assert paths[2:] == chat["messages"][0]["attachments"][2:], paths
+        assert oct((config.chats_dir() / "abc123abc123.json").stat().st_mode & 0o777) == "0o600"
+
+        # una seconda importazione non duplica nulla
+        again = migrate.import_profile(host)
+        assert (again.chats, again.skipped_chats, again.attachments) == (0, 2, 0)
+
+        # il pulsante delle Impostazioni c'è solo nel Flatpak
+        from PySide6.QtWidgets import QApplication
+        QApplication.instance() or QApplication([])
+        from olladesk.widgets.settings_dialog import SettingsDialog
+        for sandboxed in (True, False):
+            with patch.object(portal, "in_flatpak", lambda: sandboxed):
+                dlg = SettingsDialog(config.load_settings(), lambda: [], "dark", "?")
+            assert (dlg.import_btn is not None) is sandboxed
+            assert dlg.quit_requested is False
+            dlg.deleteLater()
+    finally:
+        os.environ["XDG_CONFIG_HOME"] = old_env
+
+
 if __name__ == "__main__":
     sys.exit(main())

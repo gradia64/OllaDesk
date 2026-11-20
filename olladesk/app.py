@@ -8,9 +8,10 @@ from PySide6.QtCore import QTimer
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
-from olladesk import app_update, i18n, theme
+from olladesk import app_update, i18n, portal, theme
 from olladesk.config import load_settings
 from olladesk.main_window import MainWindow
+from olladesk.widgets import profile_import
 
 ICON = Path(__file__).resolve().parent / "assets" / "olladesk.svg"
 # ID dell'app in forma DNS inversa: nome del .desktop e dell'icona installati,
@@ -61,6 +62,14 @@ def main() -> int:
     i18n.setup(settings.get("language", "auto"))
     i18n.install_qt_translator(app)
     theme.apply_theme(app, settings["theme"], settings["font_size"])
+
+    # F4: primo avvio nel Flatpak, profilo vuoto: proposta di importare i
+    # dati di un'installazione .deb/AUR/AppImage (la sandbox non li vede)
+    if portal.in_flatpak() and profile_import.offer_at_startup(settings):
+        settings = load_settings()
+        i18n.setup(settings.get("language", "auto"))
+        i18n.install_qt_translator(app)
+        theme.apply_theme(app, settings["theme"], settings["font_size"])
 
     win = MainWindow()
 

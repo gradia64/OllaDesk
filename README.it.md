@@ -394,8 +394,12 @@ e restano leggibili finché OllaDesk è aperta: dopo un riavvio quelli delle cha
 precedenti vanno riallegati (anche per gli strumenti 🔧). Il pulsante
 «Aggiorna ora» di Ollama non c'è: le impostazioni mostrano il comando da terminale.
 Chat e impostazioni sono in `~/.var/app/io.github.gradia64.OllaDesk/config/olladesk`,
-separate da quelle del `.deb`, del pacchetto AUR e dell'AppImage: al primo
-avvio il profilo è vuoto. Ollama non è incluso: va installato a parte.
+separate da quelle del `.deb`, del pacchetto AUR e dell'AppImage. Al primo
+avvio OllaDesk propone di importarle: nella finestra di scelta si apre la
+cartella `~/.config/olladesk` (Ctrl+H mostra le cartelle nascoste) e vengono
+copiate conversazioni, impostazioni, parametri dei modelli, telefoni abbinati e
+immagini incollate. Si può rifare in seguito da Impostazioni → Info → «Importa
+dati da un'altra installazione…». Ollama non è incluso: va installato a parte.
 
 ## Installazione su Debian
 
@@ -595,6 +599,7 @@ olladesk/
   context.py                allegati: testo/PDF/immagini come contesto
   office.py                 testo di .docx/.doc/.xlsx/.xls/.odt/.ods
   portal.py                 portale FileTransfer per il drag & drop in Flatpak
+  migrate.py                importazione dei dati da un'altra installazione (Flatpak)
   web_search.py             ricerca web (DuckDuckGo/Ollama Cloud/SearXNG) + worker, tool web_search e fetch_page
   updater.py                aggiornamenti di Ollama (release GitHub + pkexec)
   app_update.py             aggiornamenti di OllaDesk (solo controllo e avviso)
@@ -617,6 +622,7 @@ olladesk/
     steppers.py             campi numerici con pulsanti tondi −/+
     model_manager.py        dialog scaricamento/eliminazione modelli
     ollama_update.py        aggiornamento di Ollama (impostazioni e indicatore di stato)
+    profile_import.py       finestre dell'importazione e proposta al primo avvio
     settings_dialog.py      finestra impostazioni (2 schede + aggiornamenti)
     companion_dialog.py     finestra della companion: servizio, abbinamento, dispositivi
 tests/gui_smoke.py          collaudo automatico offscreen (base)

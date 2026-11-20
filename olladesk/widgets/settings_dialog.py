@@ -34,11 +34,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .. import __version__, app_update, config, icons, secrets_store, theme
+from .. import __version__, app_update, config, icons, portal, secrets_store, theme
 from .. import i18n
 from ..i18n import _
 from ..ollama_client import shutdown_workers
-from . import about
+from . import about, profile_import
 from .model_params import ModelParamsTab
 from .ollama_update import OllamaUpdateBox
 from .steppers import IntStepper
@@ -394,6 +394,12 @@ class SettingsDialog(QDialog):
         self._update_provider_fields()
         return page
 
+    def _import_profile(self) -> None:
+        if profile_import.import_from_settings(self):
+            # niente «Salva»: le impostazioni importate non vanno riscritte
+            self.quit_requested = True
+            self.reject()
+
     def _build_info_page(self) -> QWidget:
         page, lay = self._page(_("Info"), _("Versioni, licenza, collegamenti e informazioni "
                                             "da allegare a una segnalazione."))
@@ -434,6 +440,20 @@ class SettingsDialog(QDialog):
         cfg.setToolTip(_("Impostazioni, parametri e conversazioni sono salvati qui"))
         form.addRow(_("Configurazione:"), cfg)
         lay.addLayout(form)
+
+        # F4: nel Flatpak i dati di un'installazione .deb/AUR/AppImage non si
+        # vedono; si importano dalla cartella scelta col portale
+        self.quit_requested = False
+        self.import_btn = None
+        if portal.in_flatpak():
+            self.import_btn = QPushButton(_("Importa dati da un'altra installazione…"), w)
+            self.import_btn.setToolTip(_("Conversazioni, impostazioni e telefoni abbinati di "
+                                         "OllaDesk installato come .deb, AUR o AppImage"))
+            self.import_btn.clicked.connect(self._import_profile)
+            row = QHBoxLayout()
+            row.addWidget(self.import_btn)
+            row.addStretch(1)
+            lay.addLayout(row)
 
         links = QLabel(w)
         links.setTextFormat(Qt.TextFormat.RichText)

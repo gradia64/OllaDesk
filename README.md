@@ -380,8 +380,12 @@ and stay readable while OllaDesk is open: after a restart, those of earlier
 chats must be attached again (also for the 🔧 tools). There is no "Update now"
 button for Ollama: the settings show the terminal command instead.
 Chats and settings are in `~/.var/app/io.github.gradia64.OllaDesk/config/olladesk`,
-separate from the `.deb`, AUR package and AppImage: the first launch starts
-with an empty profile. Ollama is not included: install it separately.
+separate from the `.deb`, AUR package and AppImage. On first launch OllaDesk
+offers to import them: in the file picker, open `~/.config/olladesk` (Ctrl+H
+shows hidden folders) and chats, settings, model parameters, paired phones and
+pasted images are copied. You can do it again later from Settings → Info →
+"Import data from another installation…". Ollama is not included: install it
+separately.
 
 ## Installation on Debian
 
@@ -580,6 +584,7 @@ olladesk/
   context.py                attachments: text/PDF/images as context
   office.py                 text of .docx/.doc/.xlsx/.xls/.odt/.ods
   portal.py                 FileTransfer portal for drag & drop in Flatpak
+  migrate.py                data import from another installation (Flatpak)
   web_search.py             web search (DuckDuckGo/Ollama Cloud/SearXNG) + worker, web_search and fetch_page tools
   updater.py                Ollama updates (GitHub release + pkexec)
   app_update.py             OllaDesk updates (check and notice only)
@@ -602,6 +607,7 @@ olladesk/
     steppers.py             numeric fields with round −/+ buttons
     model_manager.py        model download/deletion dialog
     ollama_update.py        Ollama update (settings and status indicator)
+    profile_import.py       import window and first-launch offer
     settings_dialog.py      settings window (2 tabs + updates)
     companion_dialog.py     companion window: service, pairing, devices
 tests/gui_smoke.py          offscreen automated check (base)
