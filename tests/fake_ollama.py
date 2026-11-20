@@ -122,7 +122,16 @@ class FakeOllama:
                         self._line({"message": {"content": "", "tool_calls": [
                             {"function": {"name": name, "arguments": args}}]}})
                         self._line({"done": True})
+                    elif "grezza" in user and last_role == "user":
+                        # chiamata scritta come testo (formato nativo non riconosciuto)
+                        self._line({"message": {"content": "Risposta. "}})
+                        self._line({"message": {"content": "<|tool_call_start|>"}})
+                        self._line({"message": {"content": "[web_fetch(url='x')]"}})
+                        self._line({"message": {"content": "<|tool_call_end|>"}})
+                        self._line({"done": True})
                     elif last_role == "tool":
+                        # senza la riga dei giri rimasti («[tool round …]»)
+                        last = last.split("\n\n[tool round ")[0]
                         self._line({"message": {"content": "Ho letto: " + last}})
                         self._line({"done": True, "eval_count": 5,
                                     "eval_duration": 1_000_000_000})

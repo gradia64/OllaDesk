@@ -85,6 +85,8 @@ class ChatEngine(QObject):
         self._rounds: list[dict] = []
         self._open_round: dict | None = None
         self._stream_mark = 0                 # inizio del testo del giro in corso
+        self._page_urls: set[str] = set()     # pagine che fetch_page può aprire
+        self._held = ""                       # chiamata scritta come testo, non mostrata
         self._think_mark = 0
         self._closed = False
         self._status_worker: ApiWorker | None = None
@@ -203,6 +205,10 @@ class ChatEngine(QObject):
         extra = file_tools.make_tools(file_tools.shared_from_chat(chat))
         if web:
             extra.append(web_search.web_tool(**self._search_settings()))
+            # fetch_page apre solo le pagine uscite dalle ricerche di questa
+            # risposta: l'insieme si riempie a ogni giro (_on_tools_finished)
+            self._page_urls = set()
+            extra.append(web_search.page_tool(self._page_urls))
         if not extra:
             return self.tools
         return tools.ToolRegistry([*(self.tools.get(n) for n in self.tools.names()), *extra])
@@ -671,8 +677,13 @@ class ChatEngine(QObject):
         s = self.settings
         messages: list[dict] = []
         warnings: list[str] = []
-        if s["system_prompt"]:
-            messages.append({"role": "system", "content": s["system_prompt"]})
+        system = s["system_prompt"]
+        # con file o cartelle condivisi il modello deve sapere che non può
+        # modificarli: altrimenti a «scrivi nel file» risponde di averlo fatto
+        if file_tools.shared_from_chat(chat):
+            system = (system + "\n\n" if system else "") + file_tools.READ_ONLY_NOTE
+        if system:
+            messages.append({"role": "system", "content": system})
         history = context.history_window(chat["messages"], s["history_limit"])
         last_idx = len(history) - 1
         # i risultati dei tool restano interi solo nell'ultima risposta
@@ -745,6 +756,7 @@ class ChatEngine(QObject):
 
         self._pending_stream = ""
         self._pending_think = ""
+        self._held = ""
         self._chat_stopped = False
         self._payload = payload
         self._rounds = []
@@ -771,6 +783,17 @@ class ChatEngine(QObject):
     def _on_chunk(self, chunk: str) -> None:
         if self._chat_stopped or self.sender() is not self._worker:
             return
+        # da una chiamata scritta come testo in poi non si mostra nulla: i
+        # marcatori sono token speciali, arrivano interi in un frammento
+        if self._held:
+            self._held += chunk
+            return
+        at = tools.leaked_call_at(chunk)
+        if at >= 0:
+            self._held = chunk[at:]
+            chunk = chunk[:at]
+            if not chunk:
+                return
         self._pending_stream += chunk
         self.text_chunk.emit(self._active_id, chunk)
 
@@ -786,9 +809,14 @@ class ChatEngine(QObject):
         # chiamate ai tool solo se la richiesta li offriva: un modello che le
         # inventa senza tool ha comunque finito di rispondere
         calls = tools.parse_calls(done.get("tool_calls")) if "tools" in self._payload else []
+        held, self._held = self._held, ""
         if calls:
             self._run_tools(calls)
             return
+        if held:
+            self.notice.emit(self._active_id, "⚠ " + _(
+                'Il modello ha provato a chiamare uno strumento non disponibile invece di '
+                'rispondere: la chiamata è stata tolta dalla risposta.'))
         self._finalize("done", format_stats(done))
 
     # ---------------------------------------------------------------- tool
@@ -813,7 +841,14 @@ class ChatEngine(QObject):
             "content": text,
             "calls": [{**c, "result": "", "error": False} for c in calls],
         }
-        w = tools.ToolWorker(self._turn_tools, calls, self)
+        # le letture già riuscite nei giri precedenti non si ripetono
+        seen: dict[str, int] = {}
+        for n, rnd in enumerate(self._rounds, 1):
+            for c in rnd["calls"]:
+                if not c.get("error"):
+                    seen.setdefault(tools.call_key(c), n)
+        w = tools.ToolWorker(self._turn_tools, calls, self,
+                             seen=seen, round_no=len(self._rounds) + 1)
         w.call_started.connect(self._on_tool_started)
         w.call_done.connect(self._on_tool_done)
         w.all_done.connect(self._on_tools_finished)
@@ -848,16 +883,30 @@ class ChatEngine(QObject):
         for c in done_round["calls"]:
             c.pop("done", None)   # serve solo alla vista del giro in corso
         self._rounds.append(done_round)
+        entries = []
         for c in done_round["calls"]:
             entry = {"role": "tool", "tool_name": c["name"], "content": c["result"]}
             if "id" in c:
                 entry["tool_call_id"] = c["id"]
-            self._payload["messages"].append(entry)
+            entries.append(entry)
+        # quanti giri restano, solo nella richiesta: il risultato salvato
+        # (e mostrato) resta quello del tool
+        if entries:
+            note = tools.round_note(len(self._rounds))
+            entries[-1] = {**entries[-1], "content": entries[-1]["content"] + "\n\n" + note}
+        self._payload["messages"].extend(entries)
         self._stream_mark = len(self._pending_stream)
         self._think_mark = len(self._pending_think)
+        for c in done_round["calls"]:
+            if c["name"] == "web_search" and not c.get("error"):
+                self._page_urls.update(web_search.page_url_key(src["url"])
+                                       for src in web_search.web_sources(c["result"]))
         if len(self._rounds) >= tools.MAX_ROUNDS and "tools" in self._payload:
-            # senza tool il modello deve rispondere con quello che ha
+            # senza tool il modello deve rispondere con quello che ha: glielo
+            # si chiede in chiaro, o un modello piccolo ritenta una chiamata
             del self._payload["tools"]
+            self._payload["messages"].append(
+                {"role": "user", "content": tools.FINAL_ANSWER_REQUEST})
             self.notice.emit(self._active_id, "⚠ " + _(
                 'Raggiunto il limite di {count} giri di strumenti: il modello '
                 'risponde con quello che ha raccolto.').format(count=tools.MAX_ROUNDS))
@@ -877,7 +926,9 @@ class ChatEngine(QObject):
         self._rounds = []
         self._open_round = None
         chat = self.chat(self._active_id)
-        if text and chat is not None:
+        # con dei giri completi la risposta si salva anche senza testo: le
+        # chiamate (e le loro fonti) restano visibili riaprendo la chat
+        if (text or (rounds and stats is not None)) and chat is not None:
             msg = {"role": "assistant", "content": text, "ts": config.now()}
             if thinking:
                 msg["thinking"] = thinking
@@ -951,6 +1002,7 @@ class ChatEngine(QObject):
         self._payload = None
         self._rounds = []
         self._open_round = None
+        self._held = ""
         self.busy_changed.emit(False)
 
     # ---------------------------------------------------------------- chiusura

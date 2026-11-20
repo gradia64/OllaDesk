@@ -18,6 +18,7 @@ sono in inglese, la lingua che i modelli seguono meglio, e non passano da
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
@@ -128,6 +129,53 @@ def parse_calls(raw) -> list[dict]:
     return calls
 
 
+def round_note(done: int) -> str:
+    """Riga per il modello dopo il giro `done`: quanti giri restano.
+
+    Senza, un modello piccolo non sa del tetto e continua a chiamare tool
+    (otto ricerche quasi uguali) finché il motore non lo ferma.
+    """
+    left = MAX_ROUNDS - done
+    if left <= 0:
+        return (f"[tool round {done} of {MAX_ROUNDS}: no tool rounds left. "
+                "Answer now with what you have.]")
+    if left <= 2:
+        return (f"[tool round {done} of {MAX_ROUNDS}: only {left} left. "
+                "Answer with what you have unless another call is really needed.]")
+    return f"[tool round {done} of {MAX_ROUNDS}]"
+
+
+# chiamata scritta come testo invece che come tool_calls (formato nativo del
+# modello che Ollama non ha riconosciuto, per esempio dopo il tetto dei giri,
+# quando la richiesta non offre più tool): non va mostrata come risposta
+LEAKED_CALL_MARKERS = ("<|tool_call_start|>", "<tool_call>", "<|python_tag|>",
+                       "<function_call>", "[TOOL_CALLS]")
+
+FINAL_ANSWER_REQUEST = (
+    "The tool limit for this answer is reached: no tools are available any more. "
+    "Write the final answer now, in the user's language, using only the tool results "
+    "above. Do not call or mention tools."
+)
+
+
+def leaked_call_at(text: str) -> int:
+    """Posizione della prima chiamata scritta come testo, -1 se non ce n'è."""
+    found = [i for i in (text.find(m) for m in LEAKED_CALL_MARKERS) if i >= 0]
+    return min(found) if found else -1
+
+
+def call_key(call: dict) -> str:
+    """Chiave di una chiamata: stesso nome e stessi argomenti = stessa chiave."""
+    args = call.get("arguments") if isinstance(call.get("arguments"), dict) else {}
+    return str(call.get("name")) + "\0" + json.dumps(args, sort_keys=True,
+                                                     ensure_ascii=False, default=str)
+
+
+def repeated_result(round_no: int) -> str:
+    return (f"Same call as earlier in this answer (tool round {round_no}): the result "
+            "is unchanged and already above. Do not repeat it: use that result or answer.")
+
+
 def run_call(registry: ToolRegistry, call: dict) -> tuple[str, bool]:
     """Esegue una chiamata: (risultato per il modello, errore?).
 
@@ -157,11 +205,16 @@ class ToolWorker(QThread):
     call_done = Signal(int, str, bool)   # indice, risultato, errore?
     all_done = Signal()                  # giro completo (non emesso dopo uno stop)
 
-    def __init__(self, registry: ToolRegistry, calls: list[dict], parent=None):
+    def __init__(self, registry: ToolRegistry, calls: list[dict], parent=None, *,
+                 seen: dict[str, int] | None = None, round_no: int = 1):
         super().__init__(parent)
         self._registry = registry
         self._calls = list(calls)
         self._stopped = False
+        # chiamate di sola lettura già riuscite nella risposta: chiave → giro.
+        # Una ripetizione non si riesegue: il modello riceve un rimando
+        self._seen = dict(seen or {})
+        self._round = round_no
 
     def stop(self) -> None:
         """Nessuna nuova chiamata; quella in corso si interrompe se il tool
@@ -181,7 +234,14 @@ class ToolWorker(QThread):
             if self._stopped:
                 return
             self.call_started.emit(i)
-            text, error = run_call(self._registry, call)
+            key = call_key(call)
+            tool = self._registry.get(call.get("name", ""))
+            if tool is not None and tool.read_only and key in self._seen:
+                text, error = repeated_result(self._seen[key]), False
+            else:
+                text, error = run_call(self._registry, call)
+                if not error and tool is not None and tool.read_only:
+                    self._seen.setdefault(key, self._round)
             if self._stopped:
                 return
             self.call_done.emit(i, text, error)
@@ -220,6 +280,23 @@ def calls_view(rounds, open_round: dict | None = None) -> list[dict]:
                 "state": state,
             })
     return out
+
+
+_WEB_TITLE_RE = re.compile(r"^\[\d+\] ")
+
+
+def result_preview(name: str, result: str) -> str:
+    """Testo del risultato da mostrare in anteprima (bolla, telefono).
+
+    Di `web_search` l'intestazione è sempre la stessa: si mostrano i titoli
+    dei risultati, uno per riga. Gli altri tool restano come sono.
+    """
+    result = (result or "").strip()
+    if name == "web_search":
+        titles = [ln for ln in result.splitlines() if _WEB_TITLE_RE.match(ln)]
+        if titles:
+            return "\n".join(titles)
+    return result
 
 
 def arguments_summary(args: dict, limit: int = 80) -> str:

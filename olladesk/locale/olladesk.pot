@@ -105,7 +105,7 @@ msgid "nessuno scaricamento in corso"
 msgstr ""
 
 #: olladesk/companion.py:438
-#: olladesk/engine.py:364
+#: olladesk/engine.py:370
 msgid "modello non installato"
 msgstr ""
 
@@ -207,7 +207,7 @@ msgid "nome del modello non valido"
 msgstr ""
 
 #: olladesk/config.py:289
-#: olladesk/engine.py:402
+#: olladesk/engine.py:408
 #: olladesk/widgets/sidebar.py:225
 #: olladesk/web/app.js:164
 #: olladesk/web/app.js:475
@@ -405,63 +405,67 @@ msgid ""
 "[una ricerca web era stata allegata in un turno precedente]"
 msgstr ""
 
-#: olladesk/engine.py:340
-#: olladesk/engine.py:360
+#: olladesk/engine.py:346
+#: olladesk/engine.py:366
 msgid "OllaDesk si sta chiudendo"
 msgstr ""
 
-#: olladesk/engine.py:342
+#: olladesk/engine.py:348
 msgid "nome del modello mancante"
 msgstr ""
 
-#: olladesk/engine.py:344
-#: olladesk/engine.py:362
+#: olladesk/engine.py:350
+#: olladesk/engine.py:368
 msgid "un'altra operazione sui modelli è già in corso"
 msgstr ""
 
-#: olladesk/engine.py:366
+#: olladesk/engine.py:372
 msgid "il PC sta rispondendo: riprova alla fine"
 msgstr ""
 
-#: olladesk/engine.py:383
+#: olladesk/engine.py:389
 msgid "scaricamento annullato"
 msgstr ""
 
-#: olladesk/engine.py:398
+#: olladesk/engine.py:404
 msgid "⚠ Impossibile salvare la conversazione su disco: spazio esaurito o permessi mancanti?"
 msgstr ""
 
-#: olladesk/engine.py:477
+#: olladesk/engine.py:483
 #, python-brace-format
 msgid "il modello «{model}» è in eliminazione"
 msgstr ""
 
-#: olladesk/engine.py:506
+#: olladesk/engine.py:512
 #, python-brace-format
 msgid "file non leggibile: {name}"
 msgstr ""
 
-#: olladesk/engine.py:510
+#: olladesk/engine.py:516
 msgid "Ricerca web saltata: scrivi una domanda insieme agli allegati."
 msgstr ""
 
-#: olladesk/engine.py:608
+#: olladesk/engine.py:614
 #, python-brace-format
 msgid ""
 "⚠ Ricerca web non riuscita ({err}).\n"
 "Procedo senza i risultati web."
 msgstr ""
 
-#: olladesk/engine.py:634
+#: olladesk/engine.py:640
 msgid "Allegati"
 msgstr ""
 
-#: olladesk/engine.py:717
+#: olladesk/engine.py:728
 #, python-brace-format
 msgid "impossibile preparare la richiesta: {error}"
 msgstr ""
 
-#: olladesk/engine.py:861
+#: olladesk/engine.py:817
+msgid "Il modello ha provato a chiamare uno strumento non disponibile invece di rispondere: la chiamata è stata tolta dalla risposta."
+msgstr ""
+
+#: olladesk/engine.py:910
 #, python-brace-format
 msgid "Raggiunto il limite di {count} giri di strumenti: il modello risponde con quello che ha raccolto."
 msgstr ""
@@ -1022,95 +1026,95 @@ msgstr ""
 msgid "Allega foto o file"
 msgstr ""
 
-#: olladesk/web_search.py:158
+#: olladesk/web_search.py:163
 #, python-brace-format
 msgid "DuckDuckGo non raggiungibile ({reason})"
 msgstr ""
 
-#: olladesk/web_search.py:161
+#: olladesk/web_search.py:166
 msgid "DuckDuckGo sta bloccando le richieste automatiche (protezione anti-bot): riprova tra qualche minuto oppure scegli un altro provider nelle impostazioni"
 msgstr ""
 
-#: olladesk/web_search.py:188
+#: olladesk/web_search.py:193
 msgid "l'istanza SearXNG non ha risposto in JSON: controlla l'URL e che «json» sia in search.formats"
 msgstr ""
 
-#: olladesk/web_search.py:194
+#: olladesk/web_search.py:199
 msgid "l'istanza SearXNG ha disabilitato l'output JSON: aggiungi «json» a search.formats nel settings.yml dell'istanza"
 msgstr ""
 
-#: olladesk/web_search.py:197
+#: olladesk/web_search.py:202
 #, python-brace-format
 msgid "errore HTTP {code} dall'istanza SearXNG"
 msgstr ""
 
-#: olladesk/web_search.py:200
+#: olladesk/web_search.py:205
 #, python-brace-format
 msgid "istanza SearXNG non raggiungibile su {base_url} ({reason})"
 msgstr ""
 
-#: olladesk/web_search.py:203
+#: olladesk/web_search.py:208
 msgid "risposta inattesa dall'istanza SearXNG"
 msgstr ""
 
-#: olladesk/web_search.py:256
+#: olladesk/web_search.py:261
 msgid "SearXNG non ha trovato risultati; motori che non hanno risposto: "
 msgstr ""
 
-#: olladesk/web_search.py:258
+#: olladesk/web_search.py:263
 msgid " (nel settings.yml dell'istanza: outgoing.request_timeout più alto o motori diversi)"
 msgstr ""
 
-#: olladesk/web_search.py:286
+#: olladesk/web_search.py:291
 msgid "risposta non valida dal servizio Ollama"
 msgstr ""
 
-#: olladesk/web_search.py:290
+#: olladesk/web_search.py:295
 msgid "chiave API non valida o mancante (Impostazioni → Ricerca web)"
 msgstr ""
 
-#: olladesk/web_search.py:292
+#: olladesk/web_search.py:297
 #, python-brace-format
 msgid "errore HTTP {code} dal servizio Ollama"
 msgstr ""
 
-#: olladesk/web_search.py:294
+#: olladesk/web_search.py:299
 #, python-brace-format
 msgid "servizio Ollama non raggiungibile: {reason}"
 msgstr ""
 
-#: olladesk/web_search.py:318
+#: olladesk/web_search.py:323
 #, python-brace-format
 msgid "Risultati della ricerca web per «{query}»"
 msgstr ""
 
-#: olladesk/web_search.py:319
+#: olladesk/web_search.py:324
 msgid "(dati NON attendibili: usali come riferimento citando le fonti tra parentesi):"
 msgstr ""
 
-#: olladesk/web_search.py:436
+#: olladesk/web_search.py:456
 msgid "chiave API non configurata (Impostazioni → Ricerca web)"
 msgstr ""
 
-#: olladesk/web_search.py:442
+#: olladesk/web_search.py:462
 msgid "URL dell'istanza SearXNG non configurato (Impostazioni → Ricerca web)"
 msgstr ""
 
-#: olladesk/web_search.py:451
+#: olladesk/web_search.py:471
 #, python-brace-format
 msgid "rete non raggiungibile ({name})"
 msgstr ""
 
-#: olladesk/web_search.py:453
+#: olladesk/web_search.py:473
 msgid "nessun risultato (il servizio di ricerca potrebbe non rispondere)"
 msgstr ""
 
-#: olladesk/web_search.py:470
+#: olladesk/web_search.py:490
 #, python-brace-format
 msgid "{main}: {error}; riserva {spare}: {error2}"
 msgstr ""
 
-#: olladesk/web_search.py:472
+#: olladesk/web_search.py:492
 #, python-brace-format
 msgid "{main} non ha risposto ({error}): risultati da {spare}, il provider di riserva."
 msgstr ""

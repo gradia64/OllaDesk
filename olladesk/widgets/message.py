@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
 from ..md import COPY_LINK, code_blocks, md_to_html
 from .. import icons, theme
 from ..i18n import _
-from ..tools import arguments_summary
+from ..tools import arguments_summary, result_preview
 
 _ANIM_FRAMES = ["·", "··", "···"]
 TOOL_PREVIEW_LINES = 6       # righe del risultato di un tool mostrate nella bolla
@@ -344,7 +344,7 @@ class MessageWidget(QFrame):
         for c in self._tool_calls:
             mark = "…" if c.get("state") == "running" else ("✗" if c.get("error") else "✓")
             lines = [f"{mark} {c['name']}({arguments_summary(c.get('arguments') or {})})"]
-            result = (c.get("result") or "").strip()
+            result = result_preview(c["name"], c.get("result") or "")
             if result:
                 preview = result[:TOOL_PREVIEW_CHARS].splitlines()[:TOOL_PREVIEW_LINES]
                 more = len(result) > TOOL_PREVIEW_CHARS or \

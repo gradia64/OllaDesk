@@ -30,6 +30,15 @@ MAX_SEARCH_MATCHES = 100      # righe trovate da search_text
 MAX_SEARCH_FILE_BYTES = 2 * 1024 * 1024   # file più grandi saltati nella ricerca
 MAX_TOOL_SECONDS = 5.0        # tetto di tempo di una chiamata (visita, PDF…)
 
+# nota di sistema quando la chat condivide file o cartelle (anche con i tool
+# spenti: il contenuto arriva comunque con gli allegati)
+READ_ONLY_NOTE = (
+    "Files and folders shared in this conversation are read-only for you: you "
+    "cannot create, change, move or delete them. If the user asks you to change "
+    "a file, say clearly that you cannot do it and offer the new text for them "
+    "to save. Never claim that a file was changed."
+)
+
 
 @dataclass(frozen=True)
 class Shared:
@@ -94,7 +103,7 @@ class _Files:
     def overview(self) -> str:
         if not self.shared:
             return "Nothing is shared in this conversation."
-        lines = ["Shared in this conversation:"]
+        lines = ["Shared in this conversation (read-only):"]
         lines += [s.label + ("/" if s.is_dir else "") for s in self.shared]
         return "\n".join(lines)
 
@@ -278,7 +287,8 @@ def make_tools(shared: list[Shared]) -> list[Tool]:
     return [
         Tool("list_files",
              "List a shared folder (files with size and type). Without a path, "
-             f"list what is shared in this conversation: {names}.",
+             f"list what is shared in this conversation: {names}. "
+             "Shared files are read-only: no tool can change them.",
              list_files,
              {"type": "object", "properties": {"path": path_prop}}),
         Tool("read_file",

@@ -101,11 +101,17 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   cartella come contesto (nascosti, dipendenze, `.gitignore`, credenziali,
   collegamenti che escono). Con la ricerca web (🌐) accesa il modello cerca
   anche sul web quando gli serve, con il provider delle impostazioni e una
-  query scritta da lui, invece della ricerca automatica prima della risposta;
-  con 🌐 spenta non va in rete. Al massimo 8 giri di strumenti per risposta. Le
-  chiamate compaiono nella bolla in un blocco «🔧 Strumenti usati» richiudibile,
+  query scritta da lui, invece della ricerca automatica prima della risposta,
+  e può aprire una delle pagine trovate per leggerne il testo (solo pagine
+  uscite dalle sue ricerche, mai indirizzi della rete locale); se la ricerca fallisce due volte di
+  fila non la ritenta e il modello risponde senza;
+  con 🌐 spenta non va in rete. Al massimo 8 giri di strumenti per risposta: il
+  modello sa quanti gliene restano (all'ultimo gli si chiede di rispondere), e una lettura identica a una già fatta non
+  si ripete. Sa anche che i file condivisi sono in sola lettura, così non dice
+  di averli modificati. Le chiamate compaiono nella bolla in un blocco «🔧 Strumenti usati» richiudibile,
   con argomenti e inizio del risultato (durante la risposta mostra lo strumento
-  in corso), e le fonti delle ricerche finiscono in «🌐 Fonti». La scelta vale
+  in corso), e le fonti delle ricerche finiscono in «🌐 Fonti»
+  (le prime 3 di ogni ricerca, al massimo 10). La scelta vale
   per la conversazione e il telefono la rispetta; la companion mostra le
   chiamate, senza poterle comandare.
 - **Companion web** (voce «📱 Companion» della barra laterale, `Ctrl+D`;
@@ -584,7 +590,7 @@ olladesk/
   context.py                allegati: testo/PDF/immagini come contesto
   office.py                 testo di .docx/.doc/.xlsx/.xls/.odt/.ods
   portal.py                 portale FileTransfer per il drag & drop in Flatpak
-  web_search.py             ricerca web (DuckDuckGo/Ollama Cloud/SearXNG) + worker
+  web_search.py             ricerca web (DuckDuckGo/Ollama Cloud/SearXNG) + worker, tool web_search e fetch_page
   updater.py                aggiornamenti di Ollama (release GitHub + pkexec)
   app_update.py             aggiornamenti di OllaDesk (solo controllo e avviso)
   ollama_client.py          client API Ollama (stdlib) + worker QThread

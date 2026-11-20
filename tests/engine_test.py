@@ -399,7 +399,9 @@ assert tool_runs == [{"testo": "ciao"}]
 assert second["messages"][-2] == {
     "role": "assistant", "content": "Controllo. ",
     "tool_calls": [{"function": {"name": "eco", "arguments": {"testo": "ciao"}}}]}
-assert second["messages"][-1] == {"role": "tool", "tool_name": "eco", "content": "eco: ciao"}
+# il risultato arriva al modello con i giri rimasti; salvato e mostrato senza
+assert second["messages"][-1] == {"role": "tool", "tool_name": "eco",
+                                  "content": "eco: ciao\n\n[tool round 1 of 8]"}
 assert names().count("generation_started") == 1 and len(finished()) == 1
 assert finished()[-1][1:3] == (c9, "done") and finished()[-1][3], finished()
 assert "".join(e[2] for e in events if e[0] == "text_chunk") == "Controllo. Ho letto: eco: ciao"
@@ -460,11 +462,40 @@ assert wait_until(lambda: not engine.busy(), 10000)
 sent = payloads[n0:]
 assert len(sent) == tools.MAX_ROUNDS + 1, len(sent)
 assert all("tools" in p for p in sent[:-1]) and "tools" not in sent[-1]
-assert len(tool_runs) == tools.MAX_ROUNDS
+# la stessa chiamata non si riesegue: dal secondo giro il modello riceve un rimando
+assert len(tool_runs) == 1, tool_runs
 assert any("limite di 8 giri" in e[2] for e in events if e[0] == "notice")
 assert finished()[-1][1:3] == (c9e, "done")
-assert len(config.load_chat(c9e)["messages"][1]["tool_rounds"]) == tools.MAX_ROUNDS
+rounds9e = config.load_chat(c9e)["messages"][1]["tool_rounds"]
+assert len(rounds9e) == tools.MAX_ROUNDS
+assert rounds9e[0]["calls"][0]["result"] == "eco: ciao"
+assert all(r["calls"][0]["result"].startswith("Same call as earlier in this answer (tool round 1)")
+           and r["calls"][0]["error"] is False for r in rounds9e[1:])
+# i giri rimasti, nell'ultimo messaggio tool di ogni richiesta
+# all'ultima richiesta, senza tool, si chiede in chiaro la risposta finale
+assert sent[-1]["messages"][-1] == {"role": "user", "content": tools.FINAL_ANSWER_REQUEST}
+notes = [p["messages"][-1 if i < 7 else -2]["content"].rsplit("\n\n", 1)[-1]
+         for i, p in enumerate(sent[1:])]
+assert notes[0] == "[tool round 1 of 8]", notes
+assert notes[5].startswith("[tool round 6 of 8: only 2 left.") and \
+    notes[6].startswith("[tool round 7 of 8: only 1 left.")
+assert notes[7].startswith("[tool round 8 of 8: no tool rounds left."), notes[7]
 print("9e. tetto di 8 giri OK")
+
+# 9e2. chiamata scritta come testo: tolta dalla risposta, con un avviso
+events.clear()
+c9x = engine.send(None, "risposta grezza", "finto")
+assert wait_until(lambda: not engine.busy())
+shown = "".join(e[2] for e in events if e[0] == "text_chunk")
+assert shown == "Risposta. ", shown
+assert config.load_chat(c9x)["messages"][-1]["content"] == "Risposta. "
+assert any("strumento non disponibile" in e[2] for e in events if e[0] == "notice")
+assert finished()[-1][1:3] == (c9x, "done")
+events.clear()
+engine.send(c9x, "di nuovo", "finto")   # lo stato non resta «trattenuto»
+assert wait_until(lambda: not engine.busy())
+assert "".join(e[2] for e in events if e[0] == "text_chunk")
+print("9e2. chiamata grezza nascosta OK")
 
 # 9f. stop mentre un tool lavora: nessuna richiesta dopo, giro incompleto scartato
 events.clear()
@@ -514,6 +545,8 @@ print("9g. interruttore dei tool per chat OK")
 # anche con il registro fisso vuoto; si leggono dal disco nel giro dei tool
 from pathlib import Path  # noqa: E402
 
+from olladesk import file_tools  # noqa: E402
+
 engine.tools = tools.ToolRegistry()
 shared_dir = Path(tempfile.mkdtemp()) / "condivisa"
 shared_dir.mkdir()
@@ -522,16 +555,27 @@ n0 = len(payloads)
 c9h = engine.send(None, "ciao", "finto", tools=True)             # niente condiviso
 assert wait_until(lambda: not engine.busy())
 assert "tools" not in payloads[n0]
+assert payloads[n0]["messages"][0] == {"role": "system", "content": "sei un test"}
 n0 = len(payloads)
 engine.send(c9h, "guarda la cartella", "finto", tools=True,
             attachments=[{"path": str(shared_dir), "name": "condivisa/", "kind": "folder"}])
 assert wait_until(lambda: not engine.busy())
 assert [t["function"]["name"] for t in payloads[n0]["tools"]] == [
     "list_files", "read_file", "search_text"]
+# con qualcosa di condiviso il prompt di sistema dice che è in sola lettura
+assert payloads[n0]["messages"][0] == {
+    "role": "system", "content": "sei un test\n\n" + file_tools.READ_ONLY_NOTE}
 n0 = len(payloads)
 engine.send(c9h, "e adesso?", "finto")                           # la cartella resta
 assert wait_until(lambda: not engine.busy())
 assert "list_files" in str(payloads[n0]["tools"])
+n0 = len(payloads)
+engine.set_chat_tools(c9h, False)                                # anche a tool spenti
+engine.send(c9h, "scrivi nel file", "finto")
+assert wait_until(lambda: not engine.busy())
+assert "tools" not in payloads[n0]
+assert payloads[n0]["messages"][0]["content"].endswith(file_tools.READ_ONLY_NOTE)
+engine.set_chat_tools(c9h, True)
 reg = engine._tools_for(config.load_chat(c9h))
 out, err = tools.run_call(reg, {"name": "read_file", "arguments": {"path": "condivisa/nota.txt"}})
 assert not err and "contenuto della nota" in out, out
@@ -567,8 +611,10 @@ n0 = len(payloads)
 c9i = engine.send(None, "cerca con lo strumento", "finto", web=True, tools=True)
 assert wait_until(lambda: not engine.busy())
 assert not FakeSearch.created, "ricerca prima della risposta con i tool attivi"
-assert [t["function"]["name"] for t in payloads[n0]["tools"]] == ["web_search"]
+assert [t["function"]["name"] for t in payloads[n0]["tools"]] == ["fetch_page", "web_search"]
 assert searches == ["rame"]
+# fetch_page può aprire solo le pagine uscite dalle ricerche di questa risposta
+assert engine._page_urls == {"https://esempio.it/rame"}, engine._page_urls
 assert payloads[n0 + 1]["messages"][-1]["tool_name"] == "web_search"
 assert "esempio.it/rame" in payloads[n0 + 1]["messages"][-1]["content"]
 msg = config.load_chat(c9i)["messages"]

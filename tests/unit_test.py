@@ -2917,6 +2917,26 @@ def test_web_search_tool():
     assert err and "Missing query" in out, out
     assert reg.get("web_search").stop is not None
 
+    # dopo due fallimenti di fila non si ritenta: il modello risponde senza
+    asked.clear()
+    with patch.object(web_search, "search", ddg), patch.object(web_search, "search_searxng", sx_ko):
+        out, err = tools.run_call(reg, {"name": "web_search", "arguments": {"query": "ferro"}})
+        assert err and "web search failed" in out and asked == ["ferro"]
+        out, err = tools.run_call(reg, {"name": "web_search", "arguments": {"query": "oro"}})
+    assert err and "unavailable right now (it failed 2 times in a row)" in out, out
+    assert asked == ["ferro"], asked                     # nessuna nuova ricerca
+    # un successo azzera il conto (nuovo tool = nuova risposta)
+    reg2 = tools.ToolRegistry([web_search.web_tool(3, "duckduckgo")])
+    with patch.object(web_search, "search", ddg):
+        tools.run_call(reg2, {"name": "web_search", "arguments": {"query": "a"}})
+    with patch.object(web_search, "search", lambda q, *a, **k: [("T", "https://t.it", "")]):
+        out, err = tools.run_call(reg2, {"name": "web_search", "arguments": {"query": "b"}})
+    assert not err
+    with patch.object(web_search, "search", ddg):
+        tools.run_call(reg2, {"name": "web_search", "arguments": {"query": "c"}})
+        out, err = tools.run_call(reg2, {"name": "web_search", "arguments": {"query": "d"}})
+    assert "web search failed" in out and "unavailable" not in out, out
+
 
 def test_tool_calls_view_sources_and_bubble():
     """T5: vista delle chiamate, fonti dalle ricerche come tool, bolla e telefono."""
@@ -2977,6 +2997,146 @@ def test_tool_calls_view_sources_and_bubble():
     assert [c["name"] for c in out["tools"]] == ["web_search", "read_file"] + ["eco"]
     assert out["sources"][0]["url"] == "https://esempio.it/rame"
     assert "tools" not in companion.render_message({"role": "assistant", "content": "x"})
+    # anteprima di web_search: i titoli, senza l'intestazione sempre uguale
+    assert "    [1] Rame" in text and "Risultati della ricerca" not in text
+    assert tools.result_preview("web_search", block) == "[1] Rame"
+    assert tools.result_preview("web_search", "Error: x") == "Error: x"
+    assert tools.result_preview("read_file", block) == block
+    assert companion.phone_tools([calls[0]])[0]["result"] == "[1] Rame"
+
+
+def test_tool_rounds_repeats_and_source_cap():
+    """Dopo le prove: giri rimasti, chiamate ripetute, tetto delle fonti."""
+    from olladesk import tools, web_search
+
+    assert tools.round_note(1) == "[tool round 1 of 8]"
+    assert "only 2 left" in tools.round_note(6) and "no tool rounds left" in tools.round_note(8)
+    assert tools.call_key({"name": "a", "arguments": {"x": 1, "y": 2}}) == \
+        tools.call_key({"name": "a", "arguments": {"y": 2, "x": 1}})
+    assert tools.call_key({"name": "a", "arguments": {}}) != tools.call_key({"name": "b"})
+
+    # stessa lettura due volte nello stesso giro e già fatta in un giro prima
+    runs = []
+    reg = tools.ToolRegistry([
+        tools.Tool("leggi", "", lambda a: runs.append(a) or f"testo {a.get('n')}"),
+        tools.Tool("rotto", "", lambda a: (_ for _ in ()).throw(tools.ToolError("no"))),
+        tools.Tool("scrivi", "", lambda a: runs.append(a) or "scritto", read_only=False),
+    ])
+    calls = [{"name": "leggi", "arguments": {"n": 1}}, {"name": "leggi", "arguments": {"n": 1}},
+             {"name": "leggi", "arguments": {"n": 2}}, {"name": "rotto", "arguments": {}},
+             {"name": "rotto", "arguments": {}}, {"name": "scrivi", "arguments": {}},
+             {"name": "scrivi", "arguments": {}}]
+    seen = {tools.call_key({"name": "leggi", "arguments": {"n": 2}}): 1}
+    w = tools.ToolWorker(reg, calls, seen=seen, round_no=2)
+    out = []
+    w.call_done.connect(lambda i, text, err: out.append((text, err)))
+    w.run()
+    assert out[0] == ("testo 1", False)
+    assert out[1][0].startswith("Same call as earlier in this answer (tool round 2)")
+    assert out[2][0].startswith("Same call as earlier in this answer (tool round 1)")
+    assert out[3] == ("Error: no", True) and out[4] == ("Error: no", True)   # errori: si riprova
+    assert out[5] == out[6] == ("scritto", False)          # non di sola lettura: sempre eseguito
+    assert runs == [{"n": 1}, {}, {}]
+
+    # fonti: le prime 3 per ricerca, al massimo 10 in tutto
+    def search(q):
+        res = [(f"{q}{i}", f"https://{q}.it/{i}", "") for i in range(5)]
+        return {"name": "web_search", "error": False, "state": "done",
+                "result": web_search.format_results(q, res)}
+    srcs = web_search.tool_sources([search(q) for q in "abcde"])
+    assert len(srcs) == web_search.MAX_TOOL_SOURCES == 10
+    assert [s["url"] for s in srcs[:4]] == ["https://a.it/0", "https://a.it/1", "https://a.it/2",
+                                           "https://b.it/0"]
+
+
+def test_fetch_page_tool():
+    """fetch_page: solo URL delle ricerche, solo indirizzi pubblici, testo della pagina."""
+    import http.server
+    import threading
+
+    from olladesk import tools, web_search
+
+    page = ("<html><head><title>Note di rilascio</title><style>x{}</style></head><body>"
+            "<nav>menu</nav><h1>Versione 2</h1><p>Novità &amp; correzioni</p>"
+            "<script>alert(1)</script><ul><li>uno</li><li>due</li></ul>"
+            "<footer>piede</footer>" + "<p>" + "a" * 7000 + "</p></body></html>")
+    title, text = web_search.page_text(page, "text/html")
+    assert title == "Note di rilascio"
+    assert text.startswith("# Versione 2\nNovità & correzioni\n- uno\n- due"), text[:80]
+    assert "menu" not in text and "alert" not in text and "piede" not in text
+    assert web_search.page_url_key(" https://a.it/x/#sez ") == "https://a.it/x"
+
+    # indirizzi non pubblici rifiutati (letterali: nessuna rete)
+    for host in ("127.0.0.1", "192.168.1.1", "10.0.0.2", "169.254.1.1", "::1", "::ffff:127.0.0.1"):
+        try:
+            web_search._public_host(host)
+        except tools.ToolError:
+            pass
+        else:
+            raise AssertionError(f"{host} accettato")
+    web_search._public_host("93.184.215.14")
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            if self.path == "/vai":
+                self.send_response(302)
+                self.send_header("Location", f"http://127.0.0.1:{port}/pagina")
+                self.end_headers()
+                return
+            body = (page if self.path == "/pagina" else "%PDF").encode()
+            self.send_response(200)
+            self.send_header("Content-Type",
+                             "text/html; charset=utf-8" if self.path == "/pagina" else "application/pdf")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *a):
+            pass
+
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H)
+    port = srv.server_address[1]
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    real = web_search._public_host
+    # «localhost» qui conta come pubblico; 127.0.0.1 resta locale (redirect)
+    web_search._public_host = lambda host: None if host == "localhost" else real(host)
+    try:
+        base = f"http://localhost:{port}"
+        allowed = {web_search.page_url_key(base + p) for p in ("/pagina", "/vai", "/pdf")}
+        reg = tools.ToolRegistry([web_search.page_tool(allowed)])
+
+        def call(args):
+            return tools.run_call(reg, {"name": "fetch_page", "arguments": args})
+
+        out, err = call({"url": base + "/pagina"})
+        assert not err and out.startswith("Note di rilascio\nURL: " + base + "/pagina"), out[:120]
+        assert "untrusted page content" in out and "Novità & correzioni" in out
+        assert f"[more: call fetch_page with start={web_search.MAX_PAGE_CHARS}]" in out
+        out, err = call({"url": base + "/pagina", "start": web_search.MAX_PAGE_CHARS})
+        assert not err and "[more:" not in out and out.rstrip().endswith("a")
+        out, err = call({"url": base + "/altro"})
+        assert err and "only pages found by web_search" in out
+        out, err = call({"url": base + "/vai"})                 # redirect verso un IP locale
+        assert err and "not a public address" in out, out
+        out, err = call({"url": base + "/pdf"})
+        assert err and "unsupported content type 'application/pdf'" in out, out
+        out, err = call({})
+        assert err and "Missing url" in out
+    finally:
+        web_search._public_host = real
+        srv.shutdown()
+        srv.server_close()
+
+    # fonti: le pagine lette vengono prima, anche oltre le prime 3 di una ricerca
+    res = [(f"t{i}", f"https://s.it/{i}", "") for i in range(5)]
+    calls = [{"name": "web_search", "error": False, "state": "done",
+              "result": web_search.format_results("q", res)},
+             {"name": "fetch_page", "error": False, "state": "done",
+              "arguments": {"url": "https://s.it/4/"}}]
+    assert [s["url"] for s in web_search.tool_sources(calls)] == [
+        "https://s.it/4", "https://s.it/0", "https://s.it/1", "https://s.it/2"]
+    assert tools.leaked_call_at("ok <|tool_call_start|>[x()]") == 3
+    assert tools.leaked_call_at("testo normale [nota]") == -1
 
 
 if __name__ == "__main__":

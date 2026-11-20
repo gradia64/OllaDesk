@@ -479,7 +479,7 @@ def phone_tools(calls: list[dict]) -> list[dict]:
     pagina li mostra senza innerHTML."""
     out = []
     for c in calls or []:
-        result = (c.get("result") or "").strip()
+        result = tools.result_preview(c["name"], c.get("result") or "")
         if len(result) > PHONE_TOOL_RESULT_CHARS:
             result = result[:PHONE_TOOL_RESULT_CHARS] + "…"
         out.append({"name": c["name"], "args": tools.arguments_summary(c.get("arguments") or {}),

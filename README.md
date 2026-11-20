@@ -97,11 +97,18 @@ License: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   (hidden files, dependencies, `.gitignore`, credentials, links that leave
   the folder). With web search (🌐) on, the model also searches the web when
   it needs to, with the provider from the settings and a query it writes
-  itself, instead of the automatic search before the answer; with 🌐 off it
-  does not go online. At most 8 tool rounds per answer. Calls appear in the
+  itself, instead of the automatic search before the answer,
+  and it can open one of the pages found to read its text (only pages from
+  its own searches, never local network addresses); if the search fails twice in a row it is
+  not retried and the model answers without it; with 🌐 off it
+  does not go online. At most 8 tool rounds per answer: the model is told how
+  many are left (after the last one it is asked to answer), and a read identical to an earlier one is not repeated. It
+  is also told that shared files are read-only, so it does not claim to have
+  changed them. Calls appear in the
   bubble in a collapsible "🔧 Tools used" block, with arguments and the start
   of the result (while answering it shows the tool in progress), and the
-  sources of the searches go into "🌐 Sources". The choice applies to the
+  sources of the searches go into "🌐 Sources" (the first 3 of each
+  search, at most 10). The choice applies to the
   conversation and the phone follows it; the companion shows the calls,
   without controlling them.
 - **Web companion** ("📱 Companion" item in the sidebar, `Ctrl+D`; off by
@@ -568,7 +575,7 @@ olladesk/
   context.py                attachments: text/PDF/images as context
   office.py                 text of .docx/.doc/.xlsx/.xls/.odt/.ods
   portal.py                 FileTransfer portal for drag & drop in Flatpak
-  web_search.py             web search (DuckDuckGo/Ollama Cloud/SearXNG) + worker
+  web_search.py             web search (DuckDuckGo/Ollama Cloud/SearXNG) + worker, web_search and fetch_page tools
   updater.py                Ollama updates (GitHub release + pkexec)
   app_update.py             OllaDesk updates (check and notice only)
   ollama_client.py          Ollama API client (stdlib) + QThread worker
