@@ -256,6 +256,7 @@ class MainWindow(QMainWindow):
         self.chat_area.sendRequested.connect(self._on_send)
         self.chat_area.stopRequested.connect(self._on_stop)
         self.chat_area.thinkingToggled.connect(self._on_thinking_toggled)
+        self.chat_area.toolsToggled.connect(self._on_tools_toggled)
 
         self.burger.clicked.connect(self._toggle_sidebar)
         self.new_chat_btn.clicked.connect(self._new_chat)
@@ -486,6 +487,10 @@ class MainWindow(QMainWindow):
         # non arrivano niente badge (caps_changed li aggiorna)
         name = self.model_combo.currentData()
         self._render_caps((self.engine.model_caps(name) or []) if name else [])
+        # pulsante dei tool solo con un modello che sa usarli, e se c'è
+        # almeno un tool (con il registro vuoto non farebbe nulla)
+        self.chat_area.set_tools_available(
+            bool(name) and len(self.engine.tools) > 0 and self.engine.tools_supported(name))
 
     def _render_caps(self, caps: list[str]) -> None:
         t = theme.palette_for(self._resolved_theme)
@@ -528,6 +533,7 @@ class MainWindow(QMainWindow):
 
     def _render_chat(self, chat: dict) -> None:
         self.chat_area.clear_messages()
+        self.chat_area.set_tools(chat.get("tools") is True)
         msgs = chat["messages"]
         for i, m in enumerate(msgs):
             sources = web_search.answer_sources(msgs, i) if m["role"] == "assistant" else None
@@ -549,6 +555,7 @@ class MainWindow(QMainWindow):
         if self.model_combo.isEnabled():
             self.model_combo.setCurrentIndex(-1)
         self.chat_area.clear_messages()
+        self.chat_area.set_tools(False)   # spenti di default in ogni chat nuova
         self.sidebar.set_chats(self.engine.chats(), None)
         self._sync_busy_ui()
         self.chat_area.focus_input()
@@ -561,6 +568,7 @@ class MainWindow(QMainWindow):
             if self._view_id == chat_id:
                 self._view_id = None
                 self.chat_area.clear_messages()
+                self.chat_area.set_tools(False)
             self.sidebar.set_chats(self.engine.chats(), self._view_id)
             self.chat_area.add_system_note(_("⚠ Conversazione non leggibile dal disco: rimossa dall'elenco."))
             return
@@ -600,6 +608,7 @@ class MainWindow(QMainWindow):
         if self._view_id == chat_id:
             self._view_id = None
             self.chat_area.clear_messages()
+            self.chat_area.set_tools(False)
         self.sidebar.set_chats(self.engine.chats(), None)
 
     def _focus_chat_search(self) -> None:
@@ -672,6 +681,7 @@ class MainWindow(QMainWindow):
         self.engine.send(
             self._view_id, text, model, attachments=atts, web=web_on,
             think=bool(self.settings.get("thinking", True)),
+            tools=self.chat_area.tools_active(),
         )
 
     def _on_stop(self) -> None:
@@ -688,6 +698,7 @@ class MainWindow(QMainWindow):
         if self._view_id == chat_id:
             self._view_id = None
             self.chat_area.clear_messages()
+            self.chat_area.set_tools(False)
             self._sync_busy_ui()
 
     def _on_user_message(self, chat_id: str, msg: dict) -> None:
@@ -759,6 +770,14 @@ class MainWindow(QMainWindow):
     def _on_notice(self, chat_id: str, text: str) -> None:
         if self._viewing(chat_id):
             self.chat_area.add_system_note(text)
+
+    # ------------------------------------------------------- strumenti on/off
+
+    def _on_tools_toggled(self, on: bool) -> None:
+        # una chat già salvata ricorda subito la scelta; una nuova la
+        # riceve con il primo messaggio
+        if self._view_id and self.engine.chat(self._view_id) is not None:
+            self.engine.set_chat_tools(self._view_id, on)
 
     # ------------------------------------------------------- thinking on/off
 

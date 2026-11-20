@@ -218,6 +218,7 @@ class ChatArea(QWidget):
     sendRequested = Signal(str)
     stopRequested = Signal()
     thinkingToggled = Signal(bool)
+    toolsToggled = Signal(bool)
 
     def __init__(self, theme_name: str = "dark", show_ts: bool = False, parent=None):
         super().__init__(parent)
@@ -318,6 +319,22 @@ class ChatArea(QWidget):
         self.think_btn.toggled.connect(self._on_think_toggled)
         self._update_think_icon()
         fl.addWidget(self.think_btn)
+
+        # strumenti (tool): scelta della conversazione, spenta di default;
+        # visibile solo con un modello che sa chiamarli (capacità «tools»)
+        self.tools_btn = QToolButton(self.input_frame)
+        self.tools_btn.setCheckable(True)
+        self.tools_btn.setIconSize(QSize(18, 18))
+        self.tools_btn.setToolTip(
+            _("Strumenti: acceso (icona colorata), il modello può usare gli strumenti "
+              "di OllaDesk mentre risponde;\nspento (icona grigia), risponde come sempre. "
+              "Vale per questa conversazione.")
+        )
+        self.tools_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.tools_btn.toggled.connect(self._on_tools_toggled)
+        self.tools_btn.setVisible(False)
+        self._update_tools_icon()
+        fl.addWidget(self.tools_btn)
 
         self.input = ChatInput(self.input_frame)
         self.input.sendPressed.connect(self._emit_send)
@@ -750,6 +767,7 @@ class ChatArea(QWidget):
         icons.set_icon(self.clip_btn, "paperclip", t["dim"], 18, fallback="📎")
         self._update_web_icon()
         self._update_think_icon()
+        self._update_tools_icon()
         self._update_send_icon()
         for btn in self._suggestion_btns:
             icons.set_icon(btn, "sparkles", t["dim"], 15)
@@ -773,6 +791,34 @@ class ChatArea(QWidget):
 
     def thinking_active(self) -> bool:
         return self.think_btn.isChecked()
+
+    # ------------------------------------------------------------ strumenti
+
+    def _on_tools_toggled(self, checked: bool) -> None:
+        self._update_tools_icon()
+        self.toolsToggled.emit(checked)
+
+    def _update_tools_icon(self) -> None:
+        """Chiave inglese grigia da spenta, blu da accesa (come globo e cervello)."""
+        t = theme.palette_for(self.theme_name)
+        color = theme.WEB_ACTIVE_COLOR if self.tools_btn.isChecked() else t["dim"]
+        icons.set_icon(self.tools_btn, "wrench", color, 18, fallback="🔧")
+
+    def set_tools(self, on: bool) -> None:
+        """Stato della conversazione aperta, senza emettere toolsToggled."""
+        self.tools_btn.blockSignals(True)
+        self.tools_btn.setChecked(on)
+        self.tools_btn.blockSignals(False)
+        self._update_tools_icon()
+
+    def set_tools_available(self, on: bool) -> None:
+        """Pulsante visibile solo se il modello scelto sa usare i tool."""
+        self.tools_btn.setVisible(on)
+
+    def tools_active(self) -> bool:
+        """Scelta della conversazione, anche col pulsante nascosto: con un
+        modello senza tool la scelta resta salvata e il motore non li manda."""
+        return self.tools_btn.isChecked()
 
     # ----------------------------------------------------------------- input
 

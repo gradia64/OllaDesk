@@ -374,6 +374,12 @@ engine.tools = tools.ToolRegistry([
 ])
 activity: list[tuple] = []
 engine.tool_activity.connect(lambda cid_, ev: activity.append((cid_, ev)))
+# i tool partono solo con modelli che li supportano (capacità da /api/show)
+fake.model_caps["finto"] = ["completion", "tools"]
+engine._caps.clear()
+engine.refresh_models()
+assert wait_until(lambda: engine.tools_supported("finto"))
+assert not engine.tools_supported("finto-due") and not engine.tools_supported("assente")
 
 # 9a. senza tools=True la richiesta resta quella di sempre
 engine.send(None, "usa lo strumento", "finto")
@@ -477,6 +483,28 @@ saved = config.load_chat(c9f)["messages"]
 assert saved[-1]["content"] == "Controllo. " and "tool_rounds" not in saved[-1]
 assert not any(a[1].get("result") == "arrivato tardi" for a in activity)
 print("9f. stop durante un tool OK")
+
+# 9g. interruttore per chat (T2): spento di default, salvato, None = scelta salvata
+n0 = len(payloads)
+c9g = engine.send(None, "usa lo strumento", "finto")            # chat nuova: spenti
+assert wait_until(lambda: not engine.busy())
+assert "tools" not in payloads[n0] and "tools" not in config.load_chat(c9g)
+engine.set_chat_tools(c9g, True)                                # salvato subito
+assert config.load_chat(c9g)["tools"] is True
+n0 = len(payloads)
+engine.send(c9g, "usa lo strumento", "finto")                   # None: vale la chat
+assert wait_until(lambda: not engine.busy())
+assert "tools" in payloads[n0]
+n0 = len(payloads)
+engine.send(c9g, "usa lo strumento", "finto-due", tools=True)   # modello senza tool
+assert wait_until(lambda: not engine.busy())
+assert "tools" not in payloads[n0] and config.load_chat(c9g)["tools"] is True
+n0 = len(payloads)
+engine.send(c9g, "usa lo strumento", "finto", tools=False)      # spento dall'invio
+assert wait_until(lambda: not engine.busy())
+assert "tools" not in payloads[n0] and "tools" not in config.load_chat(c9g)
+engine.set_chat_tools("non-esiste", True)                       # nessun errore
+print("9g. interruttore dei tool per chat OK")
 
 # ---------------------------------------------------------------- chiusura
 

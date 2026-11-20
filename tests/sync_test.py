@@ -43,6 +43,8 @@ sys.excepthook = _hook
 
 app = QApplication([])
 fake = FakeOllama()
+# solo «finto-due» sa usare i tool: serve al pulsante degli strumenti (7)
+fake.model_caps["finto-due"] = ["completion", "tools"]
 
 
 def wait_until(pred, ms=5000):
@@ -277,6 +279,55 @@ assert h.post_json("/api/archive", {"chat_id": "chat_a", "archived": False}, TOK
 assert wait_until(lambda: not win.sidebar.showing_archive() and "chat_a" in sidebar_ids())
 assert "archived" not in config.load_chat("chat_a")
 print("6. archivio dal telefono, PC aggiornato OK")
+
+# ------------------------------- 7. interruttore degli strumenti (T2)
+
+from olladesk import tools as tools_mod  # noqa: E402
+
+btn = win.chat_area.tools_btn
+win._new_chat()
+# senza tool nel registro il pulsante non compare, nemmeno con un modello adatto
+win.model_combo.setCurrentIndex(win.model_combo.findData("finto-due"))
+assert wait_until(lambda: engine.tools_supported("finto-due")) and btn.isHidden()
+engine.tools = tools_mod.ToolRegistry([tools_mod.Tool("eco", "Ripete", lambda a: "eco")])
+win.model_combo.setCurrentIndex(win.model_combo.findData("finto"))
+assert btn.isHidden() and not btn.isChecked()        # modello senza tool: niente pulsante
+win.model_combo.setCurrentIndex(win.model_combo.findData("finto-due"))
+assert wait_until(lambda: not btn.isHidden()) and not btn.isChecked()   # spento di default
+btn.click()
+n0 = len(fake.payloads)
+win.chat_area.input.setPlainText("usa lo strumento")
+win.chat_area._emit_send()
+assert wait_until(lambda: not engine.busy())
+cid7 = win._view_id
+assert "tools" in fake.payloads[n0] and fake.payloads[n0]["model"] == "finto-due"
+assert config.load_chat(cid7)["tools"] is True
+# stesso chat con un modello senza tool: pulsante nascosto, scelta salvata, niente tool
+win.model_combo.setCurrentIndex(win.model_combo.findData("finto"))
+assert btn.isHidden() and btn.isChecked()
+win.chat_area.input.setPlainText("ciao senza")
+win.chat_area._emit_send()
+assert wait_until(lambda: not engine.busy())
+assert "tools" not in fake.payloads[-1] and config.load_chat(cid7)["tools"] is True
+# la scelta è della conversazione: un'altra chat ha la sua
+win._open_chat("chat_a")
+assert not btn.isChecked()
+win._open_chat(cid7)
+assert btn.isChecked()
+# dal telefono (senza interruttore) vale la scelta salvata nella chat
+n0 = len(fake.payloads)
+st, res = h.post_json("/api/send", {"text": "usa lo strumento", "model": "finto-due",
+                                    "chat_id": cid7}, TOKEN)
+assert st == 200, res
+assert wait_until(lambda: not engine.busy() and len(fake.payloads) > n0)
+assert "tools" in fake.payloads[n0]
+# spegnerlo in una chat salvata vale subito, anche senza inviare
+win.model_combo.setCurrentIndex(win.model_combo.findData("finto-due"))
+btn.click()
+assert "tools" not in config.load_chat(cid7)
+win._new_chat()
+assert not btn.isChecked()
+print("7. interruttore degli strumenti per chat OK")
 
 win._really_quit = True
 win.close()

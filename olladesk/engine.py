@@ -177,6 +177,14 @@ class ChatEngine(QObject):
     def chat_model_names(self) -> list[str]:
         return [m["name"] for m in self.chat_models()]
 
+    def tools_supported(self, name: str) -> bool:
+        """Il modello sa chiamare i tool (capacità «tools» di /api/show).
+
+        Capacità non ancora note = no: i modelli che non li supportano
+        rispondono con un errore se la richiesta porta `tools`.
+        """
+        return "tools" in (self.model_caps(name) or [])
+
     def reset_status(self) -> None:
         """Host cambiato: il prossimo controllo riuscito ricarica i modelli."""
         self._online = None
@@ -415,6 +423,15 @@ class ChatEngine(QObject):
             self.set_archived(chat_id, True)
         return len(idle)
 
+    def set_chat_tools(self, chat_id: str, on: bool) -> None:
+        """Interruttore dei tool di una conversazione esistente, salvato
+        subito: vale anche per i messaggi che arrivano dal telefono."""
+        chat = self.chat(chat_id)
+        if chat is None or (chat.get("tools") is True) == bool(on):
+            return
+        _set_tools_flag(chat, on)
+        self._persist(chat)
+
     def delete_chat(self, chat_id: str) -> None:
         if chat_id == self._active_id:
             self.stop()
@@ -440,13 +457,17 @@ class ChatEngine(QObject):
 
     def send(self, chat_id: str | None, text: str, model: str, *,
              attachments=(), web: bool = False, think: bool = True,
-             tools: bool = False) -> str | None:
+             tools: bool | None = None) -> str | None:
         """Aggiunge un messaggio utente e avvia la risposta.
 
         `chat_id` è una conversazione esistente o un id nuovo (`new_chat_id`):
         la conversazione nasce al primo messaggio salvato. Restituisce l'id,
-        oppure None se un'altra elaborazione è già in corso. Con `tools` il
-        modello riceve i tool del registro (se ce ne sono).
+        oppure None se un'altra elaborazione è già in corso.
+
+        `tools` è la scelta della conversazione (interruttore per chat, spento
+        di default): True/False la salva nella chat, None usa quella già
+        salvata (così fa il telefono, che non ha l'interruttore). I tool
+        partono solo se il modello li supporta (`tools_supported`).
         """
         if self.busy() or self._closed or self.send_refusal(model):
             return None
@@ -476,10 +497,10 @@ class ChatEngine(QObject):
             "web": web,
             "model": model,
             "think": think,
+            "tools": tools,
         }
         self._active_id = chat_id
         self._phase = "search" if web else "chat"
-        self._use_tools = bool(tools)
         self.busy_changed.emit(True)
         if warnings:
             self.notice.emit(chat_id, "⚠ " + "\n⚠ ".join(warnings))
@@ -598,6 +619,9 @@ class ChatEngine(QObject):
         chat["model"] = model
         chat["updated"] = ts
         chat.pop("archived", None)   # una chat ripresa torna nell'elenco
+        if p["tools"] is not None:
+            _set_tools_flag(chat, p["tools"])
+        self._use_tools = chat.get("tools") is True
         self.user_message_added.emit(chat_id, msg)
         self._persist(chat)
         if start:
@@ -678,7 +702,7 @@ class ChatEngine(QObject):
         if not think:
             payload["think"] = False
         self._think_off_sent = not think
-        if self._use_tools and len(self.tools):
+        if self._use_tools and len(self.tools) and self.tools_supported(model):
             payload["tools"] = self.tools.schemas()
 
         self._pending_stream = ""
@@ -941,3 +965,11 @@ def _assistant_messages(m: dict, full_results: bool) -> list[dict]:
         out.extend(results)
     out.append({"role": "assistant", "content": content[used:] if out else content})
     return out
+
+
+def _set_tools_flag(chat: dict, on: bool) -> None:
+    """Il campo "tools" c'è solo se acceso: le chat esistenti restano uguali."""
+    if on:
+        chat["tools"] = True
+    else:
+        chat.pop("tools", None)
