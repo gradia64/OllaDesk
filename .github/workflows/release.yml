@@ -209,6 +209,14 @@ jobs:
       - name: flatpak-builder-lint
         run: scripts/lint-flatpak.sh --gha-format
 
+      # sui tag: il manifest da proporre a Flathub (sorgente git del tag)
+      # deve passare lo stesso linter; resta tra gli artefatti del job
+      - name: Manifest per Flathub
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          scripts/flathub-manifest.py "$GITHUB_REF_NAME"
+          scripts/lint-flatpak.sh --gha-format --flathub-only
+
       # controlli con il Python della sandbox, test offline e avvio offscreen
       - name: Prova del bundle
         run: packaging/flatpak/smoke-test.sh dist/OllaDesk-*.flatpak
@@ -220,6 +228,14 @@ jobs:
         with:
           name: flatpak
           path: dist/*.flatpak
+
+      # manifest e flathub.json per la PR su Flathub: artefatto a parte,
+      # non allegato alla release (il job publish scarica solo per nome)
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          name: flathub
+          path: build/flathub/
 
   arch:
     needs: verify

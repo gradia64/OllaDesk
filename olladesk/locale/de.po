@@ -8,38 +8,42 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "X-Source-Language: it\n"
 
-#: olladesk/app_update.py:104
+#: olladesk/app_update.py:103
+#, python-brace-format
+msgid "Installa il bundle Flatpak della versione {version} con: flatpak install --user OllaDesk-{version}.flatpak (oppure flatpak update, se l'hai installato da un repository)."
+msgstr "Installiere das Flatpak-Bundle der Version {version} mit: flatpak install --user OllaDesk-{version}.flatpak (oder flatpak update, wenn du es aus einem Repository installiert hast)."
+
+#: olladesk/app_update.py:108
+msgid "Aggiorna da Discover o GNOME Software, oppure con: flatpak update io.github.gradia64.OllaDesk"
+msgstr "Aktualisieren Sie über Discover oder GNOME Software oder mit: flatpak update io.github.gradia64.OllaDesk"
+
+#: olladesk/app_update.py:111
 msgid "Aggiorna il checkout: git pull, poi riavvia OllaDesk."
 msgstr "Aktualisieren Sie den Checkout: git pull, dann OllaDesk neu starten."
 
-#: olladesk/app_update.py:105
+#: olladesk/app_update.py:112
 msgid "Aggiorna il pacchetto Python: pipx upgrade olladesk (oppure pip install -U)."
 msgstr "Aktualisieren Sie das Python-Paket: pipx upgrade olladesk (oder pip install -U)."
 
-#: olladesk/app_update.py:195
+#: olladesk/app_update.py:202
 #: olladesk/updater.py:136
 #, python-brace-format
 msgid "GitHub non raggiungibile ({reason})"
 msgstr "GitHub nicht erreichbar ({reason})"
 
-#: olladesk/app_update.py:81
+#: olladesk/app_update.py:85
 #, python-brace-format
 msgid "Scarica olladesk_{version}_all.deb dalla pagina della release e installalo con: sudo apt install ./olladesk_{version}_all.deb"
 msgstr "Laden Sie olladesk_{version}_all.deb von der Release-Seite herunter und installieren Sie es mit: sudo apt install ./olladesk_{version}_all.deb"
 
-#: olladesk/app_update.py:86
+#: olladesk/app_update.py:90
 msgid "Aggiorna dal pacchetto AUR «olladesk» con il tuo helper (es. yay -Syu olladesk) oppure ricostruiscilo con makepkg."
 msgstr "Aktualisieren Sie über das AUR-Paket „olladesk“ mit Ihrem Helfer (z. B. yay -Syu olladesk) oder bauen Sie es mit makepkg neu."
 
-#: olladesk/app_update.py:93
+#: olladesk/app_update.py:97
 #, python-brace-format
 msgid "Scarica OllaDesk-{version}-{machine}.AppImage dalla pagina della release, rendilo eseguibile (chmod +x) e usalo al posto dell'AppImage attuale{where}."
 msgstr "Laden Sie OllaDesk-{version}-{machine}.AppImage von der Release-Seite herunter, machen Sie es ausführbar (chmod +x) und verwenden Sie es anstelle des aktuellen AppImage{where}."
-
-#: olladesk/app_update.py:99
-#, python-brace-format
-msgid "Installa il bundle Flatpak della versione {version} con: flatpak install --user OllaDesk-{version}.flatpak (oppure flatpak update, se l'hai installato da un repository)."
-msgstr "Installiere das Flatpak-Bundle der Version {version} mit: flatpak install --user OllaDesk-{version}.flatpak (oder flatpak update, wenn du es aus einem Repository installiert hast)."
 
 #: olladesk/companion.py:1023
 msgid "serve Content-Type: application/octet-stream"
@@ -491,7 +495,7 @@ msgstr "Die Websuche antwortet nicht ({count} fehlgeschlagene Versuche hinterein
 msgid "Raggiunto il limite di {count} giri di strumenti: il modello risponde con quello che ha raccolto."
 msgstr "Grenze von {count} Werkzeugrunden erreicht: Das Modell antwortet mit dem, was es gesammelt hat."
 
-#: olladesk/main_window.py:1045
+#: olladesk/main_window.py:1047
 msgid "Resta attivo nella tray: clic sull'icona per mostrare o nascondere la finestra, «Esci» dal menu per chiudere."
 msgstr "Läuft im Systemabschnitt weiter: klicken Sie auf das Symbol, um das Fenster ein- oder auszublenden, „Beenden“ im Menü zum Schließen."
 
@@ -685,33 +689,33 @@ msgstr ""
 "⚠ Web-Companion nicht gestartet: {detail}.\n"
 "Wählen Sie im Fenster „Companion“ einen anderen Port (Strg+D)."
 
-#: olladesk/main_window.py:955
+#: olladesk/main_window.py:957
 #, python-brace-format
 msgid "È disponibile OllaDesk {new} (in uso: {current})"
 msgstr "OllaDesk {new} ist verfügbar (verwendet: {current})"
 
-#: olladesk/main_window.py:965
+#: olladesk/main_window.py:967
 msgid "Aggiornamento di OllaDesk"
 msgstr "OllaDesk-Aktualisierung"
 
-#: olladesk/main_window.py:968
+#: olladesk/main_window.py:970
 #, python-brace-format
 msgid "È disponibile OllaDesk {new} (in uso: {current})."
 msgstr "OllaDesk {new} ist verfügbar (verwendet: {current})."
 
-#: olladesk/main_window.py:971
+#: olladesk/main_window.py:973
 msgid "Apri la pagina di download"
 msgstr "Download-Seite öffnen"
 
-#: olladesk/main_window.py:972
+#: olladesk/main_window.py:974
 msgid "Salta questa versione"
 msgstr "Diese Version überspringen"
 
-#: olladesk/main_window.py:973
+#: olladesk/main_window.py:975
 msgid "Più tardi"
 msgstr "Später"
 
-#: olladesk/main_window.py:991
+#: olladesk/main_window.py:993
 msgid "Attendi la fine della risposta (o premi ■ per interrompere) prima di aprire le impostazioni."
 msgstr "Warten Sie, bis die Antwort fertig ist (oder drücken Sie ■ zum Abbrechen), bevor Sie die Einstellungen öffnen."
 
@@ -1247,7 +1251,7 @@ msgid "Companion web"
 msgstr "Web-Companion"
 
 #: olladesk/widgets/about.py:135
-#: olladesk/widgets/settings_dialog.py:735
+#: olladesk/widgets/settings_dialog.py:742
 #: olladesk/widgets/sidebar.py:164
 msgid "Impostazioni"
 msgstr "Einstellungen"
@@ -2169,14 +2173,14 @@ msgid "Aggiornamento di Ollama"
 msgstr "Ollama-Aktualisierung"
 
 #: olladesk/widgets/ollama_update.py:320
-#: olladesk/widgets/settings_dialog.py:710
-#: olladesk/widgets/settings_dialog.py:756
+#: olladesk/widgets/settings_dialog.py:717
+#: olladesk/widgets/settings_dialog.py:763
 msgid "Aggiornamento in corso"
 msgstr "Aktualisierung läuft"
 
 #: olladesk/widgets/ollama_update.py:320
-#: olladesk/widgets/settings_dialog.py:710
-#: olladesk/widgets/settings_dialog.py:756
+#: olladesk/widgets/settings_dialog.py:717
+#: olladesk/widgets/settings_dialog.py:763
 msgid "Attendi la fine dell'aggiornamento."
 msgstr "Warten Sie, bis die Aktualisierung abgeschlossen ist."
 
@@ -2697,7 +2701,7 @@ msgstr ""
 "Kontaktiert nur api.github.com, um die Nummer des neuesten Releases zu lesen.\n"
 "Kein automatischer Download und keine Installation: nur ein Hinweis."
 
-#: olladesk/widgets/settings_dialog.py:618
+#: olladesk/widgets/settings_dialog.py:625
 msgid "Controllo l'ultima release su GitHub…"
 msgstr "Neuestes Release auf GitHub wird geprüft…"
 
@@ -2705,44 +2709,44 @@ msgstr "Neuestes Release auf GitHub wird geprüft…"
 msgid "Impostazioni — OllaDesk"
 msgstr "Einstellungen — OllaDesk"
 
-#: olladesk/widgets/settings_dialog.py:636
+#: olladesk/widgets/settings_dialog.py:643
 msgid "Nessuna release pubblica trovata su GitHub (repository privato o senza release)."
 msgstr "Kein öffentliches Release auf GitHub gefunden (privates Repository oder keine Releases)."
 
-#: olladesk/widgets/settings_dialog.py:640
+#: olladesk/widgets/settings_dialog.py:647
 #, python-brace-format
 msgid "✓ OllaDesk è aggiornato (ultima release: {version})."
 msgstr "✓ OllaDesk ist aktuell (neuestes Release: {version})."
 
-#: olladesk/widgets/settings_dialog.py:646
+#: olladesk/widgets/settings_dialog.py:653
 #, python-brace-format
 msgid "✦ Disponibile OllaDesk <b>{version}</b>. {hint}<br><a href=\"{url}\">Apri la pagina di download</a>"
 msgstr "✦ OllaDesk <b>{version}</b> ist verfügbar. {hint}<br><a href=\"{url}\">Download-Seite öffnen</a>"
 
-#: olladesk/widgets/settings_dialog.py:652
+#: olladesk/widgets/settings_dialog.py:659
 #, python-brace-format
 msgid "⚠ Verifica non riuscita: {err}"
 msgstr "⚠ Prüfung fehlgeschlagen: {err}"
 
-#: olladesk/widgets/settings_dialog.py:725
+#: olladesk/widgets/settings_dialog.py:732
 msgid "Portachiavi non disponibile"
 msgstr "Schlüsselbund nicht verfügbar"
 
-#: olladesk/widgets/settings_dialog.py:726
+#: olladesk/widgets/settings_dialog.py:733
 msgid ""
 "Non è stato possibile aggiornare la chiave nel portachiavi di KDE.\n"
 msgstr ""
 "Der Schlüssel konnte in der KDE-Brieftasche nicht aktualisiert werden.\n"
 
-#: olladesk/widgets/settings_dialog.py:727
+#: olladesk/widgets/settings_dialog.py:734
 msgid "La chiave è stata salvata in settings.json (permessi 600)."
 msgstr "Der Schlüssel wurde in settings.json gespeichert (Berechtigungen 600)."
 
-#: olladesk/widgets/settings_dialog.py:728
+#: olladesk/widgets/settings_dialog.py:735
 msgid "La chiave precedente potrebbe essere ancora salvata."
 msgstr "Der vorherige Schlüssel ist möglicherweise noch gespeichert."
 
-#: olladesk/widgets/settings_dialog.py:736
+#: olladesk/widgets/settings_dialog.py:743
 #, python-brace-format
 msgid ""
 "Impossibile scrivere le impostazioni in {path}.\n"
@@ -2751,11 +2755,11 @@ msgstr ""
 "Die Einstellungen konnten nicht in {path} geschrieben werden.\n"
 "Änderungen gelten nur bis zum Schließen der App."
 
-#: olladesk/widgets/settings_dialog.py:741
+#: olladesk/widgets/settings_dialog.py:748
 msgid "Lingua"
 msgstr "Sprache"
 
-#: olladesk/widgets/settings_dialog.py:742
+#: olladesk/widgets/settings_dialog.py:749
 msgid "La nuova lingua sarà usata al prossimo avvio di OllaDesk."
 msgstr "Die neue Sprache wird beim nächsten Start von OllaDesk verwendet."
 

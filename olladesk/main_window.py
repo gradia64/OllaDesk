@@ -928,6 +928,8 @@ class MainWindow(QMainWindow):
     def _maybe_check_app_update(self) -> None:
         if self._app_update_worker is not None or not app_update.due_for_check(self.settings):
             return
+        if app_update.install_method() in app_update.SELF_UPDATING:
+            return   # Flathub: aggiorna il software center
         w = app_update.AppUpdateCheckWorker(self)
         w.ready.connect(self._on_app_release)
         w.failed.connect(lambda _e: None)   # controllo silenzioso: si riprova al prossimo avvio

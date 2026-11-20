@@ -39,7 +39,11 @@ AUR_PAGE = "https://aur.archlinux.org/packages/olladesk"
 CHECK_INTERVAL = 24 * 3600   # secondi tra due controlli automatici
 
 _PACKAGE_DIR = Path(__file__).resolve().parent
-MARKER_NAME = "_packaging"   # contenuto: "deb" | "arch" | "appimage" | "flatpak"
+MARKER_NAME = "_packaging"   # contenuto: "deb" | "arch" | "appimage" | "flatpak" | "flathub"
+# installazioni aggiornate dal loro repository (Flathub: Discover, GNOME
+# Software, flatpak update): niente controllo né avviso dell'app, che
+# arriverebbe prima che la nuova versione sia pubblicata lì
+SELF_UPDATING = ("flathub",)
 
 
 def _inside_appimage(package_dir: Path, env) -> bool:
@@ -59,15 +63,15 @@ def _inside_appimage(package_dir: Path, env) -> bool:
 
 
 def install_method(package_dir: Path = _PACKAGE_DIR, env=None) -> str:
-    """Come è stata installata l'app: "deb" | "arch" | "appimage" | "flatpak" |
-    "source" | "pip"."""
+    """Come è stata installata l'app: "deb" | "arch" | "appimage" | "flatpak"
+    (bundle della release) | "flathub" | "source" | "pip"."""
     if _inside_appimage(package_dir, os.environ if env is None else env):
         return "appimage"
     try:
         marker = (package_dir / MARKER_NAME).read_text(encoding="utf-8").strip()
     except OSError:
         marker = ""
-    if marker in ("deb", "arch", "appimage", "flatpak"):
+    if marker in ("deb", "arch", "appimage", "flatpak", "flathub"):
         return marker
     if (package_dir.parent / ".git").exists():
         return "source"
@@ -100,6 +104,9 @@ def update_hint(method: str, version: str) -> str:
               'flatpak install --user OllaDesk-{version}.flatpak '
               '(oppure flatpak update, se l\'hai installato da un repository).').format(version=version)
         )
+    if method == "flathub":
+        return _("Aggiorna da Discover o GNOME Software, oppure con: "
+                 "flatpak update io.github.gradia64.OllaDesk")
     if method == "source":
         return _("Aggiorna il checkout: git pull, poi riavvia OllaDesk.")
     return _("Aggiorna il pacchetto Python: pipx upgrade olladesk (oppure pip install -U).")

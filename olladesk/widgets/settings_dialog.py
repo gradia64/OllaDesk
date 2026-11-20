@@ -609,6 +609,13 @@ class SettingsDialog(QDialog):
         self.app_update_status.setTextFormat(Qt.TextFormat.RichText)
         self.app_update_status.setOpenExternalLinks(True)
         lay.addWidget(self.app_update_status)
+        if self._install_method in app_update.SELF_UPDATING:
+            # da Flathub gli aggiornamenti arrivano dal software center: un
+            # avviso dell'app arriverebbe prima della versione su Flathub
+            self.app_check_btn.hide()
+            self.app_update_chk.hide()
+            self.app_update_status.setText(html.escape(
+                app_update.update_hint(self._install_method, "")))
         return box
 
     def _check_app_update(self) -> None:

@@ -33,7 +33,7 @@ LINKS = (
 def install_label(method: str) -> str:
     return {
         "deb": _("pacchetto .deb"), "arch": _("pacchetto AUR"), "appimage": "AppImage",
-        "flatpak": "Flatpak", "source": _("sorgenti (git)"), "pip": _("pacchetto Python"),
+        "flatpak": "Flatpak", "flathub": "Flathub", "source": _("sorgenti (git)"), "pip": _("pacchetto Python"),
     }.get(method, method)
 
 

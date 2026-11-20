@@ -1,8 +1,8 @@
-# Flatpak (bundle nelle release, non su Flathub)
+# Flatpak (bundle nelle release, Flathub dopo la 0.4.0)
 
 Bundle Flatpak di OllaDesk, `OllaDesk-X.Y.Z.flatpak`, costruito e provato dal job
 `flatpak` di `release.yml` e allegato alle release, firmato come gli altri file.
-Per ora **non** va consegnato a Flathub. Primo build riuscito il 2026-10-25 (Plasma 6, Wayland):
+La consegna a Flathub è prevista dopo il rilascio della 0.4.0 (vedi «Flathub»). Primo build riuscito il 2026-10-25 (Plasma 6, Wayland):
 l'app parte, PySide6 viene dalla base app, Ollama risponde dalla sandbox e il
 trascinamento da Dolphin allega file e cartelle. Restano i punti di «Cosa verificare»
 non ancora segnati ✅.
@@ -112,6 +112,29 @@ che un host abbia font senza set di caratteri:
 flatpak run --command=sh io.github.gradia64.OllaDesk -c \
   'fc-list -f "%{file}|%{charset}\n" | awk -F"|" "\$2==\"\""'
 ```
+
+## Flathub
+
+Il manifest di questa cartella costruisce dal checkout (`type: dir`). Per Flathub
+`scripts/flathub-manifest.py [vX.Y.Z]` scrive in `build/flathub/`:
+
+- lo stesso manifest con il sorgente dell'app `type: git` (url, tag, commit del tag)
+  e `x-checker-data`, così il bot di Flathub propone l'aggiornamento a ogni tag;
+- il marcatore `_packaging=flathub`: `app_update.install_method()` restituisce
+  `flathub`, l'app non controlla le release su GitHub (l'avviso arriverebbe prima
+  della build su Flathub) e le Impostazioni indicano Discover, GNOME Software o
+  `flatpak update`;
+- `flathub.json` con `only-arches: x86_64` (le wheel di cffi e cryptography sono x86_64).
+
+Sui tag il job `flatpak` lo genera e lo controlla con `flatpak-builder-lint` senza
+eccezioni (artefatto `flathub`). In locale: `scripts/flathub-manifest.py` e poi
+`scripts/lint-flatpak.sh --flathub-only`.
+
+Consegna (dopo la 0.4.0, con l'ok del maintainer): fork di `flathub/flathub`, ramo
+dal ramo `new-pr`, i due file alla radice, PR verso `new-pr` con il titolo
+«Add io.github.gradia64.OllaDesk». L'ID `io.github.gradia64.*` si verifica con
+l'account GitHub `gradia64`. Dopo l'approvazione il manifest vive nel repository
+`flathub/io.github.gradia64.OllaDesk`.
 
 ## Cosa verificare PRIMA di consegnare a Flathub (la policy è restrittiva)
 

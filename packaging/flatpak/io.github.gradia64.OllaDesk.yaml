@@ -99,8 +99,8 @@ modules:
       - cp -r olladesk /app/share/olladesk/olladesk
       - find /app/share/olladesk -name __pycache__ -type d -prune -exec rm -rf {} +
 
-      # 3) Marcatore di install_method (app_update.py lo legge: ora "deb|arch|appimage|source|pip"
-      #    — va aggiunta la branca "flatpak"; il valore qui deve combaciare).
+      # 3) Marcatore di install_method (app_update.py): "flatpak" per il bundle della release;
+      #    scripts/flathub-manifest.py lo cambia in "flathub" (aggiornamenti dal software center).
       - printf 'flatpak\n' > /app/share/olladesk/olladesk/_packaging
 
       # 4) Wrapper di avvio /app/bin/olladesk. NON `python -m olladesk`: -m mette la cartella
@@ -124,8 +124,9 @@ modules:
       - python3 -B -E -s -m compileall -q -f --invalidation-mode unchecked-hash -s /app/share/olladesk -p / /app/share/olladesk
 
     sources:
-      # ⚠️ WIP locale: punta al checkout. path va dal dir del manifest al root del repo (../..).
-      #    In CI/Flathub sostituisci con `type: git` (tag) o `type: archive` (tarball con hash).
+      # Il checkout (path dal dir del manifest al root del repo): in CI è il tag già
+      # verificato. Per Flathub scripts/flathub-manifest.py lo sostituisce con
+      # `type: git` (tag + commit).
       - type: dir
         path: ../../
         # git-ignore: true   # opzionale: esclude .git se presenti

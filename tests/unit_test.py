@@ -978,9 +978,11 @@ def test_app_update_install_method_and_hint():
     assert app_update.install_method(pkg) == "pip"
     (d / ".git").mkdir()
     assert app_update.install_method(pkg) == "source"
-    for m in ("deb", "arch", "flatpak"):
+    for m in ("deb", "arch", "flatpak", "flathub"):
         (pkg / app_update.MARKER_NAME).write_text(m + "\n", encoding="utf-8")
         assert app_update.install_method(pkg) == m
+    assert "flatpak update io.github.gradia64.OllaDesk" in app_update.update_hint("flathub", "0.4.0")
+    assert app_update.SELF_UPDATING == ("flathub",)
     assert "flatpak install --user OllaDesk-0.3.6.flatpak" in app_update.update_hint("flatpak", "0.3.6")
     (pkg / app_update.MARKER_NAME).write_text("sconosciuto", encoding="utf-8")
     assert app_update.install_method(pkg) == "source"
@@ -3256,6 +3258,38 @@ def test_profile_import():
             dlg.deleteLater()
     finally:
         os.environ["XDG_CONFIG_HOME"] = old_env
+
+
+def test_flathub_no_app_update_check():
+    """F6: da Flathub niente controllo delle release: aggiorna il software center."""
+    from unittest.mock import patch
+
+    from PySide6.QtWidgets import QApplication
+
+    QApplication.instance() or QApplication([])
+    from olladesk import app_update, config
+    from olladesk.widgets import about
+    from olladesk.widgets.settings_dialog import SettingsDialog
+
+    assert about.install_label("flathub") == "Flathub"
+    for method, hidden in (("flathub", True), ("flatpak", False)):
+        with patch.object(app_update, "install_method", lambda m=method: m):
+            dlg = SettingsDialog(config.load_settings(), lambda: [], "dark", "?")
+        assert dlg.app_check_btn.isHidden() is hidden and dlg.app_update_chk.isHidden() is hidden
+        if hidden:
+            assert "flatpak update" in dlg.app_update_status.text()
+        dlg.deleteLater()
+
+    # la finestra principale non parte nemmeno col controllo dovuto
+    class Fake:
+        _app_update_worker = None
+        settings = {"app_update_check": True, "app_update_last_check": 0}
+    from olladesk.main_window import MainWindow
+    started = []
+    with patch.object(app_update, "install_method", lambda: "flathub"), \
+            patch.object(app_update, "AppUpdateCheckWorker", lambda *a: started.append(a)):
+        MainWindow._maybe_check_app_update(Fake())
+    assert started == []
 
 
 if __name__ == "__main__":

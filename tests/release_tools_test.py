@@ -527,6 +527,36 @@ def test_ruoli_delle_chiavi_coerenti_con_la_chiave_pubblica(tmp, keys):
     assert ci not in tag_subkeys
 
 
+def test_manifest_per_flathub(tmp, keys):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("flathub_manifest", ROOT / "scripts/flathub-manifest.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    src = mod.MANIFEST.read_text(encoding="utf-8")
+    commit = "0123456789abcdef0123456789abcdef01234567"
+    out = mod.flathub_manifest(src, "v0.4.0", commit)
+    # sorgente fisso al tag, niente checkout locale
+    assert "type: dir" not in out and "path: ../../" not in out
+    assert f"url: {mod.GIT_URL}" in out and "tag: v0.4.0" in out and f"commit: {commit}" in out
+    assert "x-checker-data:" in out and "tag-pattern: ^v([\\d.]+)$" in out
+    # marcatore: aggiornamenti dal software center
+    assert "printf 'flathub\\n' > /app/share/olladesk/olladesk/_packaging" in out
+    assert "printf 'flatpak\\n'" not in out
+    # il resto del manifest resta uguale
+    assert out.count("\n- name: ") == src.count("\n- name: ") and "finish-args:" in out
+    for bad in (("0.4.0", commit), ("v0.4.0", "abc"), ("v0.4.0;rm", commit)):
+        try:
+            mod.flathub_manifest(src, *bad)
+        except ValueError:
+            continue
+        raise AssertionError(f"accettato: {bad}")
+    assert mod.FLATHUB_JSON == {"only-arches": ["x86_64"]}
+    # in CI: generato e controllato sui tag, artefatto non allegato alla release
+    jobs = _jobs((ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8"))
+    assert "scripts/flathub-manifest.py" in jobs["flatpak"] and "--flathub-only" in jobs["flatpak"]
+    assert "name: flathub" in jobs["flatpak"] and "name: flathub" not in jobs["publish"]
+
+
 def main() -> int:
     if not all(shutil.which(t) for t in ("gpg", "git", "bash")):
         # in CI questi test sono il controllo di sicurezza del rilascio: senza
