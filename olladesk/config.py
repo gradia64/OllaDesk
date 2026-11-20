@@ -106,10 +106,17 @@ def _write_json(path: Path, data: Any) -> bool:
     """Scrittura atomica (file temporaneo + rename). False se non riuscita."""
     tmp = path.with_suffix(".tmp")
     try:
+        try:
+            text = json.dumps(data, ensure_ascii=False, indent=2)
+            text.encode("utf-8")
+        except UnicodeEncodeError:
+            # nomi di file non UTF-8 (byte surrogati di Path): in UTF-8 non si
+            # scrivono, con gli escape \udcxx sì, e json.load li ridà uguali
+            text = json.dumps(data, ensure_ascii=True, indent=2)
         # 0600 fin dalla creazione: niente letture da altri utenti
         fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            json.dump(data, fh, ensure_ascii=False, indent=2)
+            fh.write(text)
             fh.flush()
             # senza fsync un calo di corrente dopo il rename può lasciare
             # un file vuoto al posto di quello vecchio
@@ -117,7 +124,7 @@ def _write_json(path: Path, data: Any) -> bool:
         tmp.replace(path)
         os.chmod(path, 0o600)
         return True
-    except OSError:
+    except (OSError, TypeError, ValueError):   # ValueError: anche i riferimenti circolari
         try:
             tmp.unlink()
         except OSError:
@@ -163,8 +170,40 @@ def load_settings() -> dict:
             _backup_unreadable_settings(path)
         data = {}
     out = dict(DEFAULT_SETTINGS)
-    out.update({k: v for k, v in data.items() if k in out})
+    for k, v in data.items():
+        if k in out:
+            v = _coerce_setting(v, DEFAULT_SETTINGS[k])
+            if v is not None:
+                out[k] = v
     return out
+
+
+def _coerce_setting(value: Any, default: Any) -> Any:
+    """Il valore se è del tipo del predefinito (o vi si converte), altrimenti None.
+
+    settings.json può essere scritto a mano, corrotto o importato da un'altra
+    installazione (F4): un numero come testo o un tipo sbagliato faceva
+    fallire l'avvio (tema, porta della companion) o l'invio.
+    """
+    if isinstance(default, bool):
+        return value if isinstance(value, bool) else None
+    if isinstance(default, int):
+        if isinstance(value, bool):
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError, OverflowError):
+            return None
+    if isinstance(default, float):
+        if isinstance(value, bool):
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError, OverflowError):
+            return None
+    if default is None or isinstance(value, type(default)):
+        return value
+    return None
 
 
 def legacy_share_port() -> int | None:
@@ -183,7 +222,24 @@ def legacy_share_port() -> int | None:
         return 11434
 
 
+_settings_frozen = False
+
+
+def freeze_settings() -> None:
+    """Da qui all'uscita save_settings non scrive più.
+
+    Dopo un'importazione dalle Impostazioni (F4) l'app si chiude, ma la
+    finestra ha in memoria le impostazioni di prima: un salvataggio in coda
+    (controllo degli aggiornamenti finito durante il riepilogo, companion…)
+    riscriverebbe settings.json appena importato.
+    """
+    global _settings_frozen
+    _settings_frozen = True
+
+
 def save_settings(settings: dict) -> bool:
+    if _settings_frozen:
+        return False
     merged = {**DEFAULT_SETTINGS, **settings}
     return _write_json(config_dir() / "settings.json", merged)
 

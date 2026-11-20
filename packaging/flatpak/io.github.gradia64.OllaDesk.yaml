@@ -1,7 +1,7 @@
 # io.github.gradia64.OllaDesk.yaml
 # ---------------------------------------------------------------------------
-# MANIFEST flatpak-builder di OllaDesk (WIP). Bundle distribuito con le release,
-# non consegnato a Flathub per ora.
+# MANIFEST flatpak-builder di OllaDesk: bundle distribuito con le release; il
+# manifest per Flathub si genera da questo (scripts/flathub-manifest.py).
 #
 # Formato YAML (flatpak-builder lo accetta; i repo Flathub usano spesso JSON,
 # ma JSON non ha commenti, e qui ogni permesso è motivato).

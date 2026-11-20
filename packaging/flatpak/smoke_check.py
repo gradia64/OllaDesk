@@ -51,9 +51,14 @@ import PySide6.QtNetwork  # noqa: E402,F401  i quattro moduli Qt che l'app impor
 
 # F1: gli strumenti per generare i binding non sono nel bundle
 import glob  # noqa: E402
+pyside = "/app/lib/python3*/site-packages/PySide6/"
 leftovers = [p for pat in ("/app/lib/libLLVM*", "/app/lib/libclang*", "/app/bin/shiboken6*",
                            "/app/lib/python3*/site-packages/shiboken6_generator",
-                           "/app/lib/python3*/site-packages/OpenGL")
+                           "/app/lib/python3*/site-packages/OpenGL",
+                           *(pyside + name for name in (
+                               "assistant", "balsam", "balsamui", "designer", "lrelease",
+                               "lupdate", "qmlformat", "qmllint", "qmlls", "qsb", "include",
+                               "typesystems", "glue")))
              for p in glob.glob(pat)]
 assert not leftovers, leftovers
 print(f"Flatpak di OllaDesk {__version__}: controlli OK")

@@ -113,7 +113,12 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   di averli modificati. Le chiamate compaiono nella bolla in un blocco «🔧 Strumenti usati» richiudibile,
   con argomenti e inizio del risultato (durante la risposta mostra lo strumento
   in corso), e le fonti delle ricerche finiscono in «🌐 Fonti»
-  (le prime 3 di ogni ricerca, al massimo 10). La scelta vale
+  (le prime 3 di ogni ricerca, al massimo 10). Il testo di file e pagine
+  arriva al modello come dato da usare, non come istruzioni, e una ricerca che
+  ripete un pezzo di un file letto viene rifiutata; resta però un rischio: un
+  file o una pagina con istruzioni nascoste può spingere il modello a mettere
+  nella query, riassunto o riformulato, ciò che ha letto, e la query va al
+  servizio di ricerca. Con file riservati condivisi tieni spenta 🌐. La scelta vale
   per la conversazione e il telefono la rispetta; la companion mostra le
   chiamate, senza poterle comandare.
 - **Companion web** (voce «📱 Companion» della barra laterale, `Ctrl+D`;
@@ -397,8 +402,10 @@ Chat e impostazioni sono in `~/.var/app/io.github.gradia64.OllaDesk/config/ollad
 separate da quelle del `.deb`, del pacchetto AUR e dell'AppImage. Al primo
 avvio OllaDesk propone di importarle: nella finestra di scelta si apre la
 cartella `~/.config/olladesk` (Ctrl+H mostra le cartelle nascoste) e vengono
-copiate conversazioni, impostazioni, parametri dei modelli, telefoni abbinati e
-immagini incollate. Si può rifare in seguito da Impostazioni → Info → «Importa
+copiate conversazioni, impostazioni, parametri dei modelli e immagini
+incollate. I telefoni abbinati no: la companion resta spenta e si riabbina dalla
+sua finestra. Il riepilogo mostra il server Ollama e il servizio di ricerca
+delle impostazioni importate: importa solo una cartella tua. Si può rifare in seguito da Impostazioni → Info → «Importa
 dati da un'altra installazione…». Ollama non è incluso: va installato a parte.
 
 ## Installazione su Debian

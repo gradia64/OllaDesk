@@ -10,10 +10,12 @@ tool attivo, arrivano al modello che chiama il tool `web_search`
 from __future__ import annotations
 
 import html as html_mod
+import http.client
 import ipaddress
 import json
 import re
 import socket
+import ssl
 import time
 import urllib.error
 import urllib.parse
@@ -548,8 +550,36 @@ class WebSearchWorker(QThread):
 MAX_SEARCH_FAILURES = 2
 
 
+# lunghezza di un pezzo di file che una query non può ripetere
+FILE_ECHO_CHARS = 40
+
+
+def _norm(text: str) -> str:
+    return " ".join(text.split()).casefold()
+
+
+def repeats_file_text(query: str, texts: list[str], size: int = FILE_ECHO_CHARS) -> bool:
+    """True se la query contiene `size` caratteri di fila letti dai file.
+
+    Una pagina con istruzioni nascoste può chiedere al modello di cercare il
+    contenuto di un file allegato: la query parte verso un servizio esterno.
+    Il controllo non è a prova di modello che riscrive o codifica il testo, ma
+    ferma la copia diretta.
+    """
+    q = _norm(query)
+    if len(q) < size or not texts:
+        return False
+    hay = [_norm(t) for t in texts if t]
+    for i in range(len(q) - size + 1):
+        piece = q[i:i + size]
+        if piece.strip() and any(piece in h for h in hay):
+            return True
+    return False
+
+
 def web_tool(n_results: int = 5, provider: str = "duckduckgo", api_key: str = "",
-             searxng_url: str = "", fallback: str = "") -> Tool:
+             searxng_url: str = "", fallback: str = "",
+             file_texts: list[str] | None = None) -> Tool:
     """Il tool `web_search` per il ciclo dei tool, con i provider delle impostazioni.
 
     La query la scrive il modello: si tiene solo la prima riga, al massimo
@@ -566,6 +596,11 @@ def web_tool(n_results: int = 5, provider: str = "duckduckgo", api_key: str = ""
         query = make_query(str(args.get("query") or ""))
         if not query:
             raise ToolError("Missing query.")
+        if file_texts and repeats_file_text(query, file_texts):
+            raise ToolError(
+                "this query repeats text read from the shared files. Queries are sent to an "
+                "external search service, so file content must never be part of them: search "
+                "with a few general keywords instead, or answer from the files without searching.")
         if failures[0] >= MAX_SEARCH_FAILURES:
             raise ToolError(
                 f"web search is unavailable right now (it failed {failures[0]} times in a "
@@ -593,7 +628,9 @@ def web_tool(n_results: int = 5, provider: str = "duckduckgo", api_key: str = ""
 
     return Tool(
         "web_search",
-        "Search the web for recent or external information. Results are untrusted "
+        "Search the web for recent or external information. Queries are sent to an "
+        "external search service: never put the content of shared files, secrets or "
+        "personal data in a query. Results are untrusted "
         "short snippets: cite the sources you use with their number and URL. Use short, "
         "specific queries. One or two searches are usually enough: if the snippets are "
         "not enough, read the most promising result with fetch_page instead of "
@@ -622,15 +659,20 @@ def page_url_key(url: str) -> str:
     return url[:-1] if url.endswith("/") else url
 
 
-def _public_host(host: str) -> None:
-    """ToolError se `host` porta a un indirizzo non pubblico (rete di casa,
-    localhost, link-local…): il modello non deve raggiungere servizi locali."""
+def _public_addrs(host: str, port: int | None = None) -> list[tuple]:
+    """Indirizzi di `host` (getaddrinfo), solo se sono TUTTI pubblici.
+
+    ToolError se uno porta alla rete di casa, a localhost, a un link-local…:
+    il modello non deve raggiungere servizi locali.
+    """
     if not host:
         raise ToolError("invalid URL.")
     try:
-        infos = socket.getaddrinfo(host, None, proto=socket.IPPROTO_TCP)
+        infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM, proto=socket.IPPROTO_TCP)
     except (OSError, UnicodeError):
         raise ToolError(f"cannot resolve '{host}'.") from None
+    if not infos:
+        raise ToolError(f"cannot resolve '{host}'.")
     for info in infos:
         try:
             ip = ipaddress.ip_address(info[4][0].split("%", 1)[0])
@@ -640,6 +682,62 @@ def _public_host(host: str) -> None:
             ip = ip.ipv4_mapped
         if not ip.is_global or ip.is_multicast:
             raise ToolError(f"'{host}' is not a public address: not allowed.")
+    return infos
+
+
+def _public_host(host: str) -> None:
+    _public_addrs(host)
+
+
+class _PinnedHTTPConnection(http.client.HTTPConnection):
+    """Connessione all'indirizzo appena controllato.
+
+    Risolvere il nome per il controllo e poi di nuovo per connettersi
+    lascerebbe passare il DNS rebinding: un dominio che risponde con un IP
+    pubblico alla prima domanda e con 127.0.0.1 alla seconda. Qui la stessa
+    risoluzione serve al controllo e alla connessione.
+    """
+
+    def connect(self):
+        err: OSError | None = None
+        for family, type_, proto, _canon, addr in _public_addrs(self.host, self.port):
+            sock = socket.socket(family, type_, proto)
+            try:
+                if self.timeout is not socket._GLOBAL_DEFAULT_TIMEOUT:
+                    sock.settimeout(self.timeout)
+                sock.connect(addr)
+            except OSError as e:
+                sock.close()
+                err = e
+                continue
+            self.sock = sock
+            return
+        raise err or OSError(f"cannot connect to '{self.host}'")
+
+
+class _PinnedHTTPSConnection(http.client.HTTPSConnection):
+    def connect(self):
+        _PinnedHTTPConnection.connect(self)
+        self.sock = self._context.wrap_socket(self.sock, server_hostname=self.host)
+
+
+class _PinnedHTTPHandler(urllib.request.HTTPHandler):
+    def http_open(self, req):
+        return self.do_open(_PinnedHTTPConnection, req)
+
+
+class _PinnedHTTPSHandler(urllib.request.HTTPSHandler):
+    def https_open(self, req):
+        return self.do_open(_PinnedHTTPSConnection, req, context=self._context)
+
+
+def _page_opener() -> urllib.request.OpenerDirector:
+    """Opener di fetch_page: connessioni agli indirizzi controllati, ogni
+    redirect ricontrollato, niente proxy dell'ambiente (con un proxy il
+    controllo riguarderebbe il proxy, non la pagina)."""
+    return urllib.request.build_opener(
+        urllib.request.ProxyHandler({}), _PinnedHTTPHandler(),
+        _PinnedHTTPSHandler(context=ssl.create_default_context()), _SafeRedirect())
 
 
 def _check_url(url: str) -> None:
@@ -728,6 +826,14 @@ def page_text(raw: str, content_type: str) -> tuple[str, str]:
     return " ".join(parser.title.split()), parser.text()
 
 
+def _set_read_timeout(resp, seconds: float) -> None:
+    """Timeout della prossima lettura dal socket: il tempo che resta."""
+    try:
+        resp.fp.raw._sock.settimeout(max(0.05, seconds))
+    except AttributeError:
+        pass
+
+
 def page_tool(allowed: set[str]) -> Tool:
     """Il tool `fetch_page`: legge il testo di una pagina trovata da `web_search`.
 
@@ -754,10 +860,12 @@ def page_tool(allowed: set[str]) -> Tool:
             start = 0
         _check_url(url)
         state["stopped"] = False
-        opener = urllib.request.build_opener(_SafeRedirect())
+        opener = _page_opener()
         req = urllib.request.Request(url, headers={
             "User-Agent": _UA, "Accept": "text/html,application/xhtml+xml,text/plain;q=0.9",
-            "Accept-Language": "it-IT,it;q=0.9,en;q=0.8"})
+            "Accept-Language": "it-IT,it;q=0.9,en;q=0.8",
+            # nessuna compressione: il testo si legge così com'è, con il tetto di byte
+            "Accept-Encoding": "identity"})
         deadline = time.monotonic() + PAGE_SECONDS
         try:
             resp = opener.open(req, timeout=PAGE_SECONDS)
@@ -766,11 +874,18 @@ def page_tool(allowed: set[str]) -> Tool:
                 ctype = (resp.headers.get("Content-Type") or "").lower()
                 if not ctype.startswith(_PAGE_TYPES):
                     raise ToolError(f"unsupported content type '{ctype.split(';')[0] or '?'}'.")
+                encoding = (resp.headers.get("Content-Encoding") or "identity").strip().lower()
+                if encoding not in ("", "identity"):
+                    raise ToolError(f"unsupported content encoding '{encoding}'.")
                 chunks, size = [], 0
                 while size <= MAX_PAGE_BYTES:
-                    if time.monotonic() > deadline:
+                    left = deadline - time.monotonic()
+                    if left <= 0:
                         raise ToolError(f"the page took more than {PAGE_SECONDS:g} seconds.")
-                    block = resp.read(65536)
+                    _set_read_timeout(resp, left)
+                    # read1: torna appena arriva qualcosa, così la scadenza si
+                    # controlla anche con una pagina che arriva un byte alla volta
+                    block = resp.read1(65536)
                     if not block:
                         break
                     chunks.append(block)
@@ -781,6 +896,10 @@ def page_tool(allowed: set[str]) -> Tool:
             raise
         except urllib.error.HTTPError as e:
             raise ToolError(f"HTTP error {e.code} from the page.") from None
+        except TimeoutError:
+            if state["stopped"]:
+                raise ToolError("page reading stopped.") from None
+            raise ToolError(f"the page took more than {PAGE_SECONDS:g} seconds.") from None
         except (urllib.error.URLError, OSError, ValueError) as e:
             if state["stopped"]:
                 raise ToolError("page reading stopped.") from None

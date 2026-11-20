@@ -253,8 +253,14 @@ def _gitignore_regex(pattern: str, anchored: bool) -> re.Pattern:
     out, i = [], 0
     while i < len(pattern):
         if pattern.startswith("**/", i):
-            out.append("(?:.*/)?")
-            i += 3
+            # più «**/» di fila valgono come uno solo: ripetuti, ciascuno con
+            # il suo «.*», davano un backtracking esponenziale (un .gitignore
+            # ostile bloccava l'allegato e i tool per minuti). Una cartella per
+            # volta ([^/]*/) non è ambigua come «.*/»
+            while pattern.startswith("**/", i):
+                i += 3
+            if not (i == 3 and not anchored and not out):   # già coperto dal prefisso
+                out.append("(?:[^/]*/)*")
         elif pattern.startswith("/**", i) and i + 3 == len(pattern):
             out.append("/.*")
             i += 3
@@ -277,7 +283,7 @@ def _gitignore_regex(pattern: str, anchored: bool) -> re.Pattern:
         else:
             out.append(re.escape(pattern[i]))
             i += 1
-    prefix = "" if anchored else "(?:.*/)?"
+    prefix = "" if anchored else "(?:[^/]*/)*"
     return re.compile(prefix + "".join(out))
 
 
@@ -304,9 +310,11 @@ def _gitignore_rules(root: Path) -> list[tuple[re.Pattern, bool]]:
         # «*.log»); «**/x» vale a ogni livello anche se contiene una barra
         anchored = "/" in line
         line = line.lstrip("/")
-        if not line:
+        if not line or len(line) > 500:
             continue
         rules.append((_gitignore_regex(line, anchored), dir_only))
+        if len(rules) >= 1000:   # ogni regola si prova su ogni file: un tetto
+            break
     return rules
 
 

@@ -109,7 +109,7 @@ msgid "nessuno scaricamento in corso"
 msgstr "aucun téléchargement en cours"
 
 #: olladesk/companion.py:438
-#: olladesk/engine.py:371
+#: olladesk/engine.py:375
 msgid "modello non installato"
 msgstr "modèle non installé"
 
@@ -210,12 +210,12 @@ msgstr "« archived » doit valoir true ou false"
 msgid "nome del modello non valido"
 msgstr "nom de modèle non valide"
 
-#: olladesk/config.py:292
-#: olladesk/engine.py:409
+#: olladesk/config.py:348
+#: olladesk/engine.py:413
 #: olladesk/widgets/sidebar.py:225
 #: olladesk/web/app.js:164
-#: olladesk/web/app.js:475
-#: olladesk/web/app.js:711
+#: olladesk/web/app.js:479
+#: olladesk/web/app.js:715
 msgid "Conversazione"
 msgstr "Conversation"
 
@@ -281,69 +281,69 @@ msgstr ""
 "\n"
 "…[tronqué à {limit} caractères]"
 
-#: olladesk/context.py:366
-#: olladesk/context.py:389
+#: olladesk/context.py:374
+#: olladesk/context.py:397
 msgid "oltre il limite di voci esaminate"
 msgstr "au-delà de la limite d'entrées examinées"
 
-#: olladesk/context.py:369
-#: olladesk/context.py:465
+#: olladesk/context.py:377
+#: olladesk/context.py:473
 #, python-brace-format
 msgid "lettura oltre {seconds:g} secondi"
 msgstr "lecture au-delà de {seconds:g} secondes"
 
-#: olladesk/context.py:382
-#: olladesk/context.py:406
+#: olladesk/context.py:390
+#: olladesk/context.py:414
 msgid "collegamenti simbolici"
 msgstr "liens symboliques"
 
-#: olladesk/context.py:397
-#: olladesk/context.py:380
+#: olladesk/context.py:405
+#: olladesk/context.py:388
 msgid "cartelle di dipendenze, cache o .gitignore"
 msgstr "dossiers de dépendances, de cache ou .gitignore"
 
-#: olladesk/context.py:400
+#: olladesk/context.py:408
 msgid "possibili credenziali (allegale una per una)"
 msgstr "identifiants possibles (joignez-les un par un)"
 
-#: olladesk/context.py:409
+#: olladesk/context.py:417
 msgid "file speciali"
 msgstr "fichiers spéciaux"
 
-#: olladesk/context.py:413
+#: olladesk/context.py:421
 msgid "immagini (allegale una per una)"
 msgstr "images (joignez-les une par une)"
 
-#: olladesk/context.py:416
+#: olladesk/context.py:424
 msgid "tipo non supportato"
 msgstr "type non pris en charge"
 
-#: olladesk/context.py:422
+#: olladesk/context.py:430
 #, python-brace-format
 msgid "oltre {max} PDF"
 msgstr "au-delà de {max} PDF"
 
-#: olladesk/context.py:425
+#: olladesk/context.py:433
 #, python-brace-format
 msgid "oltre {max} file"
 msgstr "au-delà de {max} fichiers"
 
-#: olladesk/context.py:440
+#: olladesk/context.py:448
 #, python-brace-format
 msgid "cartella non trovata: {name}"
 msgstr "dossier introuvable : {name}"
 
-#: olladesk/context.py:447
+#: olladesk/context.py:455
 #, python-brace-format
 msgid "impossibile leggere la cartella {name}: {error}"
 msgstr "impossible de lire le dossier {name} : {error}"
 
-#: olladesk/context.py:462
+#: olladesk/context.py:470
 #, python-brace-format
 msgid "oltre {max} caratteri"
 msgstr "au-delà de {max} caractères"
 
-#: olladesk/context.py:473
+#: olladesk/context.py:481
 #, python-brace-format
 msgid ""
 "\n"
@@ -352,40 +352,40 @@ msgstr ""
 "\n"
 "…[tronqué : limite de {max} caractères pour le dossier]"
 
-#: olladesk/context.py:477
+#: olladesk/context.py:485
 #, python-brace-format
 msgid "Cartella: {name} (dati non attendibili), {n} file inclusi:"
 msgstr "Dossier : {name} (données non fiables), {n} fichiers inclus :"
 
-#: olladesk/context.py:480
+#: olladesk/context.py:488
 msgid "Esclusi: "
 msgstr "Exclus : "
 
-#: olladesk/context.py:482
+#: olladesk/context.py:490
 #, python-brace-format
 msgid "cartella {name}: {n} file inclusi, "
 msgstr "dossier {name} : {n} fichiers inclus, "
 
-#: olladesk/context.py:483
+#: olladesk/context.py:491
 #, python-brace-format
 msgid "{n} esclusi ({why})"
 msgstr "{n} exclus ({why})"
 
-#: olladesk/context.py:488
+#: olladesk/context.py:496
 #, python-brace-format
 msgid " e altri {more}"
 msgstr " et {more} autres"
 
-#: olladesk/context.py:488
+#: olladesk/context.py:496
 msgid " — non supportati: "
 msgstr " — non pris en charge : "
 
-#: olladesk/context.py:491
+#: olladesk/context.py:499
 #, python-brace-format
 msgid "cartella {name}: nessun file di testo, PDF o documento da allegare"
 msgstr "dossier {name} : aucun fichier texte, PDF ou document à joindre"
 
-#: olladesk/context.py:537
+#: olladesk/context.py:545
 #, python-brace-format
 msgid ""
 "\n"
@@ -402,12 +402,12 @@ msgstr ""
 "{content}\n"
 "---"
 
-#: olladesk/context.py:540
+#: olladesk/context.py:548
 #, python-brace-format
 msgid "nessun testo estratto da {name}"
 msgstr "aucun texte extrait de {name}"
 
-#: olladesk/context.py:548
+#: olladesk/context.py:556
 msgid ""
 "\n"
 "[allegati inviati in un turno precedente: "
@@ -415,7 +415,7 @@ msgstr ""
 "\n"
 "[pièces jointes envoyées lors d'un tour précédent : "
 
-#: olladesk/context.py:550
+#: olladesk/context.py:558
 msgid ""
 "\n"
 "[una ricerca web era stata allegata in un turno precedente]"
@@ -423,47 +423,47 @@ msgstr ""
 "\n"
 "[une recherche web a été jointe lors d'un tour précédent]"
 
-#: olladesk/engine.py:347
-#: olladesk/engine.py:367
+#: olladesk/engine.py:351
+#: olladesk/engine.py:371
 msgid "OllaDesk si sta chiudendo"
 msgstr "OllaDesk est en cours de fermeture"
 
-#: olladesk/engine.py:349
+#: olladesk/engine.py:353
 msgid "nome del modello mancante"
 msgstr "nom du modèle manquant"
 
-#: olladesk/engine.py:351
-#: olladesk/engine.py:369
+#: olladesk/engine.py:355
+#: olladesk/engine.py:373
 msgid "un'altra operazione sui modelli è già in corso"
 msgstr "une autre opération sur les modèles est déjà en cours"
 
-#: olladesk/engine.py:373
+#: olladesk/engine.py:377
 msgid "il PC sta rispondendo: riprova alla fine"
 msgstr "le PC est en train de répondre : réessayez à la fin"
 
-#: olladesk/engine.py:390
+#: olladesk/engine.py:394
 msgid "scaricamento annullato"
 msgstr "téléchargement annulé"
 
-#: olladesk/engine.py:405
+#: olladesk/engine.py:409
 msgid "⚠ Impossibile salvare la conversazione su disco: spazio esaurito o permessi mancanti?"
 msgstr "⚠ Impossible d'enregistrer la conversation sur le disque : espace épuisé ou permissions manquantes ?"
 
-#: olladesk/engine.py:484
+#: olladesk/engine.py:488
 #, python-brace-format
 msgid "il modello «{model}» è in eliminazione"
 msgstr "le modèle « {model} » est en cours de suppression"
 
-#: olladesk/engine.py:513
+#: olladesk/engine.py:517
 #, python-brace-format
 msgid "file non leggibile: {name}"
 msgstr "fichier illisible : {name}"
 
-#: olladesk/engine.py:517
+#: olladesk/engine.py:521
 msgid "Ricerca web saltata: scrivi una domanda insieme agli allegati."
 msgstr "Recherche web ignorée : écrivez une question avec les pièces jointes."
 
-#: olladesk/engine.py:615
+#: olladesk/engine.py:619
 #, python-brace-format
 msgid ""
 "⚠ Ricerca web non riuscita ({err}).\n"
@@ -472,30 +472,31 @@ msgstr ""
 "⚠ Échec de la recherche web ({err}).\n"
 "Je continue sans les résultats web."
 
-#: olladesk/engine.py:641
+#: olladesk/engine.py:645
 msgid "Allegati"
 msgstr "Pièces jointes"
 
-#: olladesk/engine.py:729
+#: olladesk/engine.py:731
+#: olladesk/engine.py:740
 #, python-brace-format
 msgid "impossibile preparare la richiesta: {error}"
 msgstr "impossible de préparer la requête : {error}"
 
-#: olladesk/engine.py:821
+#: olladesk/engine.py:861
 msgid "Il modello ha provato a chiamare uno strumento non disponibile invece di rispondere: la chiamata è stata tolta dalla risposta."
 msgstr "Le modèle a essayé d'appeler un outil non disponible au lieu de répondre : l'appel a été retiré de la réponse."
 
-#: olladesk/engine.py:920
+#: olladesk/engine.py:960
 #, python-brace-format
 msgid "La ricerca web non risponde ({count} tentativi falliti di fila): il modello continua senza."
 msgstr "La recherche web ne répond pas ({count} tentatives échouées d'affilée) : le modèle continue sans elle."
 
-#: olladesk/engine.py:929
+#: olladesk/engine.py:969
 #, python-brace-format
 msgid "Raggiunto il limite di {count} giri di strumenti: il modello risponde con quello che ha raccolto."
 msgstr "Limite de {count} tours d'outils atteinte : le modèle répond avec ce qu'il a recueilli."
 
-#: olladesk/main_window.py:1047
+#: olladesk/main_window.py:1049
 msgid "Resta attivo nella tray: clic sull'icona per mostrare o nascondere la finestra, «Esci» dal menu per chiudere."
 msgstr "Toujours actif dans la zone de notification : cliquez sur l'icône pour afficher ou masquer la fenêtre, « Quitter » dans le menu pour fermer."
 
@@ -577,7 +578,7 @@ msgid "Indirizzo del server…"
 msgstr "Adresse du serveur…"
 
 #: olladesk/main_window.py:455
-#: olladesk/web/app.js:649
+#: olladesk/web/app.js:653
 msgid "— nessun modello —"
 msgstr "— aucun modèle —"
 
@@ -615,7 +616,7 @@ msgstr ""
 msgid "Invio non possibile: {refusal}."
 msgstr "Envoi impossible : {refusal}."
 
-#: olladesk/main_window.py:779
+#: olladesk/main_window.py:781
 msgid ""
 "\n"
 "\n"
@@ -625,7 +626,7 @@ msgstr ""
 "\n"
 "Conseil : le modèle n'accepte peut-être pas le champ « think » : réactivez le bouton 🧠 dans la zone de saisie."
 
-#: olladesk/main_window.py:784
+#: olladesk/main_window.py:786
 msgid ""
 "\n"
 "\n"
@@ -635,15 +636,15 @@ msgstr ""
 "\n"
 "Conseil : lancez Ollama avec `ollama serve` et vérifiez l'URL dans les paramètres (Ctrl+,)."
 
-#: olladesk/main_window.py:823
+#: olladesk/main_window.py:825
 msgid "Mostra / nascondi"
 msgstr "Afficher / masquer"
 
-#: olladesk/main_window.py:827
+#: olladesk/main_window.py:829
 msgid "Esci"
 msgstr "Quitter"
 
-#: olladesk/main_window.py:860
+#: olladesk/main_window.py:862
 #, python-brace-format
 msgid ""
 "⚠ Il file delle impostazioni era illeggibile (non è JSON valido): OllaDesk è ripartito dalle impostazioni predefinite. Il file com'era è conservato in:\n"
@@ -652,7 +653,7 @@ msgstr ""
 "⚠ Le fichier des paramètres était illisible (JSON non valide) : OllaDesk est reparti des paramètres par défaut. Le fichier tel quel est conservé dans :\n"
 "{path}"
 
-#: olladesk/main_window.py:869
+#: olladesk/main_window.py:871
 #, python-brace-format
 msgid ""
 "\n"
@@ -661,15 +662,15 @@ msgstr ""
 "\n"
 "Le champ « Serveur Ollama » pointait vers le port {port}, celui de l'instance qui gérait le partage : il a été remis à {host}. Si votre Ollama utilise une autre adresse, modifiez-la dans les paramètres (Ctrl+,)."
 
-#: olladesk/main_window.py:875
+#: olladesk/main_window.py:877
 msgid "ℹ La condivisione dell'API Ollama in rete è stata rimossa: per usare OllaDesk dal telefono attiva la «Companion web» (voce «📱 Companion» della barra laterale, Ctrl+D), che chiede un abbinamento. Per i client di terze parti vedi il README (OLLAMA_HOST nel servizio di sistema)."
 msgstr "ℹ Le partage de l'API Ollama sur le réseau a été supprimé : pour utiliser OllaDesk depuis le téléphone, activez le « Companion web » (élément « 📱 Companion » de la barre latérale, Ctrl+D), qui demande une association. Pour les clients tiers, consultez le README (OLLAMA_HOST dans le service système)."
 
-#: olladesk/main_window.py:894
+#: olladesk/main_window.py:896
 msgid "(nessun indirizzo di rete trovato)"
 msgstr "(aucune adresse réseau trouvée)"
 
-#: olladesk/main_window.py:896
+#: olladesk/main_window.py:898
 #, python-brace-format
 msgid ""
 "Companion web attiva, sul telefono apri:\n"
@@ -680,7 +681,7 @@ msgstr ""
 "  {where}\n"
 "Cliquez pour associer un appareil (Ctrl+D)"
 
-#: olladesk/main_window.py:903
+#: olladesk/main_window.py:905
 #, python-brace-format
 msgid ""
 "⚠ Companion web non avviata: {detail}.\n"
@@ -689,33 +690,33 @@ msgstr ""
 "⚠ Companion web non démarré : {detail}.\n"
 "Choisissez un autre port dans la fenêtre « Companion » (Ctrl+D)."
 
-#: olladesk/main_window.py:957
+#: olladesk/main_window.py:959
 #, python-brace-format
 msgid "È disponibile OllaDesk {new} (in uso: {current})"
 msgstr "OllaDesk {new} est disponible (version utilisée : {current})"
 
-#: olladesk/main_window.py:967
+#: olladesk/main_window.py:969
 msgid "Aggiornamento di OllaDesk"
 msgstr "Mise à jour d'OllaDesk"
 
-#: olladesk/main_window.py:970
+#: olladesk/main_window.py:972
 #, python-brace-format
 msgid "È disponibile OllaDesk {new} (in uso: {current})."
 msgstr "OllaDesk {new} est disponible (version utilisée : {current})."
 
-#: olladesk/main_window.py:973
+#: olladesk/main_window.py:975
 msgid "Apri la pagina di download"
 msgstr "Ouvrir la page de téléchargement"
 
-#: olladesk/main_window.py:974
+#: olladesk/main_window.py:976
 msgid "Salta questa versione"
 msgstr "Ignorer cette version"
 
-#: olladesk/main_window.py:975
+#: olladesk/main_window.py:977
 msgid "Più tardi"
 msgstr "Plus tard"
 
-#: olladesk/main_window.py:993
+#: olladesk/main_window.py:995
 msgid "Attendi la fine della risposta (o premi ■ per interrompere) prima di aprire le impostazioni."
 msgstr "Attendez la fin de la réponse (ou appuyez sur ■ pour l'interrompre) avant d'ouvrir les paramètres."
 
@@ -834,7 +835,7 @@ msgid "limite di richieste a GitHub raggiunto (60 all'ora per indirizzo IP): rip
 msgstr "limite de requêtes GitHub atteinte (60 par heure par adresse IP) : réessayez après {time}"
 
 #: olladesk/web/app.js:12
-#: olladesk/web/app.js:516
+#: olladesk/web/app.js:520
 #, python-brace-format
 msgid "Elimina {name}"
 msgstr "Supprimer {name}"
@@ -848,25 +849,25 @@ msgstr "🗄 Archives ({n})"
 msgid "🧠 Pensiero"
 msgstr "🧠 Réflexion"
 
-#: olladesk/web/app.js:290
-#: olladesk/web/app.js:291
+#: olladesk/web/app.js:294
+#: olladesk/web/app.js:295
 msgid "Copia il messaggio"
 msgstr "Copier le message"
 
-#: olladesk/web/app.js:338
+#: olladesk/web/app.js:342
 msgid "Copia automatica non disponibile: tieni premuto sul testo selezionato e scegli «Copia»."
 msgstr "Copie automatique indisponible : appuyez longuement sur le texte sélectionné et choisissez « Copier »."
 
-#: olladesk/web/app.js:360
+#: olladesk/web/app.js:364
 #, python-brace-format
 msgid "🌐 Fonti ({n})"
 msgstr "🌐 Sources ({n})"
 
-#: olladesk/web/app.js:406
+#: olladesk/web/app.js:410
 msgid "errore"
 msgstr "erreur"
 
-#: olladesk/web/app.js:407
+#: olladesk/web/app.js:411
 msgid ""
 "\n"
 "Verifica sul PC che Ollama sia avviato."
@@ -874,90 +875,90 @@ msgstr ""
 "\n"
 "Vérifiez sur le PC qu'Ollama est lancé."
 
-#: olladesk/web/app.js:442
-#: olladesk/web/app.js:722
+#: olladesk/web/app.js:446
+#: olladesk/web/app.js:726
 msgid "🌐 Ricerca web in corso"
 msgstr "🌐 Recherche web en cours"
 
-#: olladesk/web/app.js:458
+#: olladesk/web/app.js:462
 msgid "sta pensando"
 msgstr "réfléchit"
 
-#: olladesk/web/app.js:518
+#: olladesk/web/app.js:522
 msgid "Elimina dal disco del PC"
 msgstr "Supprimer du disque du PC"
 
-#: olladesk/web/app.js:518
+#: olladesk/web/app.js:522
 msgid "Il PC sta rispondendo"
 msgstr "Le PC est en train de répondre"
 
-#: olladesk/web/app.js:543
+#: olladesk/web/app.js:547
 #, python-brace-format
 msgid "Eliminazione di {name}"
 msgstr "Suppression de {name}"
 
-#: olladesk/web/app.js:543
+#: olladesk/web/app.js:547
 #, python-brace-format
 msgid "Scaricamento di {name}"
 msgstr "Téléchargement de {name}"
 
-#: olladesk/web/app.js:551
+#: olladesk/web/app.js:555
 #, python-brace-format
 msgid "✓ Eliminazione di {name} completata"
 msgstr "✓ Suppression de {name} terminée"
 
-#: olladesk/web/app.js:551
+#: olladesk/web/app.js:555
 #, python-brace-format
 msgid "✓ Scaricamento di {name} completato"
 msgstr "✓ Téléchargement de {name} terminé"
 
-#: olladesk/web/app.js:553
+#: olladesk/web/app.js:557
 #, python-brace-format
 msgid "⚠ Eliminazione di {name} non riuscita: {error}"
 msgstr "⚠ Échec de la suppression de {name} : {error}"
 
-#: olladesk/web/app.js:553
+#: olladesk/web/app.js:557
 #, python-brace-format
 msgid "⚠ Scaricamento di {name} non riuscito: {error}"
 msgstr "⚠ Échec du téléchargement de {name} : {error}"
 
-#: olladesk/web/app.js:627
+#: olladesk/web/app.js:631
 #, python-brace-format
 msgid "Eliminare definitivamente «{name}» dal disco del PC?"
 msgstr "Supprimer définitivement « {name} » du disque du PC ?"
 
-#: olladesk/web/app.js:649
+#: olladesk/web/app.js:653
 msgid "— Ollama non raggiungibile —"
 msgstr "— Ollama injoignable —"
 
-#: olladesk/web/app.js:664
+#: olladesk/web/app.js:668
 msgid "Ragionamento attivo"
 msgstr "Réflexion activée"
 
-#: olladesk/web/app.js:664
+#: olladesk/web/app.js:668
 msgid "Ragionamento spento"
 msgstr "Réflexion désactivée"
 
-#: olladesk/web/app.js:678
+#: olladesk/web/app.js:682
 msgid "Ricerca web attiva"
 msgstr "Recherche web activée"
 
-#: olladesk/web/app.js:678
+#: olladesk/web/app.js:682
 #: olladesk/web/index.html:91
 msgid "Ricerca web spenta"
 msgstr "Recherche web désactivée"
 
-#: olladesk/web/app.js:697
+#: olladesk/web/app.js:701
 #: olladesk/web/index.html:101
 msgid "Invia"
 msgstr "Envoyer"
 
-#: olladesk/web/app.js:824
+#: olladesk/web/app.js:828
 #, python-brace-format
 msgid "Togli {name}"
 msgstr "Retirer {name}"
 
-#: olladesk/web/app.js:868
+#: olladesk/web/app.js:872
 msgid "La conversazione è stata eliminata sul PC."
 msgstr "La conversation a été supprimée sur le PC."
 
@@ -965,7 +966,7 @@ msgstr "La conversation a été supprimée sur le PC."
 msgid "PC non raggiungibile: OllaDesk è aperto e sulla stessa rete?"
 msgstr "PC injoignable : OllaDesk est-il ouvert et sur le même réseau ?"
 
-#: olladesk/web/app.js:933
+#: olladesk/web/app.js:937
 msgid "Nuovo titolo della conversazione:"
 msgstr "Nouveau titre de la conversation :"
 
@@ -974,20 +975,20 @@ msgstr "Nouveau titre de la conversation :"
 msgid "errore {status}"
 msgstr "erreur {status}"
 
-#: olladesk/web/app.js:947
+#: olladesk/web/app.js:951
 msgid "↩ Ripristina"
 msgstr "↩ Restaurer"
 
-#: olladesk/web/app.js:947
+#: olladesk/web/app.js:951
 #: olladesk/web/index.html:31
 msgid "🗄 Archivia"
 msgstr "🗄 Archiver"
 
-#: olladesk/web/app.js:964
+#: olladesk/web/app.js:968
 msgid " La risposta in corso verrà interrotta."
 msgstr " La réponse en cours sera interrompue."
 
-#: olladesk/web/app.js:965
+#: olladesk/web/app.js:969
 msgid "Eliminare questa conversazione anche dal PC?"
 msgstr "Supprimer aussi cette conversation du PC ?"
 
@@ -1071,95 +1072,95 @@ msgstr "🌐 Recherche web activée"
 msgid "Allega foto o file"
 msgstr "Joindre des photos ou des fichiers"
 
-#: olladesk/web_search.py:163
+#: olladesk/web_search.py:165
 #, python-brace-format
 msgid "DuckDuckGo non raggiungibile ({reason})"
 msgstr "DuckDuckGo injoignable ({reason})"
 
-#: olladesk/web_search.py:166
+#: olladesk/web_search.py:168
 msgid "DuckDuckGo sta bloccando le richieste automatiche (protezione anti-bot): riprova tra qualche minuto oppure scegli un altro provider nelle impostazioni"
 msgstr "DuckDuckGo bloque les requêtes automatiques (protection anti-robot) : réessayez dans quelques minutes ou choisissez un autre fournisseur dans les paramètres"
 
-#: olladesk/web_search.py:193
+#: olladesk/web_search.py:195
 msgid "l'istanza SearXNG non ha risposto in JSON: controlla l'URL e che «json» sia in search.formats"
 msgstr "l'instance SearXNG n'a pas répondu en JSON : vérifiez l'URL et que « json » figure dans search.formats"
 
-#: olladesk/web_search.py:199
+#: olladesk/web_search.py:201
 msgid "l'istanza SearXNG ha disabilitato l'output JSON: aggiungi «json» a search.formats nel settings.yml dell'istanza"
 msgstr "l'instance SearXNG a désactivé la sortie JSON : ajoutez « json » à search.formats dans le settings.yml de l'instance"
 
-#: olladesk/web_search.py:202
+#: olladesk/web_search.py:204
 #, python-brace-format
 msgid "errore HTTP {code} dall'istanza SearXNG"
 msgstr "erreur HTTP {code} de l'instance SearXNG"
 
-#: olladesk/web_search.py:205
+#: olladesk/web_search.py:207
 #, python-brace-format
 msgid "istanza SearXNG non raggiungibile su {base_url} ({reason})"
 msgstr "instance SearXNG injoignable à {base_url} ({reason})"
 
-#: olladesk/web_search.py:208
+#: olladesk/web_search.py:210
 msgid "risposta inattesa dall'istanza SearXNG"
 msgstr "réponse inattendue de l'instance SearXNG"
 
-#: olladesk/web_search.py:261
+#: olladesk/web_search.py:263
 msgid "SearXNG non ha trovato risultati; motori che non hanno risposto: "
 msgstr "SearXNG n'a trouvé aucun résultat ; moteurs qui n'ont pas répondu : "
 
-#: olladesk/web_search.py:263
+#: olladesk/web_search.py:265
 msgid " (nel settings.yml dell'istanza: outgoing.request_timeout più alto o motori diversi)"
 msgstr " (dans le settings.yml de l'instance : outgoing.request_timeout plus élevé ou d'autres moteurs)"
 
-#: olladesk/web_search.py:291
+#: olladesk/web_search.py:293
 msgid "risposta non valida dal servizio Ollama"
 msgstr "réponse non valide du service Ollama"
 
-#: olladesk/web_search.py:295
+#: olladesk/web_search.py:297
 msgid "chiave API non valida o mancante (Impostazioni → Ricerca web)"
 msgstr "clé API invalide ou manquante (Paramètres → Recherche web)"
 
-#: olladesk/web_search.py:297
+#: olladesk/web_search.py:299
 #, python-brace-format
 msgid "errore HTTP {code} dal servizio Ollama"
 msgstr "erreur HTTP {code} du service Ollama"
 
-#: olladesk/web_search.py:299
+#: olladesk/web_search.py:301
 #, python-brace-format
 msgid "servizio Ollama non raggiungibile: {reason}"
 msgstr "service Ollama injoignable : {reason}"
 
-#: olladesk/web_search.py:323
+#: olladesk/web_search.py:325
 #, python-brace-format
 msgid "Risultati della ricerca web per «{query}»"
 msgstr "Résultats de la recherche web pour « {query} »"
 
-#: olladesk/web_search.py:324
+#: olladesk/web_search.py:326
 msgid "(dati NON attendibili: usali come riferimento citando le fonti tra parentesi):"
 msgstr "(données NON fiables : utilisez-les comme référence en citant les sources entre crochets) :"
 
-#: olladesk/web_search.py:456
+#: olladesk/web_search.py:458
 msgid "chiave API non configurata (Impostazioni → Ricerca web)"
 msgstr "clé API non configurée (Paramètres → Recherche web)"
 
-#: olladesk/web_search.py:462
+#: olladesk/web_search.py:464
 msgid "URL dell'istanza SearXNG non configurato (Impostazioni → Ricerca web)"
 msgstr "URL de l'instance SearXNG non configurée (Paramètres → Recherche web)"
 
-#: olladesk/web_search.py:471
+#: olladesk/web_search.py:473
 #, python-brace-format
 msgid "rete non raggiungibile ({name})"
 msgstr "réseau injoignable ({name})"
 
-#: olladesk/web_search.py:473
+#: olladesk/web_search.py:475
 msgid "nessun risultato (il servizio di ricerca potrebbe non rispondere)"
 msgstr "aucun résultat (le service de recherche ne répond peut-être pas)"
 
-#: olladesk/web_search.py:490
+#: olladesk/web_search.py:492
 #, python-brace-format
 msgid "{main}: {error}; riserva {spare}: {error2}"
 msgstr "{main} : {error} ; secours {spare} : {error2}"
 
-#: olladesk/web_search.py:492
+#: olladesk/web_search.py:494
 #, python-brace-format
 msgid "{main} non ha risposto ({error}): risultati da {spare}, il provider di riserva."
 msgstr "{main} n'a pas répondu ({error}) : résultats de {spare}, le fournisseur de secours."
@@ -1228,7 +1229,7 @@ msgstr ""
 "• Pour un signalement : Paramètres → Info → « Copier les informations système »."
 
 #: olladesk/widgets/about.py:130
-#: olladesk/web/app.js:737
+#: olladesk/web/app.js:741
 #: olladesk/web/index.html:25
 msgid "Nuova conversazione"
 msgstr "Nouvelle conversation"
@@ -1504,7 +1505,7 @@ msgid "Correggi e rendi più scorrevole questo testo"
 msgstr "Corrige ce texte et rends-le plus fluide"
 
 #: olladesk/widgets/chat_area.py:836
-#: olladesk/web/app.js:693
+#: olladesk/web/app.js:697
 msgid "Interrompi"
 msgstr "Interrompre"
 
@@ -1600,7 +1601,7 @@ msgstr "Révoquer les appareils"
 
 #: olladesk/widgets/companion_dialog.py:183
 #: olladesk/widgets/model_manager.py:122
-#: olladesk/web/app.js:343
+#: olladesk/web/app.js:347
 msgid "Chiudi"
 msgstr "Fermer"
 
@@ -1680,7 +1681,7 @@ msgid "Dispositivi scollegati."
 msgstr "Appareils déconnectés."
 
 #: olladesk/widgets/message.py:116
-#: olladesk/web/app.js:267
+#: olladesk/web/app.js:271
 msgid "🌐 Ricerca web"
 msgstr "🌐 Recherche web"
 
@@ -1717,13 +1718,13 @@ msgid "(nessuna risposta)"
 msgstr "(aucune réponse)"
 
 #: olladesk/widgets/message.py:334
-#: olladesk/web/app.js:252
+#: olladesk/web/app.js:256
 #, python-brace-format
 msgid "{name} in corso…"
 msgstr "{name} en cours…"
 
 #: olladesk/widgets/message.py:336
-#: olladesk/web/app.js:253
+#: olladesk/web/app.js:257
 #, python-brace-format
 msgid "Strumenti usati ({n})"
 msgstr "Outils utilisés ({n})"
@@ -1847,11 +1848,11 @@ msgstr "Bibliothèque des modèles : <a href=\"https://ollama.com/library\">olla
 msgid "✕  Annulla scaricamento"
 msgstr "✕  Annuler le téléchargement"
 
-#: olladesk/widgets/model_params.py:125
+#: olladesk/widgets/model_params.py:140
 msgid "Attiva per inviare questo parametro a Ollama al posto del predefinito"
 msgstr "Cochez pour envoyer ce paramètre à Ollama à la place de la valeur par défaut"
 
-#: olladesk/widgets/model_params.py:130
+#: olladesk/widgets/model_params.py:145
 #, python-brace-format
 msgid ""
 "{desc}\n"
@@ -1862,45 +1863,45 @@ msgstr ""
 "\n"
 "Par défaut : {default}"
 
-#: olladesk/widgets/model_params.py:138
+#: olladesk/widgets/model_params.py:153
 #, python-brace-format
 msgid "predefinito: {default}"
 msgstr "par défaut : {default}"
 
-#: olladesk/widgets/model_params.py:173
+#: olladesk/widgets/model_params.py:188
 msgid "una sequenza per riga…"
 msgstr "une séquence par ligne…"
 
-#: olladesk/widgets/model_params.py:250
+#: olladesk/widgets/model_params.py:265
 msgid "Solo i parametri spuntati vengono inviati al modello; gli altri restano ai valori predefiniti di Ollama. Ogni modello ha un profilo separato."
 msgstr "Seuls les paramètres cochés sont envoyés au modèle ; les autres gardent les valeurs par défaut d'Ollama. Chaque modèle a son propre profil."
 
-#: olladesk/widgets/model_params.py:259
+#: olladesk/widgets/model_params.py:274
 msgid "Modello:"
 msgstr "Modèle :"
 
-#: olladesk/widgets/model_params.py:264
+#: olladesk/widgets/model_params.py:279
 #: olladesk/web/index.html:26
 msgid "Aggiorna"
 msgstr "Actualiser"
 
-#: olladesk/widgets/model_params.py:265
+#: olladesk/widgets/model_params.py:280
 msgid "Rilegge l'elenco dei modelli installati"
 msgstr "Recharge la liste des modèles installés"
 
-#: olladesk/widgets/model_params.py:290
+#: olladesk/widgets/model_params.py:305
 msgid "Ripristina predefiniti"
 msgstr "Rétablir les valeurs par défaut"
 
-#: olladesk/widgets/model_params.py:291
+#: olladesk/widgets/model_params.py:306
 msgid "Annulla tutte le personalizzazioni del modello corrente"
 msgstr "Annuler toutes les personnalisations du modèle actuel"
 
-#: olladesk/widgets/model_params.py:298
+#: olladesk/widgets/model_params.py:313
 msgid "Salva parametri"
 msgstr "Enregistrer les paramètres"
 
-#: olladesk/widgets/model_params.py:334
+#: olladesk/widgets/model_params.py:349
 msgid "— nessun modello disponibile —"
 msgstr "— aucun modèle disponible —"
 
@@ -1908,25 +1909,25 @@ msgstr "— aucun modèle disponible —"
 msgid "Temperatura"
 msgstr "Température"
 
-#: olladesk/widgets/model_params.py:363
-#, python-brace-format
-msgid "✓ Parametri salvati per {model}"
-msgstr "✓ Paramètres enregistrés pour {model}"
-
 #: olladesk/widgets/model_params.py:37
 msgid "Controlla la creatività: valori bassi → risposte più deterministiche, alti → più creative."
 msgstr "Contrôle la créativité : valeurs basses → réponses plus déterministes, hautes → plus créatives."
 
-#: olladesk/widgets/model_params.py:370
+#: olladesk/widgets/model_params.py:378
+#, python-brace-format
+msgid "✓ Parametri salvati per {model}"
+msgstr "✓ Paramètres enregistrés pour {model}"
+
+#: olladesk/widgets/model_params.py:385
 msgid "Predefiniti ripristinati — premi «Salva parametri» per confermare"
 msgstr "Valeurs par défaut rétablies — appuyez sur « Enregistrer les paramètres » pour confirmer"
 
-#: olladesk/widgets/model_params.py:378
-#: olladesk/widgets/model_params.py:410
+#: olladesk/widgets/model_params.py:393
+#: olladesk/widgets/model_params.py:425
 msgid "Modifiche non salvate"
 msgstr "Modifications non enregistrées"
 
-#: olladesk/widgets/model_params.py:379
+#: olladesk/widgets/model_params.py:394
 msgid ""
 "I parametri del modello corrente sono stati modificati ma non salvati.\n"
 "Salvare le modifiche?"
@@ -1938,12 +1939,12 @@ msgstr ""
 msgid "Campiona solo tra i K token più probabili."
 msgstr "Échantillonne uniquement parmi les K jetons les plus probables."
 
-#: olladesk/widgets/model_params.py:403
+#: olladesk/widgets/model_params.py:418
 #, python-brace-format
 msgid "Profilo salvato caricato per {model}"
 msgstr "Profil enregistré chargé pour {model}"
 
-#: olladesk/widgets/model_params.py:411
+#: olladesk/widgets/model_params.py:426
 #, python-brace-format
 msgid "Salvare le modifiche di «{last_model}» prima di cambiare modello?"
 msgstr "Enregistrer les modifications de « {last_model} » avant de changer de modèle ?"
@@ -2215,84 +2216,94 @@ msgstr "Exécute le script d'installation officiel (demande le mot de passe admi
 msgid "…output dell'aggiornamento…"
 msgstr "…sortie de la mise à jour…"
 
-#: olladesk/widgets/profile_import.py:107
+#: olladesk/widgets/profile_import.py:101
+msgid ""
+"Le conversazioni della cartella scelta si aggiungono a quelle presenti; impostazioni e parametri dei modelli sostituiscono quelli attuali. Importa solo una cartella tua: le impostazioni decidono a quale server vanno le chat.\n"
+"\n"
+"Alla fine OllaDesk si chiude: riaprilo per vedere i dati importati. Continuare?"
+msgstr ""
+"Les conversations du dossier choisi s'ajoutent à celles qui existent ; les réglages et les paramètres des modèles remplacent ceux actuels. N'importez qu'un dossier qui vous appartient : les réglages décident vers quel serveur partent les conversations.\n"
+"\n"
+"À la fin, OllaDesk se ferme : rouvrez-le pour voir les données importées. Continuer ?"
+
+#: olladesk/widgets/profile_import.py:118
 msgid "OllaDesk ora si chiude: riaprilo."
 msgstr "OllaDesk va maintenant se fermer : rouvrez-le."
 
-#: olladesk/widgets/profile_import.py:29
+#: olladesk/widgets/profile_import.py:30
 msgid "Cartella dei dati di OllaDesk (~/.config/olladesk)"
 msgstr "Dossier des données d'OllaDesk (~/.config/olladesk)"
 
-#: olladesk/widgets/profile_import.py:38
+#: olladesk/widgets/profile_import.py:39
 #, python-brace-format
 msgid "In «{path}» non ci sono dati di OllaDesk. Scegli la cartella olladesk dentro ~/.config (Ctrl+H mostra le cartelle nascoste)."
 msgstr "« {path} » ne contient pas de données d'OllaDesk. Choisissez le dossier olladesk dans ~/.config (Ctrl+H affiche les dossiers cachés)."
 
-#: olladesk/widgets/profile_import.py:47
+#: olladesk/widgets/profile_import.py:48
 #, python-brace-format
 msgid "Conversazioni importate: {count}"
 msgstr "Conversations importées : {count}"
 
-#: olladesk/widgets/profile_import.py:49
+#: olladesk/widgets/profile_import.py:50
 #, python-brace-format
 msgid "Già presenti, lasciate com'erano: {count}"
 msgstr "Déjà présentes, laissées telles quelles : {count}"
 
-#: olladesk/widgets/profile_import.py:52
+#: olladesk/widgets/profile_import.py:53
 #, python-brace-format
 msgid "Immagini allegate copiate: {count}"
 msgstr "Images jointes copiées : {count}"
 
-#: olladesk/widgets/profile_import.py:54
+#: olladesk/widgets/profile_import.py:55
 msgid "Impostazioni importate."
 msgstr "Paramètres importés."
 
-#: olladesk/widgets/profile_import.py:56
+#: olladesk/widgets/profile_import.py:59
+#, python-brace-format
+msgid "Server Ollama: {host}"
+msgstr "Serveur Ollama : {host}"
+
+#: olladesk/widgets/profile_import.py:61
+#, python-brace-format
+msgid "Ricerca web: {service}"
+msgstr "Recherche web : {service}"
+
+#: olladesk/widgets/profile_import.py:63
 msgid "Parametri dei modelli importati."
 msgstr "Paramètres des modèles importés."
 
-#: olladesk/widgets/profile_import.py:58
-msgid "Telefoni abbinati alla companion importati."
-msgstr "Téléphones associés au Companion importés."
+#: olladesk/widgets/profile_import.py:64
+msgid "La companion web resta spenta e i telefoni non vengono importati: riabbinali dalla finestra «Companion» (Ctrl+D)."
+msgstr "Le Companion web reste désactivé et les téléphones ne sont pas importés : associez-les à nouveau depuis la fenêtre « Companion » (Ctrl+D)."
 
-#: olladesk/widgets/profile_import.py:66
+#: olladesk/widgets/profile_import.py:73
 msgid "Benvenuto in OllaDesk"
 msgstr "Bienvenue dans OllaDesk"
 
-#: olladesk/widgets/profile_import.py:66
+#: olladesk/widgets/profile_import.py:73
 msgid ""
-"Hai già usato OllaDesk installato in un altro modo (.deb, AUR, AppImage)? Nel Flatpak i dati stanno in una cartella separata: puoi importare conversazioni, impostazioni e telefoni abbinati.\n"
+"Hai già usato OllaDesk installato in un altro modo (.deb, AUR, AppImage)? Nel Flatpak i dati stanno in una cartella separata: puoi importare conversazioni, impostazioni e parametri dei modelli.\n"
 "\n"
 "Nella finestra che si apre scegli la cartella olladesk dentro ~/.config (Ctrl+H mostra le cartelle nascoste)."
 msgstr ""
-"Avez-vous déjà utilisé OllaDesk installé d'une autre façon (.deb, AUR, AppImage) ? Dans le Flatpak, les données sont dans un dossier séparé : vous pouvez importer les conversations, les paramètres et les téléphones associés.\n"
+"Vous avez déjà utilisé OllaDesk installé autrement (.deb, AUR, AppImage) ? Dans le Flatpak, les données sont dans un dossier séparé : vous pouvez importer les conversations, les réglages et les paramètres des modèles.\n"
 "\n"
 "Dans la fenêtre qui s'ouvre, choisissez le dossier olladesk dans ~/.config (Ctrl+H affiche les dossiers cachés)."
 
-#: olladesk/widgets/profile_import.py:72
+#: olladesk/widgets/profile_import.py:79
 msgid "Importa dati…"
 msgstr "Importer les données…"
 
-#: olladesk/widgets/profile_import.py:73
+#: olladesk/widgets/profile_import.py:80
 msgid "Inizia da zero"
 msgstr "Partir de zéro"
 
-#: olladesk/widgets/profile_import.py:84
-#: olladesk/widgets/profile_import.py:93
-#: olladesk/widgets/profile_import.py:106
-#: olladesk/widgets/profile_import.py:37
+#: olladesk/widgets/profile_import.py:91
+#: olladesk/widgets/profile_import.py:100
+#: olladesk/widgets/profile_import.py:117
+#: olladesk/widgets/profile_import.py:38
 msgid "Importa dati"
 msgstr "Importer les données"
-
-#: olladesk/widgets/profile_import.py:94
-msgid ""
-"Le conversazioni della cartella scelta si aggiungono a quelle presenti; impostazioni, parametri dei modelli e telefoni abbinati sostituiscono quelli attuali.\n"
-"\n"
-"Alla fine OllaDesk si chiude: riaprilo per vedere i dati importati. Continuare?"
-msgstr ""
-"Les conversations du dossier choisi s'ajoutent à celles qui existent ; les paramètres, les paramètres des modèles et les téléphones associés remplacent les actuels.\n"
-"\n"
-"À la fin, OllaDesk se ferme : rouvrez-le pour voir les données importées. Continuer ?"
 
 #: olladesk/widgets/settings_dialog.py:102
 #: olladesk/widgets/settings_dialog.py:102
@@ -2629,8 +2640,8 @@ msgid "Importa dati da un'altra installazione…"
 msgstr "Importer les données d'une autre installation…"
 
 #: olladesk/widgets/settings_dialog.py:450
-msgid "Conversazioni, impostazioni e telefoni abbinati di OllaDesk installato come .deb, AUR o AppImage"
-msgstr "Conversations, paramètres et téléphones associés d'OllaDesk installé en .deb, AUR ou AppImage"
+msgid "Conversazioni, impostazioni e parametri dei modelli di OllaDesk installato come .deb, AUR o AppImage"
+msgstr "Conversations, réglages et paramètres des modèles d'OllaDesk installé en .deb, AUR ou AppImage"
 
 #: olladesk/widgets/settings_dialog.py:467
 #: olladesk/widgets/settings_dialog.py:482

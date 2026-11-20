@@ -2886,6 +2886,152 @@ def test_file_tools_shared_folders():
         assert err, out
 
 
+def test_file_tools_review_040():
+    """Revisione 0.4.0: link verso cartelle escluse, file speciali, nota sui
+    dati, registro delle letture, cartella di configurazione mai condivisa."""
+    from olladesk import config, file_tools, tools
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp) / "progetto"
+        (root / "node_modules" / "x").mkdir(parents=True)
+        (root / "node_modules" / "x" / "i.js").write_text("AGO dipendenza\n")
+        (root / "alias").symlink_to(root / "node_modules")      # dentro, ma escluso
+        (root / "nota.txt").write_text("AGO visibile\n")
+        os.mkfifo(root / "tubo")                                # bloccherebbe la lettura
+        shared = [file_tools.Shared("progetto", root, True)]
+        log: list[str] = []
+        reg = tools.ToolRegistry(file_tools.make_tools(shared, read_log=log))
+
+        def call(name, **args):
+            return tools.run_call(reg, {"name": name, "arguments": args})
+
+        out, err = call("read_file", path="progetto/alias/x/i.js")
+        assert err and "dependency" in out, out
+        out, err = call("list_files", path="progetto")
+        assert not err and "tubo" not in out and "nota.txt" in out, out
+        out, err = call("read_file", path="progetto/tubo")
+        assert err, out
+        out, err = call("search_text", query="ago")
+        assert not err and "nota.txt" in out and "dipendenza" not in out, out
+        assert file_tools.FILE_NOTE in out
+        out, err = call("read_file", path="progetto/nota.txt")
+        assert not err and file_tools.FILE_NOTE in out
+        assert any("AGO visibile" in t for t in log), log
+
+    # la cartella dell'app (chat, telefoni abbinati) no, i suoi allegati sì
+    cfg = config.config_dir().resolve()
+    (cfg / "attachments").mkdir(parents=True, exist_ok=True)
+    allegato = cfg / "attachments" / "dal-telefono.txt"
+    allegato.write_text("testo\n")
+    (cfg / "companion.json").write_text("{}")
+    chat = {"messages": [{"role": "user", "attachments_meta": [
+        {"path": str(cfg), "kind": "folder"},
+        {"path": str(cfg / "companion.json"), "kind": "text"},
+        {"path": str(allegato), "kind": "text"}]}]}
+    assert [s.path for s in file_tools.shared_from_chat(chat)] == [allegato]
+
+
+def test_web_search_refuses_file_text():
+    """Una query che ripete testo letto dai file non parte (esfiltrazione)."""
+    from unittest.mock import patch
+
+    from olladesk import tools, web_search
+
+    letto = ["Il contratto con ACME prevede un compenso di 48.000 euro annui, "
+             "pagabili in quattro rate trimestrali."]
+    assert web_search.repeats_file_text(
+        "compenso   di 48.000 EURO annui, pagabili in quattro rate", letto)
+    assert not web_search.repeats_file_text("compenso ACME 2026", letto)
+    assert not web_search.repeats_file_text("x" * 60, [])
+    reg = tools.ToolRegistry([web_search.web_tool(3, "duckduckgo", file_texts=letto)])
+    with patch.object(web_search, "search", side_effect=AssertionError("partita")):
+        out, err = tools.run_call(reg, {"name": "web_search", "arguments": {
+            "query": "ACME compenso di 48.000 euro annui, pagabili in quattro rate trimestrali"}})
+    assert err and "repeats text read from the shared files" in out, out
+    desc = reg.schemas()[0]["function"]["description"]
+    assert "external" in desc and "file" in desc, desc
+
+
+def test_gitignore_hostile_patterns_fast():
+    """Molti «**/» di fila non devono bloccare (backtracking esponenziale)."""
+    import time
+
+    from olladesk import context
+
+    rx = context._gitignore_regex("**/" * 30 + "a/**/b/**/c", False)
+    path = "x/" * 40 + "a/b/zz"
+    t0 = time.monotonic()
+    assert not rx.fullmatch(path)
+    assert time.monotonic() - t0 < 0.5
+    assert rx.fullmatch("a/b/c") and rx.fullmatch("q/a/r/b/s/c")
+    anchored = context._gitignore_regex("docs/**/x", True)
+    assert anchored.fullmatch("docs/x") and anchored.fullmatch("docs/a/b/x")
+    assert not anchored.fullmatch("altro/docs/x")
+    with tempfile.TemporaryDirectory() as tmp:
+        lines = ["a" * 600, *(f"f{i}" for i in range(1500))]
+        (Path(tmp) / ".gitignore").write_text("\n".join(lines))
+        assert len(context._gitignore_rules(Path(tmp))) == 1000
+
+
+def test_settings_bad_types_and_freeze():
+    """Valori del tipo sbagliato (file a mano o importato) non bloccano l'avvio
+    né l'invio; dopo freeze_settings save_settings non scrive."""
+    from olladesk import config
+    from olladesk.widgets import model_params
+
+    path = config.config_dir() / "settings.json"
+    path.write_text(json.dumps({"font_size": "15", "companion": "sì", "theme": 3,
+                                "companion_port": "abc", "host": "http://h:1"}))
+    s = config.load_settings()
+    assert s["font_size"] == 15 and isinstance(s["font_size"], int)
+    assert s["companion"] == config.DEFAULT_SETTINGS["companion"]
+    assert s["theme"] == config.DEFAULT_SETTINGS["theme"]
+    assert s["companion_port"] == config.DEFAULT_SETTINGS["companion_port"]
+    assert s["host"] == "http://h:1"
+
+    key = model_params.PARAM_DEFS
+    by_type = {d["type"]: d["key"] for d in key}
+    bad = {by_type["int"]: {"enabled": True, "value": "x"},
+           by_type["float"]: {"enabled": True, "value": "0.5"},
+           by_type["strlist"]: {"enabled": True, "value": "non una lista"}}
+    config.save_model_params({"m": bad})
+    assert model_params.options_for_model("m") == {by_type["float"]: 0.5}
+
+    # nomi di file non UTF-8 (surrogati): scritti con gli escape, riletti uguali
+    nome = os.fsdecode(b"/tmp/caf\xe9.txt")
+    target = config.config_dir() / "prova.json"
+    assert config._write_json(target, {"p": nome})
+    assert config._read_json(target, None) == {"p": nome}
+
+    try:
+        config.freeze_settings()
+        assert config.save_settings({"font_size": 20}) is False
+        assert config.load_settings()["font_size"] == 15
+    finally:
+        config._settings_frozen = False
+
+
+def test_tool_call_caps_and_split_markers():
+    """Tetti delle chiamate per giro e marcatori spezzati tra due frammenti."""
+    from olladesk import tools, web_search
+
+    many = [{"function": {"name": "read_file", "arguments": {"path": str(i)}}} for i in range(20)]
+    assert len(tools.parse_calls(many)) == tools.MAX_CALLS_PER_ROUND
+    big = tools.parse_calls([{"function": {"name": "web_search",
+                                           "arguments": {"query": "x" * 10_000}}}])
+    assert "_too_long" in big[0]["arguments"]
+    reg = tools.ToolRegistry([web_search.web_tool()])
+    out, err = tools.run_call(reg, big[0])
+    assert err and "too long" in out, out
+
+    assert tools.marker_prefix_len("ciao <|tool_") == len("<|tool_")
+    assert tools.marker_prefix_len("ciao [TOOL") == len("[TOOL")
+    assert tools.marker_prefix_len("ciao mondo") == 0
+    assert tools.looks_like_call('<tool_call>{"name": "x"}')
+    assert tools.looks_like_call("<|python_tag|>web_search(query='a')")
+    assert not tools.looks_like_call("<tool_call> è il marcatore che usa Qwen")
+
+
 def test_web_search_tool():
     """Il tool web_search: query su una riga, errori e riserva come testo al modello."""
     from unittest.mock import patch
@@ -3066,7 +3212,9 @@ def test_tool_rounds_repeats_and_source_cap():
 def test_fetch_page_tool():
     """fetch_page: solo URL delle ricerche, solo indirizzi pubblici, testo della pagina."""
     import http.server
+    import socket
     import threading
+    import time
 
     from olladesk import tools, web_search
 
@@ -3092,6 +3240,26 @@ def test_fetch_page_tool():
 
     class H(http.server.BaseHTTPRequestHandler):
         def do_GET(self):
+            if self.path == "/gz":
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html")
+                self.send_header("Content-Encoding", "gzip")
+                self.send_header("Content-Length", "3")
+                self.end_headers()
+                self.wfile.write(b"abc")
+                return
+            if self.path == "/lento":                  # un byte ogni 0,2 s
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain")
+                self.end_headers()
+                try:
+                    for _ in range(40):
+                        self.wfile.write(b"a")
+                        self.wfile.flush()
+                        time.sleep(0.2)
+                except OSError:
+                    pass
+                return
             if self.path == "/vai":
                 self.send_response(302)
                 self.send_header("Location", f"http://127.0.0.1:{port}/pagina")
@@ -3111,12 +3279,18 @@ def test_fetch_page_tool():
     srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H)
     port = srv.server_address[1]
     threading.Thread(target=srv.serve_forever, daemon=True).start()
-    real = web_search._public_host
+    real = web_search._public_addrs
     # «localhost» qui conta come pubblico; 127.0.0.1 resta locale (redirect)
-    web_search._public_host = lambda host: None if host == "localhost" else real(host)
+    # un nome che il DNS non risolve: la lettura riesce solo se la connessione
+    # usa gli indirizzi già verificati (niente seconda risoluzione: DNS rebinding)
+    web_search._public_addrs = lambda host, port=None: (
+        socket.getaddrinfo("127.0.0.1", port, type=socket.SOCK_STREAM)
+        if host == "pagine.invalid" else real(host, port))
+    old_seconds = web_search.PAGE_SECONDS
     try:
-        base = f"http://localhost:{port}"
-        allowed = {web_search.page_url_key(base + p) for p in ("/pagina", "/vai", "/pdf")}
+        base = f"http://pagine.invalid:{port}"
+        allowed = {web_search.page_url_key(base + p)
+                   for p in ("/pagina", "/vai", "/pdf", "/gz", "/lento")}
         reg = tools.ToolRegistry([web_search.page_tool(allowed)])
 
         def call(args):
@@ -3134,10 +3308,18 @@ def test_fetch_page_tool():
         assert err and "not a public address" in out, out
         out, err = call({"url": base + "/pdf"})
         assert err and "unsupported content type 'application/pdf'" in out, out
+        out, err = call({"url": base + "/gz"})
+        assert err and "unsupported content encoding 'gzip'" in out, out
+        web_search.PAGE_SECONDS = 1.0       # vale per tutta la lettura, non per ogni byte
+        t0 = time.monotonic()
+        out, err = call({"url": base + "/lento"})
+        assert err and "took more than 1 seconds" in out, out
+        assert time.monotonic() - t0 < 3, time.monotonic() - t0
         out, err = call({})
         assert err and "Missing url" in out
     finally:
-        web_search._public_host = real
+        web_search.PAGE_SECONDS = old_seconds
+        web_search._public_addrs = real
         srv.shutdown()
         srv.server_close()
 
@@ -3197,7 +3379,10 @@ def test_profile_import():
         (src / "attachments" / "incollato-1.png").write_bytes(b"png")
         (src / "attachments" / "companion" / "foto.jpg").write_bytes(b"jpg")
         os.symlink("/etc/passwd", src / "attachments" / "link.txt")
-        (src / "settings.json").write_text(json.dumps({"theme": "light", "font_size": 13}))
+        (src / "settings.json").write_text(json.dumps({
+            "theme": "light", "font_size": 13, "companion": True, "host": "http://srv:11434",
+            "web_provider": "searxng", "web_searxng_url": "https://s.lan",
+            "web_fallback": "duckduckgo"}))
         (src / "model_params.json").write_text(json.dumps({"m": {"temperature": 0.3}}))
         (src / "companion.json").write_text(json.dumps({"devices": [{"name": "tel"}]}))
         old_root = "/home/altro/.config/olladesk/attachments"
@@ -3226,13 +3411,19 @@ def test_profile_import():
         res = migrate.import_profile(host)   # anche scegliendo ~/.config
         assert res is not None
         assert (res.chats, res.skipped_chats, res.attachments) == (1, 1, 2), res
-        assert set(res.files) == {"settings.json", "model_params.json", "companion.json"}
+        # i telefoni non si importano e la companion resta spenta
+        assert set(res.files) == {"settings.json", "model_params.json"}
         att = config.attachments_dir()
         assert not (att / "link.txt").exists()
         s = config.load_settings()
         assert s["theme"] == "light" and s["font_size"] == 13
         assert config.load_model_params() == {"m": {"temperature": 0.3}}
-        assert config.load_companion()["devices"][0]["name"] == "tel"
+        assert s["companion"] is False
+        assert not config.load_companion().get("devices")
+        assert res.host == "http://srv:11434"
+        assert res.search == "SearXNG (https://s.lan), DuckDuckGo", res.search
+        text = profile_import.summary(res)
+        assert "http://srv:11434" in text and "SearXNG" in text and "Ctrl+D" in text
         ids = {c["id"]: c for c in config.load_chats()}
         assert set(ids) == {"abc123abc123", "dup000dup000"}
         assert ids["dup000dup000"]["title"] == "Già qui"   # non sovrascritta

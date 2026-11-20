@@ -110,7 +110,12 @@ License: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   bubble in a collapsible "🔧 Tools used" block, with arguments and the start
   of the result (while answering it shows the tool in progress), and the
   sources of the searches go into "🌐 Sources" (the first 3 of each
-  search, at most 10). The choice applies to the
+  search, at most 10). File and page text reaches the model as data to use,
+  not as instructions, and a search that repeats a piece of a file it read is
+  refused; a risk remains, though: a file or page with hidden instructions can
+  push the model to put what it read, summarized or reworded, into the query,
+  and the query goes to the search service. Keep 🌐 off when confidential files
+  are shared. The choice applies to the
   conversation and the phone follows it; the companion shows the calls,
   without controlling them.
 - **Web companion** ("📱 Companion" item in the sidebar, `Ctrl+D`; off by
@@ -382,8 +387,10 @@ button for Ollama: the settings show the terminal command instead.
 Chats and settings are in `~/.var/app/io.github.gradia64.OllaDesk/config/olladesk`,
 separate from the `.deb`, AUR package and AppImage. On first launch OllaDesk
 offers to import them: in the file picker, open `~/.config/olladesk` (Ctrl+H
-shows hidden folders) and chats, settings, model parameters, paired phones and
-pasted images are copied. You can do it again later from Settings → Info →
+shows hidden folders) and chats, settings, model parameters and pasted
+images are copied. Paired phones are not: the companion stays off and you pair
+them again from its window. The summary shows the Ollama server and the search
+service of the imported settings: only import a folder of your own. You can do it again later from Settings → Info →
 "Import data from another installation…". Ollama is not included: install it
 separately.
 

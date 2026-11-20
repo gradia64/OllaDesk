@@ -447,7 +447,7 @@ class SettingsDialog(QDialog):
         self.import_btn = None
         if portal.in_flatpak():
             self.import_btn = QPushButton(_("Importa dati da un'altra installazione…"), w)
-            self.import_btn.setToolTip(_("Conversazioni, impostazioni e telefoni abbinati di "
+            self.import_btn.setToolTip(_("Conversazioni, impostazioni e parametri dei modelli di "
                                          "OllaDesk installato come .deb, AUR o AppImage"))
             self.import_btn.clicked.connect(self._import_profile)
             row = QHBoxLayout()

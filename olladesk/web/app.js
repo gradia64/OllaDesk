@@ -239,7 +239,11 @@ function setThinking(target, html) {
 // chiamate dei tool della risposta (solo visualizzazione), richiuse come il
 // pensiero; nomi, argomenti e risultati sono solo testo (mai innerHTML)
 function setTools(target, calls) {
-  if (!calls || !calls.length) return;
+  if (!calls || !calls.length) {
+    // fine di una risposta interrotta nel primo giro: niente «in corso…» fermo
+    if (target.tools) { target.tools.remove(); target.tools = null; }
+    return;
+  }
   if (!target.tools) {
     target.tools = el("details", "tools");
     target.toolsHead = el("summary", "");
@@ -397,7 +401,7 @@ function finishPending(d) {
   if (!p.hasText && d.outcome !== "done") {
     p.box.remove();     // interrotta o fallita prima di ogni testo
   } else {
-    if (d.tools) setTools(p, d.tools);
+    setTools(p, d.tools || []);
     addSources(p.box, d.sources);
     addFoot(p.box, () => p.raw,
       [fmtTime(d.ts || Date.now() / 1000), d.stats].filter(Boolean).join(" · "));

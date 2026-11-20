@@ -760,8 +760,10 @@ class MainWindow(QMainWindow):
         if outcome != "done":
             # un giro interrotto non viene salvato: la bolla mostra solo i completi
             calls = [c for c in calls if c["state"] == "done"]
+        # sempre, anche vuoto: dopo uno stop nel primo giro il blocco
+        # restava su «… in corso» in una risposta ormai ferma
+        self.chat_area.stream_tool_calls(calls)
         if calls:
-            self.chat_area.stream_tool_calls(calls)
             urls = {s["url"] for s in sources}
             sources += [s for s in web_search.tool_sources(calls) if s["url"] not in urls]
         if outcome == "done":

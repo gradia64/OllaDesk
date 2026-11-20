@@ -17,7 +17,8 @@ def should_offer(settings: dict) -> bool:
 def _mark_offered() -> None:
     s = config.load_settings()
     s["profile_import_offered"] = True
-    config.save_settings(s)
+    # diretto: dopo un'importazione dalle Impostazioni save_settings è bloccato
+    config._write_json(config.config_dir() / "settings.json", {**config.DEFAULT_SETTINGS, **s})
 
 
 def choose_and_import(parent: QWidget | None) -> migrate.ImportResult | None:
@@ -52,10 +53,16 @@ def summary(result: migrate.ImportResult) -> str:
         lines.append(_("Immagini allegate copiate: {count}").format(count=result.attachments))
     if "settings.json" in result.files:
         lines.append(_("Impostazioni importate."))
+        # dove andranno chat e ricerche: una cartella preparata da altri può
+        # indicare un server che non è il tuo
+        if result.host:
+            lines.append(_("Server Ollama: {host}").format(host=result.host))
+        if result.search:
+            lines.append(_("Ricerca web: {service}").format(service=result.search))
     if "model_params.json" in result.files:
         lines.append(_("Parametri dei modelli importati."))
-    if "companion.json" in result.files:
-        lines.append(_("Telefoni abbinati alla companion importati."))
+    lines.append(_("La companion web resta spenta e i telefoni non vengono importati: "
+                   "riabbinali dalla finestra «Companion» (Ctrl+D)."))
     return "\n".join(lines)
 
 
@@ -66,7 +73,7 @@ def offer_at_startup(settings: dict) -> bool:
     box = QMessageBox(QMessageBox.Icon.Question, _("Benvenuto in OllaDesk"), _(
         "Hai già usato OllaDesk installato in un altro modo (.deb, AUR, "
         "AppImage)? Nel Flatpak i dati stanno in una cartella separata: puoi "
-        "importare conversazioni, impostazioni e telefoni abbinati.\n\n"
+        "importare conversazioni, impostazioni e parametri dei modelli.\n\n"
         "Nella finestra che si apre scegli la cartella olladesk dentro "
         "~/.config (Ctrl+H mostra le cartelle nascoste)."))
     imp = box.addButton(_("Importa dati…"), QMessageBox.ButtonRole.AcceptRole)
@@ -92,8 +99,9 @@ def import_from_settings(parent: QWidget) -> bool:
     ok = QMessageBox.question(
         parent, _("Importa dati"),
         _("Le conversazioni della cartella scelta si aggiungono a quelle "
-          "presenti; impostazioni, parametri dei modelli e telefoni abbinati "
-          "sostituiscono quelli attuali.\n\nAlla fine OllaDesk si chiude: "
+          "presenti; impostazioni e parametri dei modelli sostituiscono quelli "
+          "attuali. Importa solo una cartella tua: le impostazioni decidono a "
+          "quale server vanno le chat.\n\nAlla fine OllaDesk si chiude: "
           "riaprilo per vedere i dati importati. Continuare?"),
     )
     if ok != QMessageBox.StandardButton.Yes:
@@ -101,6 +109,9 @@ def import_from_settings(parent: QWidget) -> bool:
     result = choose_and_import(parent)
     if result is None:
         return False
+    # prima di qualsiasi ciclo di eventi: nessun salvataggio in coda deve
+    # riscrivere le impostazioni appena importate
+    config.freeze_settings()
     _mark_offered()
     QMessageBox.information(
         parent, _("Importa dati"),

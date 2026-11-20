@@ -40,8 +40,11 @@ non ancora segnati ✅.
   di importare i dati di un'altra installazione dalla cartella scelta col portale
   FileChooser (nessun permesso `--filesystem`); la copia la fa `migrate.py`
   subito, perché il documento del portale vale solo per l'istanza. Le chat si
-  aggiungono (stesso id: resta quella presente), settings/model_params/companion
-  si sostituiscono, i percorsi delle immagini in `attachments/` vengono riscritti.
+  aggiungono (stesso id: resta quella presente), settings/model_params si
+  sostituiscono, i percorsi delle immagini in `attachments/` vengono riscritti.
+  `companion.json` (telefoni abbinati) non si copia e la companion resta spenta:
+  una cartella preparata da altri abbinerebbe il loro telefono. Il riepilogo
+  mostra server Ollama e servizio di ricerca delle impostazioni importate.
   Dalle Impostazioni (Info) l'import chiude l'app senza salvare lo stato in memoria.
 - **Log**: `--env=QT_LOGGING_RULES=kf.solid.backends.udisks2=false` zittisce l'avviso
   di KIO sui dischi (udisks2 sta sul bus di sistema, fuori dalla sandbox), stampato a

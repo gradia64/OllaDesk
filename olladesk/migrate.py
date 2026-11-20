@@ -7,8 +7,10 @@ permesso in più sul filesystem. La cartella del portale vale solo per
 l'istanza in corso, quindi la copia avviene subito.
 
 Cosa si copia:
-- ``settings.json``, ``model_params.json``, ``companion.json``: sostituiscono
-  quelli presenti (l'utente lo conferma prima);
+- ``settings.json`` e ``model_params.json``: sostituiscono quelli presenti
+  (l'utente lo conferma prima). La companion resta spenta e ``companion.json``
+  (i telefoni abbinati) non si copia: una cartella preparata da altri
+  abbinerebbe il loro telefono. I telefoni si riabbinano con il codice;
 - le conversazioni ``chats/<id>.json`` (e il vecchio ``chats.json``): si
   aggiungono, una chat con lo stesso id già presente resta com'è;
 - ``attachments/``: le immagini incollate e quelle arrivate dalla companion.
@@ -29,8 +31,9 @@ from typing import Any
 
 from olladesk import config
 
-# file sostituiti in blocco
-_REPLACED = ("settings.json", "model_params.json", "companion.json")
+# file sostituiti in blocco (companion.json no: vedi sopra)
+_REPLACED = ("settings.json", "model_params.json")
+_PROFILE_FILES = (*_REPLACED, "companion.json", "chats.json")
 _NAMES = (config.APP_NAME, config.LEGACY_APP_NAME)
 # limite di sicurezza per un singolo file: chat e immagini stanno molto sotto
 MAX_FILE_BYTES = 200 * 1024 * 1024
@@ -42,12 +45,30 @@ class ImportResult:
     skipped_chats: int = 0    # già presenti con lo stesso id
     attachments: int = 0      # file copiati in attachments/
     files: tuple[str, ...] = ()   # file sostituiti (settings.json, …)
+    host: str = ""            # server Ollama delle impostazioni importate
+    search: str = ""          # servizio di ricerca delle impostazioni importate
+
+
+def _search_summary(settings: dict) -> str:
+    """Dove vanno le ricerche web con le impostazioni importate."""
+    names = {"duckduckgo": "DuckDuckGo", "ollama": "Ollama Cloud", "searxng": "SearXNG"}
+    out = []
+    for key in ("web_provider", "web_fallback"):
+        p = str(settings.get(key) or "")
+        if not p:
+            continue
+        label = names.get(p, p)
+        if p == "searxng":
+            label += f" ({settings.get('web_searxng_url') or ''})"
+        if label not in out:
+            out.append(label)
+    return ", ".join(out)
 
 
 def _is_profile(d: Path) -> bool:
     if d.is_symlink() or not d.is_dir():
         return False
-    return any((d / n).is_file() for n in (*_REPLACED, "chats.json")) or (d / "chats").is_dir()
+    return any((d / n).is_file() for n in _PROFILE_FILES) or (d / "chats").is_dir()
 
 
 def find_profile(chosen: Path) -> Path | None:
@@ -155,6 +176,10 @@ def import_profile(chosen: Path) -> ImportResult | None:
         data = config._read_json(s, None)
         if not isinstance(data, dict):
             continue
+        if name == "settings.json":
+            data["companion"] = False   # si riaccende a mano, dopo un nuovo abbinamento
+            result.host = str(data.get("host") or "")
+            result.search = _search_summary(data)
         if config._write_json(dest / name, data):
             replaced.append(name)
     result.files = tuple(replaced)

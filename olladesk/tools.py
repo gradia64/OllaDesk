@@ -28,6 +28,12 @@ from PySide6.QtCore import QThread, Signal
 # così deve rispondere (un modello piccolo può chiamare lo stesso tool
 # all'infinito)
 MAX_ROUNDS = 8
+# chiamate eseguite al massimo in un giro: il tetto dei giri non ferma un
+# modello che ne chiede cinquanta insieme
+MAX_CALLS_PER_ROUND = 8
+# argomenti di una chiamata (in JSON): oltre, la chiamata è un errore e
+# l'argomento non si salva nella chat
+MAX_ARGS_CHARS = 4_000
 # tetto del risultato di una chiamata, nel turno corrente e nel file della chat
 MAX_RESULT_CHARS = 16_000
 # nei messaggi vecchi (prima dell'ultima risposta) i risultati si accorciano:
@@ -122,10 +128,15 @@ def parse_calls(raw) -> list[dict]:
                 args = {"_raw": args}
         if not isinstance(args, dict):
             args = {}
+        size = len(json.dumps(args, ensure_ascii=False, default=str))
+        if size > MAX_ARGS_CHARS:
+            args = {"_too_long": size}
         call = {"name": name, "arguments": args}
         if isinstance(item.get("id"), str) and item["id"]:
             call["id"] = item["id"]
         calls.append(call)
+        if len(calls) >= MAX_CALLS_PER_ROUND:
+            break
     return calls
 
 
@@ -201,6 +212,28 @@ def leaked_call_at(text: str) -> int:
     return min(found) if found else -1
 
 
+def marker_prefix_len(text: str) -> int:
+    """Lunghezza della fine di `text` che è l'inizio di un marcatore (0 se
+    nessuna): quei caratteri aspettano il frammento successivo."""
+    for n in range(min(len(text), max(map(len, LEAKED_CALL_MARKERS)) - 1), 0, -1):
+        tail = text[-n:]
+        if any(m.startswith(tail) for m in LEAKED_CALL_MARKERS):
+            return n
+    return 0
+
+
+_CALL_AFTER_MARKER = re.compile(r"\s*(?:[\[{(\"]|[A-Za-z_][\w.]*\s*\()")
+
+
+def looks_like_call(held: str) -> bool:
+    """True se dopo il marcatore c'è una chiamata (JSON, lista, nome(…)), non
+    una frase che parla del marcatore."""
+    for m in LEAKED_CALL_MARKERS:
+        if held.startswith(m):
+            return bool(_CALL_AFTER_MARKER.match(held[len(m):]))
+    return True
+
+
 def call_key(call: dict) -> str:
     """Chiave di una chiamata: stesso nome e stessi argomenti = stessa chiave."""
     args = call.get("arguments") if isinstance(call.get("arguments"), dict) else {}
@@ -224,6 +257,9 @@ def run_call(registry: ToolRegistry, call: dict) -> tuple[str, bool]:
         available = ", ".join(registry.names()) or "none"
         return f"Error: unknown tool '{call.get('name')}'. Available tools: {available}.", True
     args = call.get("arguments") if isinstance(call.get("arguments"), dict) else {}
+    if "_too_long" in args:
+        return (f"Error: the arguments are too long ({args['_too_long']} characters, at most "
+                f"{MAX_ARGS_CHARS}): call the tool again with short arguments."), True
     try:
         result = tool.run(args)
     except ToolError as e:

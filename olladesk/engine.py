@@ -88,6 +88,7 @@ class ChatEngine(QObject):
         self._stream_mark = 0                 # inizio del testo del giro in corso
         self._page_urls: set[str] = set()     # pagine che fetch_page può aprire
         self._held = ""                       # chiamata scritta come testo, non mostrata
+        self._tail = ""                       # fine di un frammento che può iniziare un marcatore
         self._think_mark = 0
         self._closed = False
         self._status_worker: ApiWorker | None = None
@@ -203,9 +204,12 @@ class ChatEngine(QObject):
         l'unica parte del disco che il modello può leggere (`file_tools`).
         Senza 🌐 il modello non va in rete.
         """
-        extra = file_tools.make_tools(file_tools.shared_from_chat(chat))
+        # testo letto dai file in questa risposta: web_search rifiuta una
+        # query che ne ripete un pezzo (non deve uscire verso il motore)
+        read_log: list[str] = []
+        extra = file_tools.make_tools(file_tools.shared_from_chat(chat), read_log)
         if web:
-            extra.append(web_search.web_tool(**self._search_settings()))
+            extra.append(web_search.web_tool(**self._search_settings(), file_texts=read_log))
             # fetch_page apre solo le pagine uscite dalle ricerche di questa
             # risposta: l'insieme si riempie a ogni giro (_on_tools_finished)
             self._page_urls = set()
@@ -718,8 +722,6 @@ class ChatEngine(QObject):
 
     def _start_generation(self, chat: dict, think: bool) -> None:
         chat_id = chat["id"]
-        model = chat["model"]
-        s = self.settings
 
         try:
             messages, warnings = self._build_messages(chat)
@@ -731,6 +733,33 @@ class ChatEngine(QObject):
             self._set_idle()
             return
 
+        try:
+            payload = self._payload_for(chat, messages, warnings, think)
+        except Exception as e:  # noqa: BLE001 — come sopra: mai «occupato» senza richiesta
+            # parametri del modello o impostazioni con valori inattesi
+            self.notice.emit(chat_id, "⚠ " + _('impossibile preparare la richiesta: {error}').format(
+                error=f"{type(e).__name__}: {e}"))
+            self._set_idle()
+            return
+
+        self._pending_stream = ""
+        self._pending_think = ""
+        self._held = ""
+        self._tail = ""
+        self._chat_stopped = False
+        self._payload = payload
+        self._rounds = []
+        self._open_round = None
+        self._stream_mark = self._think_mark = 0
+        self.generation_started.emit(chat_id)
+        self._launch_chat()
+
+    def _payload_for(self, chat: dict, messages: list[dict], warnings: list[str],
+                     think: bool) -> dict:
+        """Richiesta per /api/chat: opzioni del modello, avvisi e tool del turno."""
+        chat_id = chat["id"]
+        model = chat["model"]
+        s = self.settings
         from .widgets.model_params import options_for_model
 
         options = options_for_model(model)
@@ -757,17 +786,7 @@ class ChatEngine(QObject):
             if self._turn_tools.get("web_search") is not None:
                 # con la ricerca il modello deve sapere che giorno è
                 _add_system_note(messages, tools.today_note(datetime.date.today()))
-
-        self._pending_stream = ""
-        self._pending_think = ""
-        self._held = ""
-        self._chat_stopped = False
-        self._payload = payload
-        self._rounds = []
-        self._open_round = None
-        self._stream_mark = self._think_mark = 0
-        self.generation_started.emit(chat_id)
-        self._launch_chat()
+        return payload
 
     def _launch_chat(self) -> None:
         """Avvia (o riprende, dopo un giro di tool) la richiesta del turno."""
@@ -787,19 +806,40 @@ class ChatEngine(QObject):
     def _on_chunk(self, chunk: str) -> None:
         if self._chat_stopped or self.sender() is not self._worker:
             return
-        # da una chiamata scritta come testo in poi non si mostra nulla: i
-        # marcatori sono token speciali, arrivano interi in un frammento
+        # da una chiamata scritta come testo in poi non si mostra nulla. Un
+        # marcatore può arrivare spezzato tra due frammenti: la fine di un
+        # frammento che potrebbe iniziarne uno aspetta il frammento dopo
         if self._held:
             self._held += chunk
             return
-        at = tools.leaked_call_at(chunk)
+        text = self._tail + chunk
+        self._tail = ""
+        at = tools.leaked_call_at(text)
         if at >= 0:
-            self._held = chunk[at:]
-            chunk = chunk[:at]
-            if not chunk:
-                return
-        self._pending_stream += chunk
-        self.text_chunk.emit(self._active_id, chunk)
+            self._held = text[at:]
+            text = text[:at]
+        else:
+            keep = tools.marker_prefix_len(text)
+            if keep:
+                text, self._tail = text[:-keep], text[-keep:]
+        self._emit_text(text)
+
+    def _emit_text(self, text: str) -> None:
+        if text:
+            self._pending_stream += text
+            self.text_chunk.emit(self._active_id, text)
+
+    def _release_held(self) -> bool:
+        """Fine della risposta: il testo trattenuto torna visibile se non era
+        una chiamata (una risposta che cita «<tool_call>»). True se era una
+        chiamata, cioè se è stato tolto."""
+        tail, self._tail = self._tail, ""
+        self._emit_text(tail)
+        held, self._held = self._held, ""
+        if held and not tools.looks_like_call(held):
+            self._emit_text(held)
+            return False
+        return bool(held)
 
     def _on_think_chunk(self, chunk: str) -> None:
         if self._chat_stopped or self.sender() is not self._worker:
@@ -813,7 +853,7 @@ class ChatEngine(QObject):
         # chiamate ai tool solo se la richiesta li offriva: un modello che le
         # inventa senza tool ha comunque finito di rispondere
         calls = tools.parse_calls(done.get("tool_calls")) if "tools" in self._payload else []
-        held, self._held = self._held, ""
+        held = self._release_held()
         if calls:
             self._run_tools(calls)
             return
@@ -968,6 +1008,7 @@ class ChatEngine(QObject):
     def _on_failed(self, err: str) -> None:
         if self._chat_stopped or self.sender() is not self._worker:
             return
+        self._release_held()
         self.generation_finished.emit(self._active_id, "failed", "", err)
         # se il modello aveva già prodotto testo, conservalo nella conversazione
         self._save_assistant(None)
@@ -1001,6 +1042,9 @@ class ChatEngine(QObject):
             self._tool_worker = None
         if self._phase is None:
             return
+        # i pochi caratteri tenuti per un possibile marcatore sono testo
+        tail, self._tail = self._tail, ""
+        self._emit_text(tail)
         if self._pending_stream:
             self._finalize("stopped", None)   # conserva il testo già prodotto
         else:
@@ -1022,6 +1066,7 @@ class ChatEngine(QObject):
         self._rounds = []
         self._open_round = None
         self._held = ""
+        self._tail = ""
         self.busy_changed.emit(False)
 
     # ---------------------------------------------------------------- chiusura

@@ -93,10 +93,25 @@ def options_for_model(model: str) -> dict:
         state = profile.get(d["key"])
         if isinstance(state, dict) and state.get("enabled"):
             val = state.get("value", d["default"])
-            if d["type"] == "strlist":
-                val = [s for s in (val or []) if str(s).strip()]
-                if not val:
+            # model_params.json può essere corrotto o importato: un valore
+            # del tipo sbagliato si salta invece di bloccare l'invio
+            try:
+                if d["type"] == "strlist":
+                    val = [str(s) for s in (val if isinstance(val, list) else []) if str(s).strip()]
+                    if not val:
+                        continue
+                elif d["type"] == "int":
+                    if isinstance(val, bool):
+                        continue
+                    val = int(val)
+                elif d["type"] == "float":
+                    if isinstance(val, bool):
+                        continue
+                    val = float(val)
+                elif d["type"] == "combo" and isinstance(val, bool):
                     continue
+            except (TypeError, ValueError, OverflowError):
+                continue
             opts[d["key"]] = val
     return opts
 
