@@ -13,6 +13,13 @@ esegue, i risultati tornano al modello e la generazione riprende, sempre
 nella stessa risposta (un solo generation_started/generation_finished). La
 fase resta "chat" per tutto il ciclo. Le chiamate di ogni giro completo si
 salvano nel messaggio dell'assistente, in "tool_rounds".
+
+Conferma delle modifiche (0.5): con il livello «write» o «full» i tool di
+scrittura chiedono il permesso a `write_tools.ApprovalGate` dal thread dei
+tool, che resta fermo finché l'utente non sceglie (`resolve_change`). Il
+motore emette `change_requested` e, a scelta fatta o richiesta chiusa da uno
+Stop, `change_resolved`; la fase resta "chat". Cambiare conversazione non
+chiude la richiesta: riaprendo la chat la si ritrova (`pending_change`).
 """
 from __future__ import annotations
 
@@ -22,7 +29,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QObject, Signal
 
-from . import config, context, file_tools, secrets_store, tools, web_search
+from . import config, context, file_tools, secrets_store, tools, web_search, write_tools
 from .i18n import _
 from .ollama_client import (
     ApiWorker, CapsWorker, ChatWorker, PostWorker, PullWorker, chat_capable, format_stats,
@@ -49,6 +56,12 @@ class ChatEngine(QObject):
     # chat_id, {"state": "started"|"done", "round", "index", "name",
     # "arguments", e a fine chiamata "result", "error"}
     tool_activity = Signal(str, dict)
+    # modifica ai file in attesa della conferma: chat_id, Request.view()
+    change_requested = Signal(str, dict)
+    # richiesta chiusa: chat_id, {"id", "decision"} ("" = chiusa da uno stop)
+    change_resolved = Signal(str, dict)
+    # dal thread dei tool (coda verso il thread principale)
+    _change_asked = Signal(object)
     # --- server Ollama e modelli
     status_changed = Signal(bool, str)        # online, versione
     models_loading = Signal(bool)             # elenco modelli in caricamento
@@ -79,6 +92,14 @@ class ChatEngine(QObject):
         # giro, giri completi e giro le cui chiamate sono in esecuzione
         self.tools = tools.ToolRegistry()
         self._use_tools = False
+        self._tools_level = "off"
+        # copie dei file modificati nella risposta in corso (annullamento, W4)
+        self._journal = write_tools.WriteJournal()
+        # conferma delle modifiche della risposta in corso (None = senza scrittura)
+        self._gate: write_tools.ApprovalGate | None = None
+        self._tool_index = -1            # chiamata del giro in esecuzione
+        self._max_rounds = tools.MAX_ROUNDS
+        self._change_asked.connect(self._on_change_asked)
         self._turn_tools = self.tools   # registro del turno: fissi + file della chat
         self._web_tool = False          # 🌐 come tool in questo turno
         self._tool_worker: tools.ToolWorker | None = None
@@ -198,7 +219,8 @@ class ChatEngine(QObject):
 
     def _tools_for(self, chat: dict, web: bool = False) -> tools.ToolRegistry:
         """Tool del turno: quelli fissi, la lettura di ciò che la chat
-        condivide e, con 🌐 acceso nell'invio, la ricerca web.
+        condivide (e la scrittura, con il livello «write» o «full» della
+        chat) e, con 🌐 acceso nell'invio, la ricerca web.
 
         Le cartelle e i file (non immagini) allegati nella conversazione sono
         l'unica parte del disco che il modello può leggere (`file_tools`).
@@ -207,7 +229,15 @@ class ChatEngine(QObject):
         # testo letto dai file in questa risposta: web_search rifiuta una
         # query che ne ripete un pezzo (non deve uscire verso il motore)
         read_log: list[str] = []
-        extra = file_tools.make_tools(file_tools.shared_from_chat(chat), read_log)
+        shared = file_tools.shared_from_chat(chat)
+        writable = chat_tools_level(chat) in tools.WRITE_LEVELS
+        extra = file_tools.make_tools(shared, read_log, writable=writable)
+        self._close_gate()
+        if writable:
+            self._journal.discard()
+            self._journal = write_tools.WriteJournal()
+            self._gate = write_tools.ApprovalGate(self._change_asked.emit)
+            extra += write_tools.make_write_tools(shared, self._gate.ask, self._journal)
         if web:
             extra.append(web_search.web_tool(**self._search_settings(), file_texts=read_log))
             # fetch_page apre solo le pagine uscite dalle ricerche di questa
@@ -456,14 +486,61 @@ class ChatEngine(QObject):
             self.set_archived(chat_id, True)
         return len(idle)
 
-    def set_chat_tools(self, chat_id: str, on: bool) -> None:
-        """Interruttore dei tool di una conversazione esistente, salvato
-        subito: vale anche per i messaggi che arrivano dal telefono."""
+    def set_chat_tools(self, chat_id: str, level) -> None:
+        """Livello dei tool di una conversazione esistente (o True/False per
+        lettura/spento), salvato subito: vale anche per i messaggi che
+        arrivano dal telefono."""
         chat = self.chat(chat_id)
-        if chat is None or (chat.get("tools") is True) == bool(on):
+        level = tools.normalize_level(level)
+        if chat is None or chat_tools_level(chat) == level:
             return
-        _set_tools_flag(chat, on)
+        _set_tools_level(chat, level)
         self._persist(chat)
+
+    # ------------------------------------------------- conferma delle modifiche
+
+    def pending_change(self) -> dict | None:
+        """Modifica che aspetta la conferma (`Request.view()`), None se nessuna."""
+        req = self._gate.pending() if self._gate is not None else None
+        return req.view() if req is not None and not req.event.is_set() else None
+
+    def resolve_change(self, req_id: int, decision: str) -> bool:
+        """Scelta dell'utente (write_tools.APPLY, REJECT, ALLOW_REST) sulla
+        richiesta `req_id`. False se non è più in attesa."""
+        if self._gate is None or not self._gate.resolve(req_id, decision):
+            return False
+        self._change_closed(req_id, decision)
+        return True
+
+    def _on_change_asked(self, req) -> None:
+        # arriva in coda dal thread dei tool: la richiesta può essere già
+        # chiusa (Stop) o di una risposta precedente
+        gate = self._gate
+        if (gate is None or gate.pending() is not req or req.event.is_set()
+                or self._open_round is None):
+            return
+        calls = self._open_round["calls"]
+        if 0 <= self._tool_index < len(calls):
+            calls[self._tool_index]["waiting"] = True
+            self.tool_activity.emit(self._active_id,
+                                    self._tool_event("waiting", self._tool_index))
+        self.change_requested.emit(self._active_id, req.view())
+
+    def _change_closed(self, req_id: int, decision: str) -> None:
+        if self._open_round is not None:
+            for c in self._open_round["calls"]:
+                c.pop("waiting", None)
+        self.change_resolved.emit(self._active_id, {"id": req_id, "decision": decision})
+
+    def _close_gate(self) -> None:
+        """Chiude la conferma della risposta: una richiesta aperta vale come
+        rifiuto e il thread dei tool riparte."""
+        gate, self._gate = self._gate, None
+        if gate is None:
+            return
+        req = gate.close()
+        if req is not None and self._active_id is not None:
+            self._change_closed(req.id, "")
 
     def delete_chat(self, chat_id: str) -> None:
         if chat_id == self._active_id:
@@ -490,17 +567,18 @@ class ChatEngine(QObject):
 
     def send(self, chat_id: str | None, text: str, model: str, *,
              attachments=(), web: bool = False, think: bool = True,
-             tools: bool | None = None) -> str | None:
+             tools: bool | str | None = None) -> str | None:
         """Aggiunge un messaggio utente e avvia la risposta.
 
         `chat_id` è una conversazione esistente o un id nuovo (`new_chat_id`):
         la conversazione nasce al primo messaggio salvato. Restituisce l'id,
         oppure None se un'altra elaborazione è già in corso.
 
-        `tools` è la scelta della conversazione (interruttore per chat, spento
-        di default): True/False la salva nella chat, None usa quella già
-        salvata (così fa il telefono, che non ha l'interruttore). I tool
-        partono solo se il modello li supporta (`tools_supported`).
+        `tools` è il livello della conversazione ("off", "read", "write",
+        "full"; True/False valgono lettura/spento; spento di default): lo
+        salva nella chat, None usa quello già salvato (così fa il telefono,
+        che non ha il menu). I tool partono solo se il modello li supporta
+        (`tools_supported`).
         """
         if self.busy() or self._closed or self.send_refusal(model):
             return None
@@ -524,7 +602,10 @@ class ChatEngine(QObject):
         # quella salvata) e un modello che li supporta, il modello cerca da
         # solo con il tool web_search invece della ricerca prima della risposta
         saved = self.chat(chat_id)
-        tools_on = tools if tools is not None else bool(saved and saved.get("tools") is True)
+        if tools is not None:
+            tools = _normalize_level(tools)   # il parametro copre il modulo tools
+        level = tools if tools is not None else (chat_tools_level(saved) if saved else "off")
+        tools_on = level != "off"
         web_tool = web and tools_on and self.tools_supported(model)
 
         self._pending_user = {
@@ -667,8 +748,9 @@ class ChatEngine(QObject):
         chat["updated"] = ts
         chat.pop("archived", None)   # una chat ripresa torna nell'elenco
         if p["tools"] is not None:
-            _set_tools_flag(chat, p["tools"])
-        self._use_tools = chat.get("tools") is True
+            _set_tools_level(chat, p["tools"])
+        self._tools_level = chat_tools_level(chat)
+        self._use_tools = self._tools_level != "off"
         self._web_tool = bool(p.get("web_tool"))
         self.user_message_added.emit(chat_id, msg)
         self._persist(chat)
@@ -686,7 +768,12 @@ class ChatEngine(QObject):
         # con file o cartelle condivisi il modello deve sapere che non può
         # modificarli: altrimenti a «scrivi nel file» risponde di averlo fatto
         if file_tools.shared_from_chat(chat):
-            system = (system + "\n\n" if system else "") + file_tools.READ_ONLY_NOTE
+            # con il livello di scrittura (e un modello che usa i tool) il
+            # modello sa che può modificare, e che ogni modifica va confermata
+            writable = (self._use_tools and self._tools_level in tools.WRITE_LEVELS
+                        and self.tools_supported(chat.get("model") or ""))
+            note = write_tools.WRITE_NOTE if writable else file_tools.READ_ONLY_NOTE
+            system = (system + "\n\n" if system else "") + note
         if system:
             messages.append({"role": "system", "content": system})
         history = context.history_window(chat["messages"], s["history_limit"])
@@ -781,8 +868,11 @@ class ChatEngine(QObject):
             payload["think"] = False
         self._think_off_sent = not think
         self._turn_tools = self._tools_for(chat, web=self._web_tool)
+        self._max_rounds = tools.MAX_ROUNDS
         if self._use_tools and len(self._turn_tools) and self.tools_supported(model):
             payload["tools"] = self._turn_tools.schemas()
+            if self._gate is not None:
+                self._max_rounds = tools.MAX_WRITE_ROUNDS
             if self._turn_tools.get("web_search") is not None:
                 # con la ricerca il modello deve sapere che giorno è
                 _add_system_note(messages, tools.today_note(datetime.date.today()))
@@ -889,7 +979,12 @@ class ChatEngine(QObject):
         seen: dict[str, int] = {}
         for n, rnd in enumerate(self._rounds, 1):
             for c in rnd["calls"]:
-                if not c.get("error"):
+                if c.get("error"):
+                    continue
+                tool = self._turn_tools.get(c.get("name", ""))
+                if tool is not None and not tool.read_only:
+                    seen.clear()   # dopo una modifica le letture di prima non valgono più
+                else:
                     seen.setdefault(tools.call_key(c), n)
         w = tools.ToolWorker(self._turn_tools, calls, self,
                              seen=seen, round_no=len(self._rounds) + 1)
@@ -910,12 +1005,14 @@ class ChatEngine(QObject):
     def _on_tool_started(self, index: int) -> None:
         if self._chat_stopped or self.sender() is not self._tool_worker:
             return
+        self._tool_index = index
         self.tool_activity.emit(self._active_id, self._tool_event("started", index))
 
     def _on_tool_done(self, index: int, result: str, error: bool) -> None:
         if self._chat_stopped or self.sender() is not self._tool_worker:
             return
         call = self._open_round["calls"][index]
+        call.pop("waiting", None)
         call["result"], call["error"], call["done"] = result, error, True
         self.tool_activity.emit(self._active_id,
                                 self._tool_event("done", index, result=result, error=error))
@@ -926,6 +1023,7 @@ class ChatEngine(QObject):
         done_round, self._open_round = self._open_round, None
         for c in done_round["calls"]:
             c.pop("done", None)   # serve solo alla vista del giro in corso
+            c.pop("waiting", None)
         self._rounds.append(done_round)
         entries = []
         for c in done_round["calls"]:
@@ -936,7 +1034,7 @@ class ChatEngine(QObject):
         # quanti giri restano, solo nella richiesta: il risultato salvato
         # (e mostrato) resta quello del tool
         if entries:
-            note = tools.round_note(len(self._rounds))
+            note = tools.round_note(len(self._rounds), self._max_rounds)
             entries[-1] = {**entries[-1], "content": entries[-1]["content"] + "\n\n" + note}
         self._payload["messages"].extend(entries)
         self._stream_mark = len(self._pending_stream)
@@ -945,7 +1043,7 @@ class ChatEngine(QObject):
             if c["name"] == "web_search" and not c.get("error"):
                 self._page_urls.update(web_search.page_url_key(src["url"])
                                        for src in web_search.web_sources(c["result"]))
-        if ("tools" in self._payload and len(self._rounds) < tools.MAX_ROUNDS
+        if ("tools" in self._payload and len(self._rounds) < self._max_rounds
                 and tools.failed_web_streak(self._rounds) >= web_search.MAX_SEARCH_FAILURES
                 and any(t["function"]["name"] in WEB_TOOLS for t in self._payload["tools"])):
             # la ricerca non risponde: i tool web escono dalla richiesta, così
@@ -960,7 +1058,7 @@ class ChatEngine(QObject):
             self.notice.emit(self._active_id, "⚠ " + _(
                 'La ricerca web non risponde ({count} tentativi falliti di fila): il modello '
                 'continua senza.').format(count=web_search.MAX_SEARCH_FAILURES))
-        if len(self._rounds) >= tools.MAX_ROUNDS and "tools" in self._payload:
+        if len(self._rounds) >= self._max_rounds and "tools" in self._payload:
             # senza tool il modello deve rispondere con quello che ha: glielo
             # si chiede in chiaro, o un modello piccolo ritenta una chiamata
             del self._payload["tools"]
@@ -968,7 +1066,7 @@ class ChatEngine(QObject):
                 {"role": "user", "content": tools.FINAL_ANSWER_REQUEST})
             self.notice.emit(self._active_id, "⚠ " + _(
                 'Raggiunto il limite di {count} giri di strumenti: il modello '
-                'risponde con quello che ha raccolto.').format(count=tools.MAX_ROUNDS))
+                'risponde con quello che ha raccolto.').format(count=self._max_rounds))
         self._launch_chat()
 
     def _save_assistant(self, stats: str | None) -> None:
@@ -1034,6 +1132,8 @@ class ChatEngine(QObject):
             self._worker.stop()   # chiude la connessione: il worker termina subito
             self._workers.retire(self._worker)
             self._worker = None
+        # una modifica in attesa vale come rifiutata: il thread dei tool riparte
+        self._close_gate()
         if self._tool_worker is not None:
             # la chiamata in corso finisce da sola; il suo risultato si scarta
             self._chat_stopped = True
@@ -1056,11 +1156,15 @@ class ChatEngine(QObject):
             self._set_idle()
 
     def _set_idle(self) -> None:
+        self._close_gate()
+        self._tool_index = -1
+        self._max_rounds = tools.MAX_ROUNDS
         self._active_id = None
         self._phase = None
         self._search_msg = None
         self._think_off_sent = False
         self._use_tools = False
+        self._tools_level = "off"
         self._web_tool = False
         self._payload = None
         self._rounds = []
@@ -1076,6 +1180,9 @@ class ChatEngine(QObject):
         self._closed = True
         self._chat_stopped = True
         self._search_stopped = True
+        # chiudere l'app con una modifica in attesa vale come rifiuto: il
+        # thread dei tool non resta fermo e si può attendere
+        self._close_gate()
         return self._workers.all()
 
 
@@ -1137,9 +1244,20 @@ def _add_system_note(messages: list[dict], note: str) -> None:
         messages.insert(0, {"role": "system", "content": note})
 
 
-def _set_tools_flag(chat: dict, on: bool) -> None:
-    """Il campo "tools" c'è solo se acceso: le chat esistenti restano uguali."""
-    if on:
-        chat["tools"] = True
-    else:
+def _normalize_level(value) -> str:
+    return tools.normalize_level(value)
+
+
+def chat_tools_level(chat: dict) -> str:
+    """Livello dei tool salvato nella conversazione ("off" se manca)."""
+    return tools.normalize_level(chat.get("tools"))
+
+
+def _set_tools_level(chat: dict, level) -> None:
+    """Il campo "tools" c'è solo se acceso; la sola lettura resta True, come
+    nella 0.4, così le chat che non scrivono restano leggibili da lì."""
+    value = tools.stored_level(level)
+    if value is None:
         chat.pop("tools", None)
+    else:
+        chat["tools"] = value

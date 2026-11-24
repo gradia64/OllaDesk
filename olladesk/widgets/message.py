@@ -4,7 +4,7 @@ from __future__ import annotations
 import html
 import time
 
-from PySide6.QtCore import QEvent, Qt, QTimer, QUrl
+from PySide6.QtCore import QEvent, Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import QDesktopServices, QGuiApplication
 from PySide6.QtWidgets import (
     QFrame,
@@ -12,7 +12,9 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QMenu,
+    QPushButton,
     QSizePolicy,
+    QTextEdit,
     QToolButton,
     QVBoxLayout,
 )
@@ -25,6 +27,109 @@ from ..tools import arguments_summary, result_preview
 _ANIM_FRAMES = ["·", "··", "···"]
 TOOL_PREVIEW_LINES = 6       # righe del risultato di un tool mostrate nella bolla
 TOOL_PREVIEW_CHARS = 500
+DIFF_MAX_HEIGHT = 300        # altezza massima del diff nella scheda di conferma
+# righe aggiunte e tolte del diff: (tema scuro, tema chiaro), leggibili su entrambi
+DIFF_ADD_COLORS = ("#4ade80", "#15803d")
+DIFF_DEL_COLORS = ("#f87171", "#b91c1c")
+
+
+def change_title(view: dict) -> str:
+    """Titolo della richiesta di conferma (`Request.view()`)."""
+    label = view.get("label", "")
+    kind = view.get("kind")
+    if kind == "mkdir":
+        return _("Il modello vuole creare la cartella {path}").format(path=label)
+    if kind == "create":
+        return _("Il modello vuole creare {path}").format(path=label)
+    if kind == "replace":
+        return _("Il modello vuole riscrivere {path}").format(path=label)
+    return _("Il modello vuole modificare {path}").format(path=label)
+
+
+def diff_html(diff: str, dim: str, dark: bool = True) -> str:
+    """Diff unificato in HTML: righe aggiunte verdi, tolte rosse."""
+    add = DIFF_ADD_COLORS[0 if dark else 1]
+    rem = DIFF_DEL_COLORS[0 if dark else 1]
+    rows = []
+    for line in diff.splitlines():
+        if line.startswith(("+++", "---")):
+            color = dim
+        elif line.startswith("+"):
+            color = add
+        elif line.startswith("-"):
+            color = rem
+        elif line.startswith("@@"):
+            color = dim
+        else:
+            color = ""
+        text = html.escape(line) or "&nbsp;"
+        rows.append(f'<span style="color:{color}">{text}</span>' if color else text)
+    return ('<pre style="margin:0; font-family: monospace; white-space: pre;">'
+            + "<br>".join(rows) + "</pre>")
+
+
+class ChangeCard(QFrame):
+    """Richiesta di conferma di una modifica ai file, dentro la bolla.
+
+    Mostra il diff e tre scelte; `decided` porta l'id della richiesta e la
+    scelta (write_tools.APPLY, REJECT, ALLOW_REST). Dopo un clic i pulsanti
+    si disattivano: la scheda sparisce quando il motore chiude la richiesta.
+    """
+
+    decided = Signal(int, str)
+
+    def __init__(self, view: dict, theme_name: str, parent=None):
+        super().__init__(parent)
+        self.view = dict(view)
+        t = theme.palette_for(theme_name)
+        self.setObjectName("changeCard")
+        self.setStyleSheet(
+            f"QFrame#changeCard {{ border: 1px solid {theme.TOOLS_WRITE_COLOR}; "
+            "border-radius: 8px; }"
+        )
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(10, 8, 10, 8)
+        lay.setSpacing(6)
+        title = change_title(view)
+        if view.get("kind") != "mkdir":
+            title += "  " + _("(+{added} −{removed})").format(
+                added=view.get("added", 0), removed=view.get("removed", 0))
+        self.title = QLabel(title, self)
+        self.title.setTextFormat(Qt.TextFormat.PlainText)
+        self.title.setWordWrap(True)
+        self.title.setStyleSheet("font-weight: 600;")
+        lay.addWidget(self.title)
+        self.diff = QTextEdit(self)
+        self.diff.setReadOnly(True)
+        self.diff.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
+        self.diff.setHtml(diff_html(view.get("diff", ""), t["dim"],
+                                    theme.palette_for(theme_name) is theme.palette_for("dark")))
+        # alto quanto il diff, fino al tetto (poi si scorre)
+        doc_h = int(self.diff.document().size().height())
+        self.diff.setFixedHeight(min(DIFF_MAX_HEIGHT, doc_h + 2 * self.diff.frameWidth() + 2))
+        self.diff.setVisible(bool(view.get("diff")))
+        lay.addWidget(self.diff)
+        row = QHBoxLayout()
+        row.setSpacing(6)
+        self.apply_btn = QPushButton(_("Applica"), self)
+        self.apply_btn.setObjectName("primaryBtn")
+        self.reject_btn = QPushButton(_("Rifiuta"), self)
+        self.rest_btn = QPushButton(_("Consenti per il resto della risposta"), self)
+        self.rest_btn.setToolTip(_("Applica questa modifica e le prossime di questa risposta "
+                                   "senza chiedere di nuovo."))
+        for btn, decision in ((self.apply_btn, "apply"), (self.reject_btn, "reject"),
+                              (self.rest_btn, "allow_rest")):
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.clicked.connect(lambda _c=False, d=decision: self._decide(d))
+            row.addWidget(btn)
+        row.addStretch(1)
+        lay.addLayout(row)
+
+    def _decide(self, decision: str) -> None:
+        for btn in (self.apply_btn, self.reject_btn, self.rest_btn):
+            btn.setEnabled(False)
+        self.decided.emit(int(self.view.get("id", 0)), decision)
+
 
 
 class MessageWidget(QFrame):
@@ -108,6 +213,9 @@ class MessageWidget(QFrame):
         self._style_tools()
         inner.addWidget(self.tools_btn, 0, Qt.AlignmentFlag.AlignLeft)
         inner.addWidget(self.tools_label)
+        # richiesta di conferma di una modifica (solo nella risposta in corso)
+        self._inner = inner
+        self.change_card: ChangeCard | None = None
         if tool_calls:
             self.set_tool_calls(tool_calls)
 
@@ -329,8 +437,11 @@ class MessageWidget(QFrame):
 
     def _sync_tools_widgets(self) -> None:
         arrow = "▾" if self._tools_expanded else "▸"
+        waiting = [c for c in self._tool_calls if c.get("state") == "waiting"]
         running = [c for c in self._tool_calls if c.get("state") == "running"]
-        if running:
+        if waiting:
+            head = _('{name}: attende la tua conferma').format(name=waiting[0]["name"])
+        elif running:
             head = _('{name} in corso…').format(name=running[0]["name"])
         else:
             head = _('Strumenti usati ({n})').format(n=len(self._tool_calls))
@@ -342,7 +453,8 @@ class MessageWidget(QFrame):
     def _tools_text(self) -> str:
         blocks = []
         for c in self._tool_calls:
-            mark = "…" if c.get("state") == "running" else ("✗" if c.get("error") else "✓")
+            mark = "…" if c.get("state") in ("running", "waiting") else \
+                ("✗" if c.get("error") else "✓")
             lines = [f"{mark} {c['name']}({arguments_summary(c.get('arguments') or {})})"]
             result = result_preview(c["name"], c.get("result") or "")
             if result:
@@ -354,6 +466,29 @@ class MessageWidget(QFrame):
                     lines.append("    …")
             blocks.append("\n".join(lines))
         return "\n\n".join(blocks)
+
+    def show_change(self, view: dict) -> ChangeCard:
+        """Mostra la richiesta di conferma (sostituisce quella di prima)."""
+        self.clear_change()
+        self.stop_animation()
+        if not self.raw:
+            self.label.setText("")   # niente puntini sotto la scheda: la risposta aspetta
+        card = ChangeCard(view, self.theme_name, self)
+        # sotto al blocco dei tool, sopra al testo
+        self._inner.insertWidget(self._inner.indexOf(self.tools_label) + 1, card)
+        self.change_card = card
+        return card
+
+    def clear_change(self, req_id: int | None = None) -> None:
+        """Toglie la richiesta (solo quella con `req_id`, se dato)."""
+        card = self.change_card
+        if card is None or (req_id is not None and card.view.get("id") != req_id):
+            return
+        self.change_card = None
+        card.hide()
+        card.deleteLater()
+        if not self.raw and self.role == "assistant":
+            self.start_animation()
 
     def _on_tools_toggle(self) -> None:
         self._tools_expanded = not self._tools_expanded

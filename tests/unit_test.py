@@ -3032,6 +3032,259 @@ def test_tool_call_caps_and_split_markers():
     assert not tools.looks_like_call("<tool_call> è il marcatore che usa Qwen")
 
 
+def test_write_tools():
+    """Tool di scrittura (0.5, W2): dentro le voci condivise, con le esclusioni
+    della lettura, conferma per ogni modifica e annullamento."""
+    from olladesk import file_tools, tools, write_tools
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp) / "progetto"
+        (root / "src").mkdir(parents=True)
+        (root / "node_modules").mkdir()
+        (root / "generati").mkdir()
+        (root / ".gitignore").write_text("generati/\n")
+        calc = root / "src" / "calc.py"
+        calc.write_text("def somma(a, b):\n    return a + b\n\n\ndef sottrai(a, b):\n"
+                        "    return a - b\n")
+        os.chmod(calc, 0o640)
+        fuori = Path(tmp) / "fuori"
+        fuori.mkdir()
+        (root / "uscita").symlink_to(fuori)
+        (root / "link.py").symlink_to(calc)
+        solo = Path(tmp) / "nota.txt"
+        solo.write_text("vecchia nota\n")
+        shared = [file_tools.Shared("progetto", root, True),
+                  file_tools.Shared("nota.txt", solo, False)]
+        changes: list = []
+        decision = {"ok": True}
+
+        def approve(ch):
+            changes.append(ch)
+            return decision["ok"]
+
+        journal = write_tools.WriteJournal()
+        reg = tools.ToolRegistry(file_tools.make_tools(shared, writable=True)
+                                 + write_tools.make_write_tools(shared, approve, journal))
+        assert {"write_file", "edit_file", "make_dir"} <= set(reg.names())
+        assert not reg.get("write_file").read_only
+
+        def call(name, **args):
+            return tools.run_call(reg, {"name": name, "arguments": args})
+
+        out, err = call("list_files")
+        assert not err and "read-only" not in out, out
+
+        # edit_file: pezzo esatto, una volta sola
+        out, err = call("edit_file", path="progetto/src/calc.py",
+                        old_text="def sottrai(a, b):", new_text="def differenza(a, b):")
+        assert not err and "Replaced 1 occurrence" in out and "differenza" in out, out
+        assert "def differenza" in calc.read_text()
+        assert oct(calc.stat().st_mode & 0o777) == "0o640"        # permessi mantenuti
+        assert changes[-1].kind == "edit" and "+def differenza" in changes[-1].diff
+        out, err = call("edit_file", path="progetto/src/calc.py",
+                        old_text="    return", new_text="    return")
+        assert err and "appears 2 times" in out, out
+        out, err = call("edit_file", path="progetto/src/calc.py",
+                        old_text="    5  def differenza(a, b):", new_text="x")
+        assert err and "line numbers" in out, out
+        out, err = call("edit_file", path="progetto/src/calc.py",
+                        old_text="def  somma(a,b):", new_text="x")
+        assert err and "most similar line is 1" in out, out
+
+        # write_file crea anche le cartelle mancanti, dopo la conferma
+        decision["ok"] = False
+        out, err = call("write_file", path="progetto/docs/NOTE.md", content="# Note\n")
+        assert err and "rejected" in out and not (root / "docs").exists(), out
+        decision["ok"] = True
+        out, err = call("write_file", path="progetto/docs/NOTE.md", content="# Note\n- somma\n")
+        assert not err and out.startswith("Created progetto/docs/NOTE.md (2 lines"), out
+        out, err = call("make_dir", path="progetto/docs/extra/più")
+        assert not err and (root / "docs" / "extra" / "più").is_dir(), out
+        out, err = call("write_file", path="progetto/src/calc.py/x.txt", content="x")
+        assert err and "is a file" in out, out
+        out, err = call("write_file", path="nota.txt", content="nuova nota\n")
+        assert not err and solo.read_text() == "nuova nota\n", out
+
+        # rifiuti: esclusioni, link, fuori, file da solo, non testo
+        rifiuti = {
+            "progetto/.env": "hidden",
+            "progetto/id_rsa": "credentials",
+            "progetto/node_modules/x.js": "dependency",
+            "progetto/generati/out.txt": ".gitignore",
+            "progetto/uscita/x.txt": "outside",
+            "progetto/link.py": "is a link",
+            "progetto/../fuori/x.txt": "'..'",
+            "nota.txt/altro.txt": "single shared file",
+            "progetto/foto.png": "only text files",
+            "progetto": "shared folder itself",
+            "altro/x.txt": "not shared",
+        }
+        for path, atteso in rifiuti.items():
+            out, err = call("write_file", path=path, content="x")
+            assert err and atteso in out, (path, out)
+        out, err = call("write_file", path="progetto/.env", content="x")
+        assert "do not try again" in out, out
+        assert not (root / ".env").exists() and not (fuori / "x.txt").exists()
+
+        # la conferma rifiutata non tocca il file e lo dice al modello
+        decision["ok"] = False
+        prima = calc.read_text()
+        out, err = call("write_file", path="progetto/src/calc.py", content="rotto\n")
+        assert err and "rejected" in out and calc.read_text() == prima, out
+        decision["ok"] = True
+
+        # annulla: tutto com'era, file e cartelle creati tolti
+        assert journal.undo() == []
+        assert "def sottrai" in calc.read_text() and "differenza" not in calc.read_text()
+        assert solo.read_text() == "vecchia nota\n"
+        assert not (root / "docs").exists()
+
+        # dopo una scrittura le letture già fatte si rieseguono
+        reg2 = tools.ToolRegistry(file_tools.make_tools(shared, writable=True)
+                                  + write_tools.make_write_tools(shared))
+        calls = [{"name": "read_file", "arguments": {"path": "progetto/src/calc.py"}},
+                 {"name": "edit_file", "arguments": {"path": "progetto/src/calc.py",
+                                                     "old_text": "somma", "new_text": "add"}},
+                 {"name": "read_file", "arguments": {"path": "progetto/src/calc.py"}}]
+        w = tools.ToolWorker(reg2, calls)
+        got = {}
+        w.call_done.connect(lambda i, text, e: got.__setitem__(i, text))
+        w.run()
+        assert "def add" in got[2] and "Same call" not in got[2], got[2]
+
+    # rientro sbagliato copiando da read_file (visto con lfm2.5:24b): stesse
+    # righe a meno del rientro, una sola volta → si applica rientrando
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp) / "p"
+        root.mkdir()
+        main = root / "main.py"
+        main.write_text('def main():\n    print("5 - 3 =", sottrai(5, 3))\n    x = 1\n'
+                        '\n\ndef altro():\n    x = 1\n')
+        reg = tools.ToolRegistry(write_tools.make_write_tools([file_tools.Shared("p", root, True)]))
+        out, err = tools.run_call(reg, {"name": "edit_file", "arguments": {
+            "path": "p/main.py", "old_text": '      print("5 - 3 =", sottrai(5, 3))',
+            "new_text": '      print("5 - 3 =", differenza(5, 3))\n      y = 2'}})
+        assert not err and "re-indented" in out, out
+        assert main.read_text().startswith(
+            'def main():\n    print("5 - 3 =", differenza(5, 3))\n    y = 2\n    x = 1\n'), \
+            main.read_text()
+        out, err = tools.run_call(reg, {"name": "edit_file", "arguments": {
+            "path": "p/main.py", "old_text": "  x = 1", "new_text": "  x = 2"}})
+        assert err and "appears 2 times" in out, out             # sottostringa: due volte
+        out, err = tools.run_call(reg, {"name": "edit_file", "arguments": {
+            "path": "p/main.py", "old_text": "\tx = 1\n", "new_text": "\tx = 2\n"}})
+        assert err and "not found" in out, out                    # ambiguo: due righe uguali
+
+    # argomenti lunghi: per i tool di scrittura il tetto è più alto
+    big = tools.parse_calls([{"function": {"name": "write_file", "arguments": {
+        "path": "p/a.txt", "content": "x" * 50_000}}}])
+    assert "_too_long" not in big[0]["arguments"]
+    assert "write_file" in write_tools.WRITE_NOTE and "approves" in write_tools.WRITE_NOTE
+
+
+def test_change_approval_gate_and_card():
+    """0.5, W2: conferma delle modifiche tra il thread dei tool e la UI."""
+    import threading
+    from pathlib import Path
+
+    from olladesk import tools, write_tools
+    from olladesk.widgets import message
+
+    ch = write_tools.Change("edit", "p/a.txt", Path("/x/a.txt"),
+                            "--- a/p/a.txt\n+++ b/p/a.txt\n@@ -1 +1 @@\n-vecchio\n+nuovo\n")
+    asked: list = []
+    gate = write_tools.ApprovalGate(asked.append)
+
+    def run(change, out):
+        try:
+            out.append(gate.ask(change))
+        except tools.ToolError as e:
+            out.append(str(e))
+
+    def ask_in_thread(change):
+        out: list = []
+        t = threading.Thread(target=run, args=(change, out))
+        t.start()
+        for _ in range(200):
+            if gate.pending() is not None or out:
+                break
+            threading.Event().wait(0.01)
+        return t, out
+
+    # Applica
+    t, out = ask_in_thread(ch)
+    req = gate.pending()
+    assert req is not None and asked == [req] and req.view() == {
+        "id": 1, "kind": "edit", "label": "p/a.txt", "diff": ch.diff, "added": 1, "removed": 1}
+    assert not gate.resolve(2, "apply") and not gate.resolve(1, "boh")
+    assert gate.resolve(1, "apply")
+    t.join(2)
+    assert out == [True] and gate.pending() is None and not gate.resolve(1, "reject")
+    # Rifiuta: la stessa modifica non si ripropone, una diversa sì
+    t, out = ask_in_thread(ch)
+    assert gate.resolve(gate.pending().id, "reject")
+    t.join(2)
+    assert out == [False]
+    t, out = ask_in_thread(ch)
+    t.join(2)
+    assert "already rejected" in out[0] and len(asked) == 2
+    other = write_tools.Change("mkdir", "p/d", Path("/x/d"))
+    # consenti per il resto: le richieste dopo passano senza chiedere
+    t, out = ask_in_thread(other)
+    assert gate.resolve(gate.pending().id, "allow_rest")
+    t.join(2)
+    t, out2 = ask_in_thread(write_tools.Change("create", "p/b.txt", Path("/x/b.txt"), "+b"))
+    t.join(2)
+    assert out == [True] and out2 == [True] and len(asked) == 3
+    # chiusura (Stop, uscita) durante l'attesa: il thread riparte con un rifiuto
+    gate2 = write_tools.ApprovalGate()
+    gate = gate2
+    t, out = ask_in_thread(other)
+    closed = gate2.close()
+    t.join(2)
+    assert closed is not None and closed.id == 1 and "stopped" in out[0]
+    assert gate2.close() is None
+    t, out = ask_in_thread(other)
+    t.join(2)
+    assert "stopped" in out[0]
+    # tetto dei giri con la scrittura e stato «in attesa» (bolla e telefono)
+    assert tools.round_note(1, 12) == "[tool round 1 of 12]"
+    assert "only 2 left" in tools.round_note(10, 12)
+    assert tools.calls_view([], {"calls": [{"name": "edit_file", "waiting": True}]})[0][
+        "state"] == "waiting"
+    from olladesk import companion
+    phone = companion.phone_tools([{"name": "edit_file", "arguments": {}, "result": "",
+                                    "error": False, "state": "waiting"}])
+    assert phone[0]["waiting"] and phone[0]["running"]
+
+    # scheda nella bolla
+    from PySide6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    w = message.MessageWidget("assistant", "")
+    view = {"id": 7, "kind": "edit", "label": "p/a.txt", "diff": ch.diff,
+            "added": 1, "removed": 1}
+    card = w.show_change(view)
+    assert "p/a.txt" in card.title.text() and "+1 −1" in card.title.text()
+    assert not card.diff.isHidden() and "nuovo" in card.diff.toPlainText()
+    got: list = []
+    card.decided.connect(lambda i, d: got.append((i, d)))
+    card.rest_btn.click()
+    assert got == [(7, "allow_rest")] and not card.apply_btn.isEnabled()
+    w.clear_change(8)                       # altra richiesta: resta
+    assert w.change_card is card
+    w.clear_change(7)
+    assert w.change_card is None
+    card = w.show_change({"id": 8, "kind": "mkdir", "label": "p/d", "diff": ""})
+    assert card.diff.isHidden() and "cartella" in card.title.text()
+    w.set_tool_calls([{"name": "make_dir", "arguments": {}, "result": "", "error": False,
+                       "state": "waiting"}])
+    assert "conferma" in w.tools_btn.text()
+    html = message.diff_html("+<b>\n-x\n ctx", "#999")
+    assert "&lt;b&gt;" in html and message.DIFF_ADD_COLORS[0] in html
+    assert message.DIFF_DEL_COLORS[1] in message.diff_html("-x", "#999", dark=False)
+    w.deleteLater()
+
+
 def test_web_search_tool():
     """Il tool web_search: query su una riga, errori e riserva come testo al modello."""
     from unittest.mock import patch

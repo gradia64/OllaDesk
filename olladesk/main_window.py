@@ -29,7 +29,7 @@ from PySide6.QtWidgets import (
 
 from . import __version__, app_update, companion, config, icons, theme, tools, updater, web_search
 from .i18n import _
-from .engine import ChatEngine
+from .engine import ChatEngine, chat_tools_level
 from .ollama_client import shutdown_workers
 from .widgets.chat_area import ChatArea
 from .widgets.model_manager import ModelManagerDialog
@@ -256,7 +256,8 @@ class MainWindow(QMainWindow):
         self.chat_area.sendRequested.connect(self._on_send)
         self.chat_area.stopRequested.connect(self._on_stop)
         self.chat_area.thinkingToggled.connect(self._on_thinking_toggled)
-        self.chat_area.toolsToggled.connect(self._on_tools_toggled)
+        self.chat_area.toolsLevelChanged.connect(self._on_tools_level)
+        self.chat_area.changeDecided.connect(self._on_change_decided)
 
         self.burger.clicked.connect(self._toggle_sidebar)
         self.new_chat_btn.clicked.connect(self._new_chat)
@@ -277,6 +278,8 @@ class MainWindow(QMainWindow):
         e.text_chunk.connect(self._on_text_chunk)
         e.think_chunk.connect(self._on_think_chunk)
         e.tool_activity.connect(self._on_tool_activity)
+        e.change_requested.connect(self._on_change_requested)
+        e.change_resolved.connect(self._on_change_resolved)
         e.generation_finished.connect(self._on_generation_finished)
         e.notice.connect(self._on_notice)
         e.status_changed.connect(self._on_status_changed)
@@ -534,7 +537,7 @@ class MainWindow(QMainWindow):
 
     def _render_chat(self, chat: dict) -> None:
         self.chat_area.clear_messages()
-        self.chat_area.set_tools(chat.get("tools") is True)
+        self.chat_area.set_tools(chat_tools_level(chat))
         msgs = chat["messages"]
         for i, m in enumerate(msgs):
             is_answer = m["role"] == "assistant"
@@ -558,7 +561,7 @@ class MainWindow(QMainWindow):
         if self.model_combo.isEnabled():
             self.model_combo.setCurrentIndex(-1)
         self.chat_area.clear_messages()
-        self.chat_area.set_tools(False)   # spenti di default in ogni chat nuova
+        self.chat_area.set_tools("off")   # spenti di default in ogni chat nuova
         self.sidebar.set_chats(self.engine.chats(), None)
         self._sync_busy_ui()
         self.chat_area.focus_input()
@@ -571,7 +574,7 @@ class MainWindow(QMainWindow):
             if self._view_id == chat_id:
                 self._view_id = None
                 self.chat_area.clear_messages()
-                self.chat_area.set_tools(False)
+                self.chat_area.set_tools("off")
             self.sidebar.set_chats(self.engine.chats(), self._view_id)
             self.chat_area.add_system_note(_("⚠ Conversazione non leggibile dal disco: rimossa dall'elenco."))
             return
@@ -611,7 +614,7 @@ class MainWindow(QMainWindow):
         if self._view_id == chat_id:
             self._view_id = None
             self.chat_area.clear_messages()
-            self.chat_area.set_tools(False)
+            self.chat_area.set_tools("off")
         self.sidebar.set_chats(self.engine.chats(), None)
 
     def _focus_chat_search(self) -> None:
@@ -651,6 +654,9 @@ class MainWindow(QMainWindow):
             self.chat_area.stream_tool_calls(calls)
         if text:
             self.chat_area.stream_text(text)
+        change = self.engine.pending_change()
+        if change is not None:
+            self.chat_area.show_change(change)
 
     def _on_send(self, text: str) -> None:
         if self._busy():
@@ -687,7 +693,7 @@ class MainWindow(QMainWindow):
         self.engine.send(
             self._view_id, text, model, attachments=atts, web=web_on,
             think=bool(self.settings.get("thinking", True)),
-            tools=self.chat_area.tools_active(),
+            tools=self.chat_area.tools_level(),
         )
 
     def _on_stop(self) -> None:
@@ -704,7 +710,7 @@ class MainWindow(QMainWindow):
         if self._view_id == chat_id:
             self._view_id = None
             self.chat_area.clear_messages()
-            self.chat_area.set_tools(False)
+            self.chat_area.set_tools("off")
             self._sync_busy_ui()
 
     def _on_user_message(self, chat_id: str, msg: dict) -> None:
@@ -743,6 +749,24 @@ class MainWindow(QMainWindow):
     def _on_tool_activity(self, chat_id: str, _event: dict) -> None:
         if self._viewing(chat_id):
             self.chat_area.stream_tool_calls(self.engine.partial_tools())
+
+    def _on_change_requested(self, chat_id: str, view: dict) -> None:
+        # anche con la finestra in secondo piano: la risposta è ferma finché
+        # l'utente non sceglie
+        QApplication.alert(self)
+        if self._viewing(chat_id):
+            self.chat_area.show_change(view)
+        else:
+            self.chat_area.add_system_note(
+                _("Il modello vuole modificare un file in un'altra conversazione e aspetta "
+                  "la tua conferma: aprila per vedere la modifica."))
+
+    def _on_change_resolved(self, chat_id: str, info: dict) -> None:
+        if self._viewing(chat_id):
+            self.chat_area.clear_change(info.get("id"))
+
+    def _on_change_decided(self, req_id: int, decision: str) -> None:
+        self.engine.resolve_change(req_id, decision)
 
     def _on_think_chunk(self, chat_id: str, chunk: str) -> None:
         if self._viewing(chat_id):
@@ -793,11 +817,11 @@ class MainWindow(QMainWindow):
 
     # ------------------------------------------------------- strumenti on/off
 
-    def _on_tools_toggled(self, on: bool) -> None:
+    def _on_tools_level(self, level: str) -> None:
         # una chat già salvata ricorda subito la scelta; una nuova la
         # riceve con il primo messaggio
         if self._view_id and self.engine.chat(self._view_id) is not None:
-            self.engine.set_chat_tools(self._view_id, on)
+            self.engine.set_chat_tools(self._view_id, level)
 
     # ------------------------------------------------------- thinking on/off
 

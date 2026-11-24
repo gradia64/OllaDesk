@@ -93,13 +93,25 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   conversazione. Finché il modello pensa non si vedono solo i puntini: la
   bolla mostra «sta pensando…» e poi il testo del ragionamento.
 - **Strumenti (🔧, spenti di default)**: con i modelli che chiamano i tool
-  (badge 🔧 accanto al selettore) il pulsante 🔧 dell'input permette al modello
-  di leggere da solo, mentre risponde, le cartelle e i file allegati alla
-  conversazione: elencare una cartella, leggere un file a blocchi di 400 righe
-  (anche PDF e documenti), cercare un testo nei file di testo e codice. Solo
-  lettura e solo ciò che è stato allegato, con le stesse esclusioni della
-  cartella come contesto (nascosti, dipendenze, `.gitignore`, credenziali,
-  collegamenti che escono). Con la ricerca web (🌐) accesa il modello cerca
+  (badge 🔧 accanto al selettore) il menu 🔧 dell'input sceglie, per ogni
+  conversazione, che cosa il modello può fare da solo, mentre risponde, con le
+  cartelle e i file allegati: con «Solo lettura» elencare una cartella, leggere
+  un file a blocchi di 400 righe (anche PDF e documenti), cercare un testo nei
+  file di testo e codice; con «Scrivere file» anche creare file di testo e
+  cartelle e modificare un file (tutto o un pezzo di testo esatto). Ogni
+  modifica aspetta la tua conferma: la bolla mostra il diff con *Applica*,
+  *Rifiuta* e *Consenti per il resto della risposta*, e la risposta resta
+  ferma finché non scegli (Stop o la chiusura dell'app valgono come rifiuto);
+  il telefono mostra la richiesta, ma si conferma solo dal PC, e una modifica
+  rifiutata non si ripropone nella stessa risposta. Scrittura atomica, solo
+  file di testo fino a 512 KB; un file allegato da solo si può modificare, ma
+  accanto non si crea nulla. «Accesso completo» per ora vale come «Scrivere
+  file» (spostare e cancellare arriveranno dopo). La chiave inglese è grigia,
+  blu o ambra secondo il livello. Sempre e solo ciò che è stato allegato, con
+  le stesse esclusioni della cartella come contesto anche per scrivere
+  (nascosti, dipendenze, `.gitignore`, credenziali, collegamenti che escono);
+  niente comandi né git.
+  Con la ricerca web (🌐) accesa il modello cerca
   anche sul web quando gli serve, con il provider delle impostazioni e una
   query scritta da lui, invece della ricerca automatica prima della risposta,
   e può aprire una delle pagine trovate per leggerne il testo (solo pagine
@@ -107,10 +119,11 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   fila gli strumenti web vengono tolti e il modello risponde senza; con la
   ricerca il modello riceve anche la data di oggi, per non cercare notizie
   dell'anno sbagliato;
-  con 🌐 spenta non va in rete. Al massimo 8 giri di strumenti per risposta: il
+  con 🌐 spenta non va in rete. Al massimo 8 giri di strumenti per risposta (12 con la scrittura): il
   modello sa quanti gliene restano (all'ultimo gli si chiede di rispondere), e una lettura identica a una già fatta non
-  si ripete. Sa anche che i file condivisi sono in sola lettura, così non dice
-  di averli modificati. Le chiamate compaiono nella bolla in un blocco «🔧 Strumenti usati» richiudibile,
+  si ripete. In «Solo lettura» sa anche che i file condivisi non si modificano, così non dice
+  di averli modificati; con la scrittura sa che ogni modifica va confermata e
+  che non deve annunciarne una che lo strumento non ha confermato. Le chiamate compaiono nella bolla in un blocco «🔧 Strumenti usati» richiudibile,
   con argomenti e inizio del risultato (durante la risposta mostra lo strumento
   in corso), e le fonti delle ricerche finiscono in «🌐 Fonti»
   (le prime 3 di ogni ricerca, al massimo 10). Il testo di file e pagine
@@ -615,6 +628,7 @@ olladesk/
   engine.py                 motore di chat: conversazioni, generazione, salvataggio
   tools.py                  strumenti per il modello: registro, chiamate, esecuzione
   file_tools.py             tool di lettura sulle cartelle e i file allegati alla chat
+  write_tools.py            tool di scrittura con conferma (diff) e copie per l'annullamento
   workers.py                registro dei worker QThread attivi e in arresto
   companion.py              companion web: server HTTP in LAN e abbinamento
   web/                      pagina mobile della companion (HTML, CSS, JS, manifest e icone)

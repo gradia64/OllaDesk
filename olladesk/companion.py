@@ -484,7 +484,9 @@ def phone_tools(calls: list[dict]) -> list[dict]:
             result = result[:PHONE_TOOL_RESULT_CHARS] + "…"
         out.append({"name": c["name"], "args": tools.arguments_summary(c.get("arguments") or {}),
                     "result": result, "error": bool(c.get("error")),
-                    "running": c.get("state") == "running"})
+                    "running": c.get("state") in ("running", "waiting"),
+                    # modifica ai file che aspetta la conferma (solo dal PC)
+                    "waiting": c.get("state") == "waiting"})
     return out
 
 

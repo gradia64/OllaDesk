@@ -581,6 +581,132 @@ out, err = tools.run_call(reg, {"name": "read_file", "arguments": {"path": "cond
 assert not err and "contenuto della nota" in out, out
 print("9h. tool sui file condivisi nella chat OK")
 
+# 9h2. livelli dei tool (0.5, W1): lettura salvata come True (leggibile dalla
+# 0.4), scrittura come stringa; con la scrittura i tool e la nota cambiano
+from olladesk import write_tools  # noqa: E402
+
+engine.set_chat_tools(c9h, "read")
+assert config.load_chat(c9h)["tools"] is True
+n0 = len(payloads)
+engine.send(c9h, "correggi la nota", "finto", tools="write")
+assert wait_until(lambda: not engine.busy())
+assert config.load_chat(c9h)["tools"] == "write"
+assert [t["function"]["name"] for t in payloads[n0]["tools"]] == [
+    "edit_file", "list_files", "make_dir", "read_file", "search_text", "write_file"]
+assert payloads[n0]["messages"][0]["content"] == "sei un test\n\n" + write_tools.WRITE_NOTE
+assert "read-only" not in str(payloads[n0]["tools"])
+n0 = len(payloads)
+engine.send(c9h, "e con un modello senza tool?", "finto-due")    # None: vale la chat
+assert wait_until(lambda: not engine.busy())
+assert "tools" not in payloads[n0]
+assert payloads[n0]["messages"][0]["content"].endswith(file_tools.READ_ONLY_NOTE)
+engine.set_chat_tools(c9h, "full")
+assert config.load_chat(c9h)["tools"] == "full"
+engine.set_chat_tools(c9h, "boh")                                # valore ignoto = spento
+assert "tools" not in config.load_chat(c9h)
+engine.set_chat_tools(c9h, True)
+print("9h2. livelli dei tool per chat OK")
+
+# 9h3. conferma delle modifiche (0.5, W2): la risposta aspetta la scelta
+# dell'utente; Applica, Rifiuta (e niente seconda richiesta identica),
+# «consenti per il resto della risposta», Stop durante l'attesa
+requests: list[tuple] = []
+resolved: list[tuple] = []
+engine.change_requested.connect(lambda cid, v: requests.append((cid, v)))
+engine.change_resolved.connect(lambda cid, info: resolved.append((cid, info)))
+nota = shared_dir / "nota.txt"
+EDIT = {"name": "edit_file", "arguments": {"path": "condivisa/nota.txt",
+                                           "old_text": "contenuto", "new_text": "testo"}}
+engine.set_chat_tools(c9h, "write")
+
+# Applica
+fake.write_rounds = [[EDIT]]
+requests.clear()
+resolved.clear()
+n0 = len(payloads)
+engine.send(c9h, "modifica la nota", "finto")
+assert wait_until(lambda: engine.pending_change() is not None)
+view = engine.pending_change()
+assert requests and requests[-1] == (c9h, view)
+assert view["kind"] == "edit" and view["label"] == "condivisa/nota.txt", view
+assert "-contenuto della nota" in view["diff"] and "+testo della nota" in view["diff"]
+assert (view["added"], view["removed"]) == (1, 1)
+assert engine.partial_tools()[-1]["state"] == "waiting"
+assert any(a[1]["state"] == "waiting" for a in activity)
+assert engine.busy() and nota.read_text() == "contenuto della nota\n"
+assert wait_until(lambda: False, 200) is False and len(payloads) == n0 + 1   # nessun giro avanti
+assert not engine.resolve_change(view["id"] + 1, "apply")      # richiesta sbagliata
+assert not engine.resolve_change(view["id"], "boh")            # scelta ignota
+assert engine.resolve_change(view["id"], "apply")
+assert not engine.resolve_change(view["id"], "apply")          # già decisa
+assert resolved[-1] == (c9h, {"id": view["id"], "decision": "apply"})
+assert wait_until(lambda: not engine.busy())
+assert nota.read_text() == "testo della nota\n"
+saved = config.load_chat(c9h)["messages"][-1]
+call = saved["tool_rounds"][0]["calls"][0]
+assert not call["error"] and "waiting" not in call, call
+# con la scrittura il tetto dei giri sale
+assert payloads[n0 + 1]["messages"][-1]["content"].endswith(
+    f"[tool round 1 of {tools.MAX_WRITE_ROUNDS}]")
+print("9h3. conferma: Applica OK")
+
+# Rifiuta: la stessa modifica rifatta nel giro dopo non si ripropone
+nota.write_text("contenuto della nota\n")
+fake.write_rounds = [[EDIT], [EDIT]]
+requests.clear()
+engine.send(c9h, "modifica di nuovo", "finto")
+assert wait_until(lambda: engine.pending_change() is not None)
+assert engine.resolve_change(engine.pending_change()["id"], "reject")
+assert wait_until(lambda: not engine.busy())
+assert len(requests) == 1, requests
+calls = [c for r in config.load_chat(c9h)["messages"][-1]["tool_rounds"] for c in r["calls"]]
+assert calls[0]["error"] and "rejected this change" in calls[0]["result"], calls[0]
+assert calls[1]["error"] and "already rejected" in calls[1]["result"], calls[1]
+assert nota.read_text() == "contenuto della nota\n"
+print("9h3. conferma: Rifiuta e niente richiesta ripetuta OK")
+
+# consenti per il resto della risposta: la seconda scrittura non chiede
+fake.write_rounds = [
+    [{"name": "write_file", "arguments": {"path": "condivisa/a.txt", "content": "a\n"}}],
+    [{"name": "write_file", "arguments": {"path": "condivisa/b.txt", "content": "b\n"}}]]
+requests.clear()
+engine.send(c9h, "modifica: crea due file", "finto")
+assert wait_until(lambda: engine.pending_change() is not None)
+assert engine.pending_change()["kind"] == "create"
+assert engine.resolve_change(engine.pending_change()["id"], "allow_rest")
+assert wait_until(lambda: not engine.busy())
+assert len(requests) == 1
+assert (shared_dir / "a.txt").read_text() == "a\n" and (shared_dir / "b.txt").read_text() == "b\n"
+# la risposta dopo chiede di nuovo
+fake.write_rounds = [[{"name": "write_file", "arguments": {"path": "condivisa/c.txt",
+                                                           "content": "c\n"}}]]
+engine.send(c9h, "modifica ancora", "finto")
+assert wait_until(lambda: engine.pending_change() is not None)
+assert engine.resolve_change(engine.pending_change()["id"], "reject")
+assert wait_until(lambda: not engine.busy())
+assert len(requests) == 2 and not (shared_dir / "c.txt").exists()
+print("9h3. conferma: consenti per il resto della risposta OK")
+
+# Stop durante l'attesa: vale come rifiuto, nessun giro dopo, niente file
+fake.write_rounds = [[{"name": "write_file", "arguments": {"path": "condivisa/d.txt",
+                                                           "content": "d\n"}}]]
+resolved.clear()
+n0 = len(payloads)
+engine.send(c9h, "modifica e fermati", "finto")
+assert wait_until(lambda: engine.pending_change() is not None)
+rid = engine.pending_change()["id"]
+t0 = time.monotonic()
+engine.stop()
+assert time.monotonic() - t0 < 1.0, "lo stop ha atteso la conferma"
+assert not engine.busy() and engine.pending_change() is None
+assert resolved == [(c9h, {"id": rid, "decision": ""})], resolved
+assert not engine.resolve_change(rid, "apply")
+assert wait_until(lambda: False, 300) is False
+assert len(payloads) == n0 + 1 and not (shared_dir / "d.txt").exists()
+fake.write_rounds = []
+engine.set_chat_tools(c9h, True)
+print("9h3. conferma: Stop durante l'attesa OK")
+
 # 9i. ricerca web come tool (T4): con 🌐 e i tool attivi niente ricerca prima
 # della risposta, il modello chiama web_search; senza 🌐 il tool non c'è
 searches: list[str] = []

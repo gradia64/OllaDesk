@@ -280,19 +280,23 @@ assert wait_until(lambda: not win.sidebar.showing_archive() and "chat_a" in side
 assert "archived" not in config.load_chat("chat_a")
 print("6. archivio dal telefono, PC aggiornato OK")
 
-# ------------------------------- 7. interruttore degli strumenti (T2)
+# ------------------------------- 7. livello degli strumenti (T2, 0.5 W1)
 
 from olladesk import tools as tools_mod  # noqa: E402
 
 btn = win.chat_area.tools_btn
+level = win.chat_area.tools_level
+pick = lambda lv: win.chat_area._tools_actions[lv].trigger()  # noqa: E731 — voce del menu 🔧
 win._new_chat()
 # il pulsante dipende solo dal modello: i tool sui file condivisi ci sono sempre
 engine.tools = tools_mod.ToolRegistry([tools_mod.Tool("eco", "Ripete", lambda a: "eco")])
 win.model_combo.setCurrentIndex(win.model_combo.findData("finto"))
-assert btn.isHidden() and not btn.isChecked()        # modello senza tool: niente pulsante
+assert btn.isHidden() and level() == "off"           # modello senza tool: niente pulsante
 win.model_combo.setCurrentIndex(win.model_combo.findData("finto-due"))
-assert wait_until(lambda: not btn.isHidden()) and not btn.isChecked()   # spento di default
-btn.click()
+assert wait_until(lambda: not btn.isHidden()) and level() == "off"   # spento di default
+assert btn.menu() is not None and list(win.chat_area._tools_actions) == [
+    "off", "read", "write", "full"]
+pick("read")
 n0 = len(fake.payloads)
 win.chat_area.input.setPlainText("usa lo strumento")
 win.chat_area._emit_send()
@@ -319,19 +323,20 @@ assert "Strumenti usati (1)" in last_answer().tools_btn.text()
 # il telefono le vede nella conversazione (solo testo, già ridotte)
 st, snap = h.get_json(f"/api/chats/{cid7}", TOKEN)
 assert st == 200 and snap["messages"][-1]["tools"] == [
-    {"name": "eco", "args": "testo=ciao", "result": "eco", "error": False, "running": False}]
+    {"name": "eco", "args": "testo=ciao", "result": "eco", "error": False, "running": False,
+     "waiting": False}]
 # stesso chat con un modello senza tool: pulsante nascosto, scelta salvata, niente tool
 win.model_combo.setCurrentIndex(win.model_combo.findData("finto"))
-assert btn.isHidden() and btn.isChecked()
+assert btn.isHidden() and level() == "read"
 win.chat_area.input.setPlainText("ciao senza")
 win.chat_area._emit_send()
 assert wait_until(lambda: not engine.busy())
 assert "tools" not in fake.payloads[-1] and config.load_chat(cid7)["tools"] is True
 # la scelta è della conversazione: un'altra chat ha la sua
 win._open_chat("chat_a")
-assert not btn.isChecked()
+assert level() == "off"
 win._open_chat(cid7)
-assert btn.isChecked()
+assert level() == "read"
 # dal telefono (senza interruttore) vale la scelta salvata nella chat
 st, snap = h.get_json(f"/api/chats/{cid7}", TOKEN)
 phone = h.SSE(f"/api/chats/{cid7}/events?after={snap['seq']}", TOKEN)
@@ -347,13 +352,80 @@ assert wait_until(lambda: "done" in phone.kinds())
 assert any(a.get("tools") for a in phone.of("answer")), phone.of("answer")
 assert phone.of("done")[-1]["tools"][0]["name"] == "eco"
 phone.close()
-# spegnerlo in una chat salvata vale subito, anche senza inviare
+# cambiarlo in una chat salvata vale subito, anche senza inviare
 win.model_combo.setCurrentIndex(win.model_combo.findData("finto-due"))
-btn.click()
+pick("write")
+assert config.load_chat(cid7)["tools"] == "write" and "Scrivere file" in btn.toolTip()
+win._open_chat("chat_a")
+win._open_chat(cid7)
+assert level() == "write" and win.chat_area._tools_actions["write"].isChecked()
+pick("off")
 assert "tools" not in config.load_chat(cid7)
 win._new_chat()
-assert not btn.isChecked()
-print("7. interruttore degli strumenti per chat OK")
+assert level() == "off"
+print("7. livello degli strumenti per chat OK")
+
+# ------------------------- 8. conferma delle modifiche nella bolla (0.5 W2)
+
+from pathlib import Path  # noqa: E402
+
+folder = Path(tempfile.mkdtemp()) / "progetto"
+folder.mkdir()
+(folder / "nota.txt").write_text("prima riga\n")
+fake.write_rounds = [[{"name": "edit_file", "arguments": {
+    "path": "progetto/nota.txt", "old_text": "prima", "new_text": "nuova"}}]]
+win.model_combo.setCurrentIndex(win.model_combo.findData("finto-due"))
+cid8 = engine.new_chat_id()
+win._view_id = cid8
+engine.send(cid8, "modifica la nota", "finto-due", tools="write",
+            attachments=[{"path": str(folder), "name": "progetto/", "kind": "folder"}])
+assert wait_until(lambda: engine.pending_change() is not None)
+win._open_chat(cid8)                              # la chat nasce col primo messaggio
+
+
+def card():
+    w = win.chat_area._stream_widget
+    return w.change_card if w is not None else None
+
+
+assert wait_until(lambda: card() is not None)
+assert "progetto/nota.txt" in card().title.text() and "+nuova riga" in card().diff.toPlainText()
+assert "attende la tua conferma" in win.chat_area._stream_widget.tools_btn.text()
+# il telefono vede l'attesa, ma non può approvare
+st, snap = h.get_json(f"/api/chats/{cid8}", TOKEN)
+phone = h.SSE(f"/api/chats/{cid8}/events?after={snap['seq']}", TOKEN)
+assert wait_until(lambda: phone.of("answer")), phone.kinds()
+assert phone.of("answer")[-1]["tools"][0]["waiting"] is True, phone.of("answer")
+phone.close()
+# cambiare conversazione non chiude la richiesta: riaprendo la chat torna
+win._open_chat("chat_a")
+assert card() is None and engine.pending_change() is not None
+win._open_chat(cid8)
+assert wait_until(lambda: card() is not None)
+card().apply_btn.click()
+assert wait_until(lambda: not engine.busy())
+assert (folder / "nota.txt").read_text() == "nuova riga\n"
+assert win.chat_area._stream_widget is None
+# richiesta che arriva mentre si guarda un'altra chat: un avviso lo dice
+notes = []
+win.chat_area.add_system_note = notes.append
+win._open_chat("chat_a")
+fake.write_rounds = [[{"name": "edit_file", "arguments": {
+    "path": "progetto/nota.txt", "old_text": "nuova", "new_text": "terza"}}]]
+engine.send(cid8, "modifica ancora", "finto-due")
+assert wait_until(lambda: engine.pending_change() is not None)
+assert wait_until(lambda: notes) and "aspetta la tua conferma" in notes[0], notes
+win.chat_area.add_system_note = real_note
+# Rifiuta dalla scheda
+win._open_chat(cid8)
+assert wait_until(lambda: card() is not None)
+card().reject_btn.click()
+assert wait_until(lambda: not engine.busy())
+assert (folder / "nota.txt").read_text() == "nuova riga\n"
+# chiusura dell'app con una richiesta aperta (sotto): vale come rifiuto
+engine.send(cid8, "modifica per l'ultima volta", "finto-due")
+assert wait_until(lambda: engine.pending_change() is not None)
+print("8. conferma delle modifiche nella bolla OK")
 
 win._really_quit = True
 win.close()

@@ -11,6 +11,7 @@ import uuid
 from pathlib import Path
 
 from PySide6.QtCore import QEvent, QPoint, QSize, Qt, QTimer, Signal
+from PySide6.QtGui import QAction, QActionGroup
 from PySide6.QtWidgets import (
     QFileDialog,
     QFrame,
@@ -27,7 +28,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .. import config, context, icons, portal, theme
+from .. import config, context, icons, portal, theme, tools
 from .. import __version__
 from ..i18n import N_, _
 from .message import MessageWidget, SystemNoteWidget
@@ -218,7 +219,8 @@ class ChatArea(QWidget):
     sendRequested = Signal(str)
     stopRequested = Signal()
     thinkingToggled = Signal(bool)
-    toolsToggled = Signal(bool)
+    toolsLevelChanged = Signal(str)   # livello dei tool: off, read, write, full
+    changeDecided = Signal(int, str)  # richiesta di modifica: id, scelta dell'utente
 
     def __init__(self, theme_name: str = "dark", show_ts: bool = False, parent=None):
         super().__init__(parent)
@@ -320,21 +322,30 @@ class ChatArea(QWidget):
         self._update_think_icon()
         fl.addWidget(self.think_btn)
 
-        # strumenti (tool): scelta della conversazione, spenta di default;
+        # strumenti (tool): livello della conversazione, spento di default;
         # visibile solo con un modello che sa chiamarli (capacità «tools»)
         self.tools_btn = QToolButton(self.input_frame)
-        self.tools_btn.setCheckable(True)
         self.tools_btn.setIconSize(QSize(18, 18))
-        self.tools_btn.setToolTip(
-            _("Strumenti: acceso (icona colorata), il modello può leggere le cartelle e i "
-              "file allegati alla conversazione mentre risponde e, con la ricerca web accesa, "
-              "cercare da solo sul web;\nspento (icona grigia), risponde come sempre. "
-              "Vale per questa conversazione.")
-        )
+        self.tools_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.tools_btn.setStyleSheet("QToolButton::menu-indicator { image: none; width: 0px; }")
         self.tools_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.tools_btn.toggled.connect(self._on_tools_toggled)
+        self._tools_level = "off"
+        self._tools_menu = QMenu(self.tools_btn)
+        self._tools_menu.setToolTipsVisible(True)
+        group = QActionGroup(self._tools_menu)
+        group.setExclusive(True)
+        self._tools_actions: dict[str, QAction] = {}
+        for level, label, tip in self._tools_level_texts():
+            act = QAction(label, self._tools_menu, checkable=True)
+            act.setToolTip(tip)
+            act.setData(level)
+            group.addAction(act)
+            self._tools_menu.addAction(act)
+            self._tools_actions[level] = act
+        group.triggered.connect(lambda act: self._on_tools_level(act.data()))
+        self.tools_btn.setMenu(self._tools_menu)
         self.tools_btn.setVisible(False)
-        self._update_tools_icon()
+        self._show_tools_level()
         fl.addWidget(self.tools_btn)
 
         self.input = ChatInput(self.input_frame)
@@ -561,6 +572,20 @@ class ChatArea(QWidget):
             self._stream_widget.set_tool_calls(calls)
             QTimer.singleShot(0, self, self._follow_stream)
 
+    def show_change(self, view: dict) -> None:
+        """Richiesta di conferma di una modifica nella risposta in corso."""
+        if self._stream_widget is None:
+            return
+        self._flush_stream()
+        self._flush_thinking()
+        card = self._stream_widget.show_change(view)
+        card.decided.connect(self.changeDecided)
+        QTimer.singleShot(0, self, self._scroll_to_bottom)
+
+    def clear_change(self, req_id: int | None = None) -> None:
+        if self._stream_widget is not None:
+            self._stream_widget.clear_change(req_id)
+
     def _flush_stream(self) -> None:
         if self._stream_widget is not None and self._stream_buffer:
             self._stream_widget.append_stream(self._stream_buffer)
@@ -578,6 +603,7 @@ class ChatArea(QWidget):
         w, self._stream_widget = self._stream_widget, None
         if w is None:
             return
+        w.clear_change()
         if discard_empty and not w.raw:
             # nessun contenuto ricevuto: elimina la bolla vuota (con la sua riga)
             row = w.parentWidget()
@@ -775,7 +801,7 @@ class ChatArea(QWidget):
         icons.set_icon(self.clip_btn, "paperclip", t["dim"], 18, fallback="📎")
         self._update_web_icon()
         self._update_think_icon()
-        self._update_tools_icon()
+        self._show_tools_level()
         self._update_send_icon()
         for btn in self._suggestion_btns:
             icons.set_icon(btn, "sparkles", t["dim"], 15)
@@ -802,31 +828,56 @@ class ChatArea(QWidget):
 
     # ------------------------------------------------------------ strumenti
 
-    def _on_tools_toggled(self, checked: bool) -> None:
-        self._update_tools_icon()
-        self.toolsToggled.emit(checked)
+    @staticmethod
+    def _tools_level_texts() -> list[tuple[str, str, str]]:
+        return [
+            ("off", _("Strumenti spenti"), _("Il modello risponde come sempre.")),
+            ("read", _("Solo lettura"),
+             _("Il modello può leggere le cartelle e i file allegati alla conversazione e, "
+               "con la ricerca web accesa, cercare da solo sul web.")),
+            ("write", _("Scrivere file"),
+             _("Come «Solo lettura», e in più il modello può creare e modificare file di "
+               "testo nelle cartelle e nei file allegati. Ogni modifica va confermata.")),
+            ("full", _("Accesso completo"),
+             _("Come «Scrivere file», e in più il modello può spostare, rinominare e "
+               "cancellare file (nel cestino). Ogni modifica va confermata.")),
+        ]
 
-    def _update_tools_icon(self) -> None:
-        """Chiave inglese grigia da spenta, blu da accesa (come globo e cervello)."""
+    def _on_tools_level(self, level: str) -> None:
+        if level == self._tools_level:
+            return
+        self._tools_level = level
+        self._show_tools_level()
+        self.toolsLevelChanged.emit(level)
+
+    def _show_tools_level(self) -> None:
+        """Chiave inglese grigia da spenta, blu in lettura, ambra quando il
+        modello può modificare i file; voce del menu e suggerimento allineati."""
+        level = self._tools_level
         t = theme.palette_for(self.theme_name)
-        color = theme.WEB_ACTIVE_COLOR if self.tools_btn.isChecked() else t["dim"]
+        color = (t["dim"] if level == "off" else theme.TOOLS_WRITE_COLOR
+                 if level in tools.WRITE_LEVELS else theme.WEB_ACTIVE_COLOR)
         icons.set_icon(self.tools_btn, "wrench", color, 18, fallback="🔧")
+        self._tools_actions[level].setChecked(True)
+        texts = {lv: (label, tip) for lv, label, tip in self._tools_level_texts()}
+        label, tip = texts[level]
+        self.tools_btn.setToolTip(_("Strumenti: {level}").format(level=label) + "\n" + tip
+                                  + "\n" + _("Vale per questa conversazione."))
 
-    def set_tools(self, on: bool) -> None:
-        """Stato della conversazione aperta, senza emettere toolsToggled."""
-        self.tools_btn.blockSignals(True)
-        self.tools_btn.setChecked(on)
-        self.tools_btn.blockSignals(False)
-        self._update_tools_icon()
+    def set_tools(self, level) -> None:
+        """Livello della conversazione aperta (o True/False), senza emettere
+        toolsLevelChanged."""
+        self._tools_level = tools.normalize_level(level)
+        self._show_tools_level()
 
     def set_tools_available(self, on: bool) -> None:
         """Pulsante visibile solo se il modello scelto sa usare i tool."""
         self.tools_btn.setVisible(on)
 
-    def tools_active(self) -> bool:
-        """Scelta della conversazione, anche col pulsante nascosto: con un
+    def tools_level(self) -> str:
+        """Livello della conversazione, anche col pulsante nascosto: con un
         modello senza tool la scelta resta salvata e il motore non li manda."""
-        return self.tools_btn.isChecked()
+        return self._tools_level
 
     # ----------------------------------------------------------------- input
 

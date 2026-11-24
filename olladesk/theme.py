@@ -12,6 +12,7 @@ from PySide6.QtGui import (
 from PySide6.QtWidgets import QApplication
 
 WEB_ACTIVE_COLOR = "#3b82f6"  # blu della ricerca web attiva
+TOOLS_WRITE_COLOR = "#f59e0b"  # ambra: tool che possono modificare i file
 
 
 def resolve_theme(name: str) -> str:

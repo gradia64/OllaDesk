@@ -12,6 +12,9 @@ finto modello scrive «Controllo. » e chiama un tool: «sconosciuto» →
 `inesistente`, «rotto» → `rotto`, «lento» → `lento`, «cerca» → `web_search` (query «rame»), altrimenti `eco`.
 Dopo i risultati (ultimo messaggio `tool`) risponde «Ho letto: <risultato>»;
 con «infinito» richiama `eco` finché la richiesta offre i tool.
+Con «modifica» nell'ultimo messaggio utente e i tool nella richiesta, il giro
+n-esimo della risposta chiama le chiamate di `write_rounds[n]` (lista di
+giri, impostata dal test); finiti i giri risponde come sopra.
 """
 import json
 import threading
@@ -23,6 +26,7 @@ MODELS = ["finto", "finto-due"]
 class FakeOllama:
     def __init__(self):
         self.payloads: list[dict] = []
+        self.write_rounds: list[list[dict]] = []   # giri di chiamate per «modifica»
         self.release = threading.Event()   # sblocca le risposte «lente»
         self.models = list(MODELS)         # installati: /api/pull li aggiunge, /api/delete li toglie
         self.pull_release = threading.Event()   # sblocca un /api/pull in attesa
@@ -110,8 +114,18 @@ class FakeOllama:
                 self.send_response(200)
                 self.send_header("Content-Type", "application/x-ndjson")
                 self.end_headers()
+                done_rounds = 0
+                for m in reversed(body["messages"]):
+                    if m["role"] == "user":
+                        break
+                    if m["role"] == "assistant" and m.get("tool_calls"):
+                        done_rounds += 1
                 try:
-                    if "strumento" in user and offers and (
+                    if "modifica" in user and offers and done_rounds < len(fake.write_rounds):
+                        self._line({"message": {"content": "", "tool_calls": [
+                            {"function": c} for c in fake.write_rounds[done_rounds]]}})
+                        self._line({"done": True})
+                    elif "strumento" in user and offers and (
                             last_role == "user" or "infinito" in user):
                         name = ("inesistente" if "sconosciuto" in user else
                                 "rotto" if "rotto" in user else

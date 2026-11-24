@@ -28,17 +28,43 @@ from PySide6.QtCore import QThread, Signal
 # così deve rispondere (un modello piccolo può chiamare lo stesso tool
 # all'infinito)
 MAX_ROUNDS = 8
+# con la scrittura servono più giri: leggere, modificare, rileggere, e un
+# compito su due file con un modello piccolo arrivava al tetto di 8
+MAX_WRITE_ROUNDS = 12
 # chiamate eseguite al massimo in un giro: il tetto dei giri non ferma un
 # modello che ne chiede cinquanta insieme
 MAX_CALLS_PER_ROUND = 8
 # argomenti di una chiamata (in JSON): oltre, la chiamata è un errore e
 # l'argomento non si salva nella chat
 MAX_ARGS_CHARS = 4_000
+# i tool di scrittura portano il testo del file negli argomenti
+MAX_WRITE_ARGS_CHARS = 200_000
+LARGE_ARGS_TOOLS = frozenset({"write_file", "edit_file"})
 # tetto del risultato di una chiamata, nel turno corrente e nel file della chat
 MAX_RESULT_CHARS = 16_000
 # nei messaggi vecchi (prima dell'ultima risposta) i risultati si accorciano:
 # non servono più per intero e riempirebbero il contesto a ogni turno
 OLD_RESULT_CHARS = 1_000
+
+
+# livelli di accesso dei tool di una conversazione (0.5, W1). Nel file della
+# chat il campo "tools" manca (spento), vale True (sola lettura: lo leggono
+# anche le versioni 0.4) o "write"/"full"
+LEVELS = ("off", "read", "write", "full")
+WRITE_LEVELS = ("write", "full")
+
+
+def normalize_level(value) -> str:
+    """Livello da un valore salvato o passato: True = lettura, il resto spento."""
+    if value is True:
+        return "read"
+    return value if isinstance(value, str) and value in LEVELS else "off"
+
+
+def stored_level(level: str):
+    """Valore da salvare nel campo "tools" della chat (None = da togliere)."""
+    level = normalize_level(level)
+    return None if level == "off" else True if level == "read" else level
 
 
 @dataclass(frozen=True)
@@ -129,7 +155,7 @@ def parse_calls(raw) -> list[dict]:
         if not isinstance(args, dict):
             args = {}
         size = len(json.dumps(args, ensure_ascii=False, default=str))
-        if size > MAX_ARGS_CHARS:
+        if size > (MAX_WRITE_ARGS_CHARS if name in LARGE_ARGS_TOOLS else MAX_ARGS_CHARS):
             args = {"_too_long": size}
         call = {"name": name, "arguments": args}
         if isinstance(item.get("id"), str) and item["id"]:
@@ -140,20 +166,20 @@ def parse_calls(raw) -> list[dict]:
     return calls
 
 
-def round_note(done: int) -> str:
-    """Riga per il modello dopo il giro `done`: quanti giri restano.
+def round_note(done: int, limit: int = MAX_ROUNDS) -> str:
+    """Riga per il modello dopo il giro `done` di `limit`: quanti giri restano.
 
     Senza, un modello piccolo non sa del tetto e continua a chiamare tool
     (otto ricerche quasi uguali) finché il motore non lo ferma.
     """
-    left = MAX_ROUNDS - done
+    left = limit - done
     if left <= 0:
-        return (f"[tool round {done} of {MAX_ROUNDS}: no tool rounds left. "
+        return (f"[tool round {done} of {limit}: no tool rounds left. "
                 "Answer now with what you have.]")
     if left <= 2:
-        return (f"[tool round {done} of {MAX_ROUNDS}: only {left} left. "
+        return (f"[tool round {done} of {limit}: only {left} left. "
                 "Answer with what you have unless another call is really needed.]")
-    return f"[tool round {done} of {MAX_ROUNDS}]"
+    return f"[tool round {done} of {limit}]"
 
 
 # chiamata scritta come testo invece che come tool_calls (formato nativo del
@@ -258,8 +284,9 @@ def run_call(registry: ToolRegistry, call: dict) -> tuple[str, bool]:
         return f"Error: unknown tool '{call.get('name')}'. Available tools: {available}.", True
     args = call.get("arguments") if isinstance(call.get("arguments"), dict) else {}
     if "_too_long" in args:
+        limit = MAX_WRITE_ARGS_CHARS if tool.name in LARGE_ARGS_TOOLS else MAX_ARGS_CHARS
         return (f"Error: the arguments are too long ({args['_too_long']} characters, at most "
-                f"{MAX_ARGS_CHARS}): call the tool again with short arguments."), True
+                f"{limit}): call the tool again with short arguments."), True
     try:
         result = tool.run(args)
     except ToolError as e:
@@ -315,6 +342,9 @@ class ToolWorker(QThread):
                 text, error = run_call(self._registry, call)
                 if not error and tool is not None and tool.read_only:
                     self._seen.setdefault(key, self._round)
+                elif not error and tool is not None:
+                    # dopo una modifica le letture di prima non valgono più
+                    self._seen.clear()
             if self._stopped:
                 return
             self.call_done.emit(i, text, error)
@@ -329,7 +359,8 @@ def calls_view(rounds, open_round: dict | None = None) -> list[dict]:
 
     [{"name", "arguments", "result", "error", "state"}] con state "done"
     per i giri completi (`tool_rounds`) e, per il giro in corso, "running"
-    finché non arriva il risultato. Giri malformati (chat modificate a mano)
+    finché non arriva il risultato ("waiting" mentre una modifica aspetta la
+    conferma dell'utente). Giri malformati (chat modificate a mano)
     si saltano.
     """
     out: list[dict] = []
@@ -343,7 +374,10 @@ def calls_view(rounds, open_round: dict | None = None) -> list[dict]:
         for c in calls:
             if not isinstance(c, dict) or not isinstance(c.get("name"), str):
                 continue
-            state = "done" if kind == "done" or c.get("done") else "running"
+            if kind == "done" or c.get("done"):
+                state = "done"
+            else:
+                state = "waiting" if c.get("waiting") else "running"
             args = c.get("arguments")
             out.append({
                 "name": c["name"],

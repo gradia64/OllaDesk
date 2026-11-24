@@ -89,13 +89,25 @@ License: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   model thinks, the bubble doesn't just show dots: it shows "thinking…" and
   then the reasoning text.
 - **Tools (🔧, off by default)**: with models that can call tools (🔧 badge
-  next to the selector) the 🔧 button in the input lets the model read, on
-  its own while it answers, the folders and files attached to the
-  conversation: list a folder, read a file in chunks of 400 lines (PDFs and
-  documents too), search text in text and code files. Read-only and limited
-  to what was attached, with the same exclusions as a folder as context
-  (hidden files, dependencies, `.gitignore`, credentials, links that leave
-  the folder). With web search (🌐) on, the model also searches the web when
+  next to the selector) the 🔧 menu in the input sets, per conversation, what
+  the model may do on its own while it answers with the folders and files
+  attached to the conversation: with "Read only" list a folder, read a file in
+  chunks of 400 lines (PDFs and documents too), search text in text and code
+  files; with "Write files" also create text files and folders and change a
+  file (all of it or an exact piece of text). Every change waits for your
+  confirmation: the bubble shows the diff with *Apply*, *Reject* and *Allow
+  for the rest of the answer*, and the answer stays paused until you choose
+  (Stop or closing the app count as a rejection); the phone shows the
+  request, but you confirm only on the PC, and a rejected change is not
+  proposed again in the same answer. Atomic writes, text files only, up to
+  512 KB; a file attached on its own can be changed, but nothing can be
+  created next to it. "Full access" is for now the same as "Write files"
+  (moving and deleting files will come later). The wrench is grey, blue or
+  amber depending on the level. Always limited to what was attached, with the
+  same exclusions as a folder as context, for writing too (hidden files,
+  dependencies, `.gitignore`, credentials, links that leave the folder); no
+  commands and no git.
+  With web search (🌐) on, the model also searches the web when
   it needs to, with the provider from the settings and a query it writes
   itself, instead of the automatic search before the answer,
   and it can open one of the pages found to read its text (only pages from
@@ -103,10 +115,11 @@ License: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   tools are removed and the model answers without them; with search the
   model is also given today's date, so it does not look for news from the
   wrong year; with 🌐 off it
-  does not go online. At most 8 tool rounds per answer: the model is told how
-  many are left (after the last one it is asked to answer), and a read identical to an earlier one is not repeated. It
-  is also told that shared files are read-only, so it does not claim to have
-  changed them. Calls appear in the
+  does not go online. At most 8 tool rounds per answer (12 with writing): the model is told how
+  many are left (after the last one it is asked to answer), and a read identical to an earlier one is not repeated. With "Read only" it is also told that shared files are not changed, so it
+  does not claim to have changed them; with writing it is told that every
+  change must be confirmed and that it must not claim a change the tool did
+  not confirm. Calls appear in the
   bubble in a collapsible "🔧 Tools used" block, with arguments and the start
   of the result (while answering it shows the tool in progress), and the
   sources of the searches go into "🌐 Sources" (the first 3 of each
@@ -600,6 +613,7 @@ olladesk/
   engine.py                 chat engine: conversations, generation, saving
   tools.py                  tools for the model: registry, calls, execution
   file_tools.py             read-only tools on the folders and files attached to the chat
+  write_tools.py            write tools: confirmation with a diff, backups for undo
   workers.py                registry of active and stopping QThread workers
   companion.py              web companion: HTTP server on LAN and pairing
   web/                      mobile companion page (HTML, CSS, JS, manifest and icons)

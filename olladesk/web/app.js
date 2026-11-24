@@ -252,9 +252,12 @@ function setTools(target, calls) {
     target.box.insertBefore(target.tools, target.body);
   }
   const running = calls.find((c) => c.running);
-  target.toolsHead.textContent = running
-    ? "🔧 " + trf("{name} in corso…", { name: running.name })
-    : "🔧 " + trf("Strumenti usati ({n})", { n: calls.length });
+  const waiting = calls.find((c) => c.waiting);
+  target.toolsHead.textContent = waiting
+    ? "🔧 " + trf("{name}: in attesa di conferma sul PC", { name: waiting.name })
+    : running
+      ? "🔧 " + trf("{name} in corso…", { name: running.name })
+      : "🔧 " + trf("Strumenti usati ({n})", { n: calls.length });
   const rows = calls.map((c) => {
     const row = el("div", "call" + (c.error ? " error" : ""));
     const mark = c.running ? "…" : (c.error ? "✗" : "✓");
