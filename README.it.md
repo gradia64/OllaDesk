@@ -107,7 +107,7 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   mandarli nel cestino del sistema (mai cancellati per sempre): queste
   operazioni chiedono sempre conferma, una per una, anche dopo «Consenti per il
   resto della risposta», e una cartella con dentro file nascosti, esclusi, collegamenti o file speciali non si sposta né si cancella. Sotto la risposta «↶ Annulla le modifiche» rimette i file com'erano
-  prima (anche dopo un riavvio o se chiudi l'app durante la risposta; avvisa se nel frattempo un file è cambiato; con più risposte sugli stessi file si annulla dalla più recente). Le copie per annullare restano nella cartella di configurazione finché non annulli o elimini la chat; nel Flatpak un file mandato nel cestino non torna con «Annulla»: lo si ripristina dal cestino del sistema. e
+  prima (anche dopo un riavvio o se chiudi l'app durante la risposta; avvisa se nel frattempo un file è cambiato; con più risposte sugli stessi file si annulla dalla più recente). Le copie per annullare restano nella cartella di configurazione finché non annulli o elimini la chat; nel Flatpak il portale del cestino (xdg-desktop-portal 1.22) rifiuta i file allegati alla chat: lì cestinarli non riesce e non si cancella nulla; dove riesce, il file non torna con «Annulla» ma si ripristina dal cestino del sistema. e
   il blocco «🔧 Strumenti usati» dice per ogni modifica se è stata rifiutata o
   annullata. La chiave inglese è grigia,
   blu o ambra secondo il livello. Sempre e solo ciò che è stato allegato, con

@@ -4019,6 +4019,19 @@ def test_write_review_050():
         out, err = call("write_file", path="altro/x.txt", content="x")
         assert err and "read-only" not in out
 
+        # il portale Trash del Flatpak rifiuta: errore che spiega, niente cancellato
+        (root / "rifiutato.txt").write_text("r\n")
+
+        def refused(path):
+            raise write_tools.TrashRefused("the trash portal refused the file")
+
+        reg_fp = tools.ToolRegistry(write_tools.make_write_tools(
+            shared, None, full=True, trash=refused))
+        out, err = tools.run_call(reg_fp, {"name": "delete_file",
+                                           "arguments": {"path": "p/rifiutato.txt"}})
+        assert err and "Flatpak" in out and "Do not try again" in out, out
+        assert (root / "rifiutato.txt").exists()
+
         # la scheda mostra i caratteri invisibili e avvisa
         ch = write_tools.Change("create", "p/c.py", root / "c.py",
                                 write_tools._diff("p/c.py", "", "x = 1  # ok‮;rm -rf ~/‬\n"))
@@ -4103,6 +4116,12 @@ def test_write_review_050():
              "final": {}}))
         loaded = write_tools.WriteJournal.load(store)
         assert loaded is not None and loaded.undo([root]) == ["vittima"] and vittima.exists()
+        # radici e percorsi si confrontano veri (nel Flatpak /run/user/<uid>/doc
+        # è un link a /run/flatpak/doc)
+        (Path(tmp) / "link-p").symlink_to(root, target_is_directory=True)
+        assert write_tools._inside(Path(tmp) / "link-p" / "a.txt", [root])
+        assert write_tools._inside(root / "a.txt", [Path(tmp) / "link-p"])
+        assert not write_tools._inside(vittima, [Path(tmp) / "link-p"])
 
         # cartella dell'app dentro una cartella condivisa: esclusa
         base = Path(tmp) / "home"

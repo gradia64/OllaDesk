@@ -103,7 +103,7 @@ License: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   move them to the system trash (never deleted permanently): these always ask
   for confirmation, one by one, even after "Allow for the rest of the
   answer", and a folder with hidden or excluded files, links or special files inside cannot be moved or deleted. Under the answer, "↶ Undo the changes" puts the files back as they were
-  (also after a restart or if you close the app during the answer; it warns if a file changed in the meantime; with several answers on the same files you undo from the most recent). The copies for undoing stay in the configuration folder until you undo or delete the conversation; in the Flatpak a file moved to the trash does not come back with "Undo": restore it from the system trash. and the
+  (also after a restart or if you close the app during the answer; it warns if a file changed in the meantime; with several answers on the same files you undo from the most recent). The copies for undoing stay in the configuration folder until you undo or delete the conversation; in the Flatpak the trash portal (xdg-desktop-portal 1.22) refuses files attached to the conversation: there, moving them to the trash fails and nothing is deleted; where it works, the file does not come back with "Undo" but can be restored from the system trash. and the
   "🔧 Tools used" block says for each change whether it was rejected or
   undone. The wrench is grey, blue or
   amber depending on the level. Always limited to what was attached, with the

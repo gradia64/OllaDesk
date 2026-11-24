@@ -288,7 +288,14 @@ def _valid_op(op) -> bool:
 
 
 def _inside(path: Path, roots: list[Path]) -> bool:
-    """`path` è una delle voci condivise o sta dentro una cartella condivisa."""
+    """`path` è una delle voci condivise o sta dentro una cartella condivisa,
+    confrontando i percorsi veri (nel Flatpak /run/user/<uid>/doc è un
+    link a /run/flatpak/doc)."""
+    try:
+        path = Path(os.path.realpath(path.parent)) / path.name
+        roots = [Path(os.path.realpath(r)) for r in roots]
+    except (OSError, ValueError):
+        return False
     return any(path == r or r in path.parents for r in roots)
 
 
@@ -318,6 +325,13 @@ def _stat_key(path: Path) -> tuple | None:
     except OSError:
         return None
     return (st.st_ino, st.st_mode, st.st_size, st.st_mtime_ns)
+
+
+class TrashRefused(OSError):
+    """Il portale Trash del Flatpak rifiuta il file. Con xdg-desktop-portal
+    1.22 succede a ogni file arrivato dal portale dei documenti (cioè a
+    tutto ciò che si allega alla chat), anche a GLib: il limite è del
+    portale, non dell'app."""
 
 
 def move_to_trash(path: Path) -> Path | None:
@@ -370,7 +384,7 @@ def _portal_trash(path: Path) -> None:
         except OSError:
             pass
     if reply.header.message_type == MessageType.error or not reply.body or reply.body[0] != 1:
-        raise OSError("the trash portal refused the file")
+        raise TrashRefused("the trash portal refused the file")
 
 
 def _restore_from_trash(path: Path, where: Path | None) -> None:
@@ -1060,6 +1074,12 @@ def make_write_tools(shared: list[Shared], approve: Callable[[Change], bool] | N
                 raise ToolError(stopped)
             try:
                 where = trash_fn(real)
+            except TrashRefused:
+                raise ToolError(
+                    f"the system trash refused '{label}': in this sandboxed (Flatpak) version "
+                    "the trash does not accept files shared with the app. Nothing was deleted. "
+                    "Do not try again: tell the user to delete it themselves if they want "
+                    "to.") from None
             except OSError as e:
                 raise ToolError(f"cannot move '{label}' to the trash: {e}. Nothing was "
                                 "deleted.") from None
