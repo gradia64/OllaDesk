@@ -38,6 +38,7 @@ from .tools import Tool, ToolError
 
 MAX_WRITE_BYTES = 512 * 1024     # dimensione massima di un file scritto
 MAX_DIFF_LINES = 400             # righe del diff mostrate per la conferma
+DIFF_CUT_MARK = "[... "          # inizio dell'ultima riga di un diff tagliato
 MAX_REPLY_CONTEXT = 3            # righe di contesto nella risposta di edit_file
 
 # nota di sistema al posto di file_tools.READ_ONLY_NOTE quando la chat
@@ -250,19 +251,22 @@ def _portal_trash(path: Path) -> None:
     cestino dell'host non si raggiunge con i file."""
     try:
         from jeepney import DBusAddress, MessageType, new_method_call
-        from jeepney.fds import FileDescriptor
         from jeepney.io.blocking import open_dbus_connection
     except ImportError:
         raise OSError("the trash portal is not available") from None
-    flags = os.O_RDONLY | os.O_NOFOLLOW | (os.O_DIRECTORY if path.is_dir() else 0)
-    fd = os.open(path, flags)
+    # come GLib (gtrashportal.c): un file aperto in scrittura, una cartella
+    # con O_PATH; il portale rifiuta ciò che l'app non può scrivere
+    if path.is_dir():
+        fd = os.open(path, os.O_PATH | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_DIRECTORY)
+    else:
+        fd = os.open(path, os.O_RDWR | os.O_CLOEXEC | os.O_NOFOLLOW)
     addr = DBusAddress("/org/freedesktop/portal/desktop",
                        bus_name="org.freedesktop.portal.Desktop",
                        interface="org.freedesktop.portal.Trash")
     try:
         with open_dbus_connection(bus="SESSION", enable_fds=True) as conn:
             reply = conn.send_and_get_reply(
-                new_method_call(addr, "TrashFile", "h", (FileDescriptor(fd),)), timeout=10)
+                new_method_call(addr, "TrashFile", "h", (fd,)), timeout=10)
     except OSError:
         raise
     except Exception as e:  # noqa: BLE001 — bus assente, tempo scaduto
@@ -311,6 +315,9 @@ class Request:
         return {"id": self.id, "kind": self.change.kind, "label": self.change.label,
                 "target": self.change.target, "diff": self.change.diff,
                 "added": added, "removed": removed,
+                # diff tagliato a MAX_DIFF_LINES: la scheda lo dice chiaramente
+                "truncated": self.change.kind != "delete" and any(
+                    line.startswith(DIFF_CUT_MARK) for line in self.change.diff.splitlines()[-1:]),
                 # spostare e cestinare chiedono sempre: niente «consenti per il resto»
                 "allow_rest": self.change.kind in ALLOW_REST_KINDS}
 
@@ -429,7 +436,7 @@ def _diff(label: str, old: str, new: str) -> str:
         old.splitlines(keepends=True), new.splitlines(keepends=True),
         fromfile=label if old else "/dev/null", tofile=label, n=2))
     if len(lines) > MAX_DIFF_LINES:
-        lines = lines[:MAX_DIFF_LINES] + [f"[... {len(lines) - MAX_DIFF_LINES} more diff lines]\n"]
+        lines = lines[:MAX_DIFF_LINES] + [f"{DIFF_CUT_MARK}{len(lines) - MAX_DIFF_LINES} more diff lines]\n"]
     return "".join(line if line.endswith("\n") else line + "\n" for line in lines)
 
 

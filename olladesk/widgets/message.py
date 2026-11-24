@@ -117,6 +117,13 @@ class ChangeCard(QFrame):
         self.diff.setFixedHeight(min(DIFF_MAX_HEIGHT, doc_h + 2 * self.diff.frameWidth() + 2))
         self.diff.setVisible(bool(view.get("diff")))
         lay.addWidget(self.diff)
+        # una modifica lunga si vede solo in parte: chi approva deve saperlo
+        self.cut_note = QLabel(_("Modifica troppo lunga: qui ne vedi solo una parte. Se non "
+                                 "sai cosa cambia nel resto del file, rifiutala."), self)
+        self.cut_note.setWordWrap(True)
+        self.cut_note.setStyleSheet(f"color: {theme.TOOLS_WRITE_COLOR}; font-weight: 600;")
+        self.cut_note.setVisible(bool(view.get("truncated")))
+        lay.addWidget(self.cut_note)
         row = QHBoxLayout()
         row.setSpacing(6)
         self.apply_btn = QPushButton(_("Applica"), self)

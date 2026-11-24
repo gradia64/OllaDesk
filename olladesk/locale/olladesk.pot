@@ -1590,7 +1590,7 @@ msgid "Porta:"
 msgstr ""
 
 #: olladesk/widgets/companion_dialog.py:116
-#: olladesk/widgets/message.py:122
+#: olladesk/widgets/message.py:129
 msgid "Applica"
 msgstr ""
 
@@ -1627,7 +1627,7 @@ msgid "Chiudi"
 msgstr ""
 
 #: olladesk/widgets/companion_dialog.py:217
-#: olladesk/widgets/message.py:342
+#: olladesk/widgets/message.py:349
 #: olladesk/widgets/settings_dialog.py:481
 msgid "Copiato ✓"
 msgstr ""
@@ -1704,61 +1704,57 @@ msgstr ""
 msgid "(+{added} −{removed})"
 msgstr ""
 
-#: olladesk/widgets/message.py:124
+#: olladesk/widgets/message.py:121
+msgid "Modifica troppo lunga: qui ne vedi solo una parte. Se non sai cosa cambia nel resto del file, rifiutala."
+msgstr ""
+
+#: olladesk/widgets/message.py:131
 msgid "Rifiuta"
 msgstr ""
 
-#: olladesk/widgets/message.py:125
+#: olladesk/widgets/message.py:132
 msgid "Consenti per il resto della risposta"
 msgstr ""
 
-#: olladesk/widgets/message.py:126
+#: olladesk/widgets/message.py:133
 msgid "Applica questa modifica e le prossime di questa risposta senza chiedere di nuovo."
 msgstr ""
 
-#: olladesk/widgets/message.py:134
+#: olladesk/widgets/message.py:141
 msgid "Sposta nel cestino"
 msgstr ""
 
-#: olladesk/widgets/message.py:238
+#: olladesk/widgets/message.py:245
 #: olladesk/web/app.js:276
 msgid "🌐 Ricerca web"
 msgstr ""
 
-#: olladesk/widgets/message.py:298
+#: olladesk/widgets/message.py:305
 msgid "↶ Annulla le modifiche"
 msgstr ""
 
-#: olladesk/widgets/message.py:299
+#: olladesk/widgets/message.py:306
 msgid "Rimette i file com'erano prima di questa risposta"
 msgstr ""
 
-#: olladesk/widgets/message.py:316
+#: olladesk/widgets/message.py:323
 msgid "Copia messaggio"
 msgstr ""
 
-#: olladesk/widgets/message.py:342
+#: olladesk/widgets/message.py:349
 msgid "Copia"
 msgstr ""
 
-#: olladesk/widgets/message.py:342
+#: olladesk/widgets/message.py:349
 msgid "codice"
 msgstr ""
 
-#: olladesk/widgets/message.py:368
+#: olladesk/widgets/message.py:375
 msgid "📋  Copia messaggio"
 msgstr ""
 
-#: olladesk/widgets/message.py:370
+#: olladesk/widgets/message.py:377
 msgid "Seleziona tutto"
-msgstr ""
-
-#: olladesk/widgets/message.py:423
-msgid "Pensiero"
-msgstr ""
-
-#: olladesk/widgets/message.py:423
-msgid "sta pensando…"
 msgstr ""
 
 #: olladesk/widgets/message.py:43
@@ -1766,8 +1762,12 @@ msgstr ""
 msgid "Il modello vuole rinominare {path} in {name}"
 msgstr ""
 
-#: olladesk/widgets/message.py:443
-msgid "(nessuna risposta)"
+#: olladesk/widgets/message.py:430
+msgid "Pensiero"
+msgstr ""
+
+#: olladesk/widgets/message.py:430
+msgid "sta pensando…"
 msgstr ""
 
 #: olladesk/widgets/message.py:45
@@ -1775,9 +1775,8 @@ msgstr ""
 msgid "Il modello vuole spostare {path} in {target}"
 msgstr ""
 
-#: olladesk/widgets/message.py:469
-#, python-brace-format
-msgid "{name}: attende la tua conferma"
+#: olladesk/widgets/message.py:450
+msgid "(nessuna risposta)"
 msgstr ""
 
 #: olladesk/widgets/message.py:47
@@ -1785,24 +1784,29 @@ msgstr ""
 msgid "Il modello vuole spostare nel cestino {path}"
 msgstr ""
 
-#: olladesk/widgets/message.py:471
+#: olladesk/widgets/message.py:476
+#, python-brace-format
+msgid "{name}: attende la tua conferma"
+msgstr ""
+
+#: olladesk/widgets/message.py:478
 #: olladesk/web/app.js:259
 #, python-brace-format
 msgid "{name} in corso…"
 msgstr ""
 
-#: olladesk/widgets/message.py:473
+#: olladesk/widgets/message.py:480
 #: olladesk/web/app.js:260
 #, python-brace-format
 msgid "Strumenti usati ({n})"
 msgstr ""
 
-#: olladesk/widgets/message.py:481
+#: olladesk/widgets/message.py:488
 #: olladesk/web/app.js:265
 msgid "annullata"
 msgstr ""
 
-#: olladesk/widgets/message.py:481
+#: olladesk/widgets/message.py:488
 #: olladesk/web/app.js:264
 msgid "rifiutata"
 msgstr ""
@@ -1827,16 +1831,16 @@ msgstr ""
 msgid "Il modello vuole modificare {path}"
 msgstr ""
 
-#: olladesk/widgets/message.py:557
+#: olladesk/widgets/message.py:564
 msgid "Si aprono nel browser"
 msgstr ""
 
-#: olladesk/widgets/message.py:563
+#: olladesk/widgets/message.py:570
 #, python-brace-format
 msgid "{arrow} 🌐 Fonti ({n})"
 msgstr ""
 
-#: olladesk/widgets/message.py:661
+#: olladesk/widgets/message.py:668
 msgid "Nascondi questa nota"
 msgstr ""
 

@@ -3391,7 +3391,7 @@ def test_change_approval_gate_and_card():
     req = gate.pending()
     assert req is not None and asked == [req] and req.view() == {
         "id": 1, "kind": "edit", "label": "p/a.txt", "target": "", "diff": ch.diff,
-        "added": 1, "removed": 1, "allow_rest": True}
+        "added": 1, "removed": 1, "allow_rest": True, "truncated": False}
     assert not gate.resolve(2, "apply") and not gate.resolve(1, "boh")
     assert gate.resolve(1, "apply")
     t.join(2)
@@ -3441,6 +3441,11 @@ def test_change_approval_gate_and_card():
             "added": 1, "removed": 1}
     card = w.show_change(view)
     assert "p/a.txt" in card.title.text() and "+1 −1" in card.title.text()
+    assert card.cut_note.isHidden()
+    long_diff = write_tools._diff("p/l.txt", "", "".join(f"r{i}\n" for i in range(1000)))
+    long_view = write_tools.Request(9, write_tools.Change("create", "p/l.txt", Path("/x"),
+                                                          long_diff)).view()
+    assert long_view["truncated"] and not message.ChangeCard(long_view, "dark").cut_note.isHidden()
     assert not card.diff.isHidden() and "nuovo" in card.diff.toPlainText()
     got: list = []
     card.decided.connect(lambda i, d: got.append((i, d)))
