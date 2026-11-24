@@ -105,7 +105,10 @@ License: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   move them to the system trash (never deleted permanently): these always ask
   for confirmation, one by one, even after "Allow for the rest of the
   answer", and a folder with hidden or excluded files or links inside cannot
-  be moved or deleted. The wrench is grey, blue or
+  be moved or deleted. Under the answer, "↶ Undo the changes" puts the files back as they were
+  (also after a restart; it warns if a file changed in the meantime), and the
+  "🔧 Tools used" block says for each change whether it was rejected or
+  undone. The wrench is grey, blue or
   amber depending on the level. Always limited to what was attached, with the
   same exclusions as a folder as context, for writing too (hidden files,
   dependencies, `.gitignore`, credentials, links that leave the folder); no

@@ -324,7 +324,7 @@ assert "Strumenti usati (1)" in last_answer().tools_btn.text()
 st, snap = h.get_json(f"/api/chats/{cid7}", TOKEN)
 assert st == 200 and snap["messages"][-1]["tools"] == [
     {"name": "eco", "args": "testo=ciao", "result": "eco", "error": False, "running": False,
-     "waiting": False}]
+     "waiting": False, "outcome": ""}]
 # stesso chat con un modello senza tool: pulsante nascosto, scelta salvata, niente tool
 win.model_combo.setCurrentIndex(win.model_combo.findData("finto"))
 assert btn.isHidden() and level() == "read"
@@ -406,6 +406,19 @@ card().apply_btn.click()
 assert wait_until(lambda: not engine.busy())
 assert (folder / "nota.txt").read_text() == "nuova riga\n"
 assert win.chat_area._stream_widget is None
+
+
+def answers_with_undo():
+    out = []
+    for j in range(1, win.chat_area.msgs.count()):
+        w = win.chat_area._row_widget(win.chat_area.msgs.itemAt(j).widget())
+        if getattr(w, "role", "") == "assistant" and not w.undo_btn.isHidden():
+            out.append(w)
+    return out
+
+
+# la risposta che ha cambiato il file riceve «Annulla le modifiche» (W4)
+assert wait_until(lambda: len(answers_with_undo()) == 1)
 # richiesta che arriva mentre si guarda un'altra chat: un avviso lo dice
 notes = []
 win.chat_area.add_system_note = notes.append
@@ -422,7 +435,26 @@ assert wait_until(lambda: card() is not None)
 card().reject_btn.click()
 assert wait_until(lambda: not engine.busy())
 assert (folder / "nota.txt").read_text() == "nuova riga\n"
+# 9. annullare dalla bolla: conferma, file ripristinato, chiamata «annullata»
+from PySide6.QtWidgets import QMessageBox  # noqa: E402
+
+asked = []
+real_exec = QMessageBox.exec
+QMessageBox.exec = lambda box: asked.append(box.text()) or QMessageBox.StandardButton.Yes
+assert len(answers_with_undo()) == 1
+answers_with_undo()[0].undo_btn.click()
+QMessageBox.exec = real_exec
+assert asked and "Operazioni da annullare: 1" in asked[0], asked
+assert (folder / "nota.txt").read_text() == "prima riga\n"
+assert wait_until(lambda: not answers_with_undo())
+undone_bubbles = [win.chat_area._row_widget(win.chat_area.msgs.itemAt(j).widget())
+                  for j in range(1, win.chat_area.msgs.count())]
+assert any("annullata" in w._tools_text() for w in undone_bubbles
+           if getattr(w, "_tool_calls", None)), "esito «annullata» assente"
+print("8b. annullare le modifiche dalla bolla OK")
 # chiusura dell'app con una richiesta aperta (sotto): vale come rifiuto
+fake.write_rounds = [[{"name": "edit_file", "arguments": {
+    "path": "progetto/nota.txt", "old_text": "prima", "new_text": "altra"}}]]
 engine.send(cid8, "modifica per l'ultima volta", "finto-due")
 assert wait_until(lambda: engine.pending_change() is not None)
 print("8. conferma delle modifiche nella bolla OK")

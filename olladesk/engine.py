@@ -24,7 +24,10 @@ chiude la richiesta: riaprendo la chat la si ritrova (`pending_change`).
 from __future__ import annotations
 
 import datetime
+import re
+import shutil
 import time
+import uuid
 from pathlib import Path
 
 from PySide6.QtCore import QObject, Signal
@@ -42,6 +45,7 @@ class ChatEngine(QObject):
     # --- conversazioni
     chats_changed = Signal()                  # indice cambiato (titoli, ordine, eliminazioni)
     chat_deleted = Signal(str)                # chat_id eliminata (dal PC o dal telefono)
+    answer_undone = Signal(str, int)          # chat_id, indice della risposta annullata
     user_message_added = Signal(str, dict)    # chat_id, messaggio utente salvato
     # --- elaborazione (una sola alla volta, globale)
     busy_changed = Signal(bool)
@@ -235,7 +239,7 @@ class ChatEngine(QObject):
         extra = file_tools.make_tools(shared, read_log, writable=writable)
         self._close_gate()
         if writable:
-            self._journal.discard()
+            self._journal.discard()   # copie di una risposta mai salvata
             self._journal = write_tools.WriteJournal()
             self._gate = write_tools.ApprovalGate(self._change_asked.emit)
             extra += write_tools.make_write_tools(shared, self._gate.ask, self._journal,
@@ -544,9 +548,55 @@ class ChatEngine(QObject):
         if req is not None and self._active_id is not None:
             self._change_closed(req.id, "")
 
+    # --------------------------------------------- annullare una risposta
+
+    def _undo_journal(self, chat_id: str, index: int) -> tuple[dict, dict, object] | None:
+        chat = self.chat(chat_id)
+        if chat is None or not (0 <= index < len(chat["messages"])):
+            return None
+        msg = chat["messages"][index]
+        undo_id = msg.get("undo") if msg.get("role") == "assistant" else None
+        if not isinstance(undo_id, str) or not _SAFE_ID.match(undo_id):
+            return None
+        journal = write_tools.WriteJournal.load(_undo_dir(chat_id, undo_id))
+        return (chat, msg, journal) if journal is not None else None
+
+    def undo_status(self, chat_id: str, index: int) -> dict | None:
+        """Si possono annullare le modifiche della risposta `index`? None se
+        no; altrimenti {"count": operazioni, "changed": [file cambiati dopo
+        la risposta, che annullando tornerebbero indietro]}."""
+        found = self._undo_journal(chat_id, index)
+        if found is None:
+            return None
+        journal = found[2]
+        return {"count": len(journal.ops), "changed": journal.changed_since()}
+
+    def undo_answer(self, chat_id: str, index: int) -> list[str] | None:
+        """Annulla le modifiche ai file della risposta `index`. None se non si
+        può (nulla da annullare, o il PC sta rispondendo); altrimenti i file
+        che non è riuscito a ripristinare. Le chiamate annullate restano
+        nella risposta, segnate come annullate."""
+        if self.busy():
+            return None
+        found = self._undo_journal(chat_id, index)
+        if found is None:
+            return None
+        chat, msg, journal = found
+        failed = journal.undo()
+        for rnd in msg.get("tool_rounds") or []:
+            for c in rnd.get("calls") or []:
+                if c.get("name") in tools.WRITE_TOOL_NAMES and not c.get("error"):
+                    c["undone"] = True
+        msg.pop("undo", None)
+        self._persist(chat)
+        self.answer_undone.emit(chat_id, index)
+        return failed
+
     def delete_chat(self, chat_id: str) -> None:
         if chat_id == self._active_id:
             self.stop()
+        if _SAFE_ID.match(chat_id or ""):
+            shutil.rmtree(config.config_dir() / "undo" / chat_id, ignore_errors=True)
         self._cache.pop(chat_id, None)
         # le chat in memoria proteggono i loro allegati anche se il loro
         # salvataggio su disco è fallito
@@ -1089,7 +1139,10 @@ class ChatEngine(QObject):
         chat = self.chat(self._active_id)
         # con dei giri completi la risposta si salva anche senza testo: le
         # chiamate (e le loro fonti) restano visibili riaprendo la chat
-        if (text or (rounds and stats is not None)) and chat is not None:
+        # con delle modifiche ai file si salva sempre: il pulsante «Annulla»
+        # vive nella risposta
+        journal, self._journal = self._journal, write_tools.WriteJournal()
+        if (text or (rounds and stats is not None) or journal) and chat is not None:
             msg = {"role": "assistant", "content": text, "ts": config.now()}
             if thinking:
                 msg["thinking"] = thinking
@@ -1097,9 +1150,21 @@ class ChatEngine(QObject):
                 msg["stats"] = stats
             if rounds:
                 msg["tool_rounds"] = rounds
+            if journal:
+                undo_id = uuid.uuid4().hex
+                try:
+                    journal.save(_undo_dir(chat["id"], undo_id))
+                    msg["undo"] = undo_id
+                except OSError as e:
+                    journal.discard()
+                    self.notice.emit(chat["id"], "⚠ " + _(
+                        'Le modifiche ai file non si potranno annullare: {error}').format(
+                        error=e.strerror or e))
             chat["messages"].append(msg)
             chat["updated"] = config.now()
             self._persist(chat)
+        else:
+            journal.discard()
 
     def _finalize(self, outcome: str, stats: str | None) -> None:
         """Chiude la risposta, salva il testo prodotto e torna idle."""
@@ -1149,8 +1214,10 @@ class ChatEngine(QObject):
         # i pochi caratteri tenuti per un possibile marcatore sono testo
         tail, self._tail = self._tail, ""
         self._emit_text(tail)
-        if self._pending_stream:
-            self._finalize("stopped", None)   # conserva il testo già prodotto
+        if self._pending_stream or self._journal:
+            # conserva il testo già prodotto e le modifiche già fatte ai file
+            # (la risposta porta il pulsante per annullarle)
+            self._finalize("stopped", None)
         else:
             # scelta coerente con «niente contenuto, niente messaggio»: una
             # generazione interrotta durante il solo ragionamento non lascia
@@ -1188,6 +1255,17 @@ class ChatEngine(QObject):
         # thread dei tool non resta fermo e si può attendere
         self._close_gate()
         return self._workers.all()
+
+
+# id delle chat e degli annullamenti: diventano nomi di cartelle
+_SAFE_ID = re.compile(r"^[A-Za-z0-9_-]{1,80}$")
+
+
+def _undo_dir(chat_id: str, undo_id: str) -> Path:
+    """Cartella delle copie per annullare una risposta."""
+    if not (_SAFE_ID.match(chat_id) and _SAFE_ID.match(undo_id)):
+        raise OSError("invalid id")
+    return config.config_dir() / "undo" / chat_id / undo_id
 
 
 def _assistant_messages(m: dict, full_results: bool) -> list[dict]:

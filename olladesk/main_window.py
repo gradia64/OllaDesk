@@ -258,6 +258,7 @@ class MainWindow(QMainWindow):
         self.chat_area.thinkingToggled.connect(self._on_thinking_toggled)
         self.chat_area.toolsLevelChanged.connect(self._on_tools_level)
         self.chat_area.changeDecided.connect(self._on_change_decided)
+        self.chat_area.undoRequested.connect(self._on_undo_requested)
 
         self.burger.clicked.connect(self._toggle_sidebar)
         self.new_chat_btn.clicked.connect(self._new_chat)
@@ -280,6 +281,7 @@ class MainWindow(QMainWindow):
         e.tool_activity.connect(self._on_tool_activity)
         e.change_requested.connect(self._on_change_requested)
         e.change_resolved.connect(self._on_change_resolved)
+        e.answer_undone.connect(self._on_answer_undone)
         e.generation_finished.connect(self._on_generation_finished)
         e.notice.connect(self._on_notice)
         e.status_changed.connect(self._on_status_changed)
@@ -547,6 +549,7 @@ class MainWindow(QMainWindow):
                 m["role"], m.get("display", m.get("content", "")), m.get("ts"),
                 m.get("attachments"), bool(m.get("web")), m.get("stats"),
                 thinking=m.get("thinking", ""), sources=sources, tool_calls=calls,
+                undo_index=i if is_answer and m.get("undo") else None,
             )
 
     # durante una generazione si può navigare: la risposta continua in
@@ -768,6 +771,61 @@ class MainWindow(QMainWindow):
     def _on_change_decided(self, req_id: int, decision: str) -> None:
         self.engine.resolve_change(req_id, decision)
 
+    def _on_undo_requested(self, index: int) -> None:
+        chat_id = self._view_id
+        if chat_id is None:
+            return
+        if self.engine.busy():
+            self.chat_area.add_system_note(
+                _("Attendi la fine della risposta in corso, poi annulla le modifiche."))
+            return
+        status = self.engine.undo_status(chat_id, index)
+        if status is None:
+            self._rerender_view()
+            self.chat_area.add_system_note(
+                _("Le modifiche di questa risposta non si possono più annullare."))
+            return
+        text = _("Rimettere i file com'erano prima di questa risposta? "
+                 "Operazioni da annullare: {n}.").format(n=status["count"])
+        if status["changed"]:
+            text += "\n\n" + _("Questi file sono cambiati dopo la risposta: annullando "
+                                "perdi anche quelle modifiche.") + "\n" + "\n".join(
+                "• " + label for label in status["changed"][:15])
+        box = QMessageBox(QMessageBox.Icon.Question, _("Annulla le modifiche"), text,
+                          QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, self)
+        box.button(QMessageBox.StandardButton.Yes).setText(_("Annulla le modifiche"))
+        box.button(QMessageBox.StandardButton.No).setText(_("Lascia così"))
+        box.setDefaultButton(QMessageBox.StandardButton.No)
+        if box.exec() != QMessageBox.StandardButton.Yes:
+            return
+        failed = self.engine.undo_answer(chat_id, index)
+        if failed:
+            self.chat_area.add_system_note(
+                _("Non è stato possibile ripristinare: {files}.").format(
+                    files=", ".join(failed)))
+
+    def _show_undo_button(self, chat_id: str) -> None:
+        """Dopo il salvataggio della risposta: se ha cambiato dei file, la sua
+        bolla riceve «Annulla le modifiche»."""
+        chat = self.engine.chat(chat_id)
+        if not self._viewing(chat_id) or chat is None or not chat["messages"]:
+            return
+        index = len(chat["messages"]) - 1
+        if chat["messages"][index].get("role") != "assistant" or \
+                not chat["messages"][index].get("undo"):
+            return
+        if not self.chat_area.mark_last_answer_undo(index):
+            self._rerender_view()   # bolla scartata (fermata senza testo)
+
+    def _on_answer_undone(self, chat_id: str, _index: int) -> None:
+        if self._viewing(chat_id) and not self.engine.busy():
+            self._rerender_view()
+
+    def _rerender_view(self) -> None:
+        chat = self.engine.chat(self._view_id) if self._view_id else None
+        if chat is not None:
+            self._render_chat(chat)
+
     def _on_think_chunk(self, chat_id: str, chunk: str) -> None:
         if self._viewing(chat_id):
             self.chat_area.stream_thinking(chunk)
@@ -775,6 +833,8 @@ class MainWindow(QMainWindow):
     def _on_generation_finished(self, chat_id: str, outcome: str, stats: str, err: str) -> None:
         if not self._viewing(chat_id):
             return
+        # la risposta si salva subito dopo questo segnale
+        QTimer.singleShot(0, self, lambda cid=chat_id: self._show_undo_button(cid))
         # il segnale arriva prima del salvataggio della risposta: l'ultimo
         # messaggio è ancora quello dell'utente, con i risultati web
         chat = self.engine.chat(chat_id)

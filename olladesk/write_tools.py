@@ -21,6 +21,8 @@ Testi e errori sono per il modello, in inglese (vedi `tools.py`).
 from __future__ import annotations
 
 import difflib
+import hashlib
+import json
 import os
 import shutil
 import stat
@@ -88,46 +90,102 @@ class WriteJournal:
     Un elenco di operazioni nell'ordine in cui sono avvenute: prima di ogni
     scrittura una copia del file (o il segno che non esisteva), le cartelle
     create, gli spostamenti, i file mandati nel cestino (con il posto nel
-    cestino, se noto). `undo` le disfa dall'ultima alla prima. Le copie
-    stanno in una cartella temporanea privata.
+    cestino, se noto). `undo` le disfa dall'ultima alla prima.
+
+    Durante la risposta le copie stanno in una cartella temporanea; a fine
+    risposta `save` le sposta nella cartella dell'app con `journal.json`, e
+    `load` le rilegge: il pulsante «Annulla» vale anche dopo un riavvio.
+    `save` annota anche lo stato finale di ogni percorso toccato, così
+    `changed_since` sa dire quali file sono cambiati dopo la risposta.
     """
 
-    ops: list[tuple] = field(default_factory=list)
+    ops: list[dict] = field(default_factory=list)
+    final: dict[str, str | None] = field(default_factory=dict)   # percorso → impronta
     _dir: Path | None = None
+    _saved: bool = False
 
-    def remember(self, path: Path) -> None:
+    def remember(self, path: Path, label: str = "") -> None:
         """Stato di `path` prima di una scrittura."""
-        if not path.exists():
-            self.ops.append(("write", path, None))
-            return
-        if self._dir is None:
-            self._dir = Path(tempfile.mkdtemp(prefix="olladesk-undo-"))
-        copy = self._dir / str(len(self.ops))
-        shutil.copy2(path, copy)
-        self.ops.append(("write", path, copy))
+        op = {"kind": "write", "path": str(path), "label": label, "copy": None}
+        if path.exists():
+            if self._dir is None:
+                self._dir = Path(tempfile.mkdtemp(prefix="olladesk-undo-"))
+            copy = self._dir / f"copy-{len(self.ops)}"
+            shutil.copy2(path, copy)
+            op["copy"] = copy.name
+        self.ops.append(op)
 
-    def created_dir(self, path: Path) -> None:
-        self.ops.append(("mkdir", path))
+    def created_dir(self, path: Path, label: str = "") -> None:
+        self.ops.append({"kind": "mkdir", "path": str(path), "label": label})
 
-    def moved(self, src: Path, dst: Path) -> None:
-        self.ops.append(("move", src, dst))
+    def moved(self, src: Path, dst: Path, label: str = "", target: str = "") -> None:
+        self.ops.append({"kind": "move", "path": str(src), "dst": str(dst),
+                         "label": label, "target": target})
 
-    def trashed(self, path: Path, where: Path | None) -> None:
-        self.ops.append(("trash", path, where))
+    def trashed(self, path: Path, where: Path | None, label: str = "") -> None:
+        self.ops.append({"kind": "trash", "path": str(path), "label": label,
+                         "where": str(where) if where is not None else None})
 
-    def undo(self) -> list[Path]:
-        """Rimette tutto com'era; restituisce i percorsi che non è riuscito a
-        ripristinare (un file cestinato senza posto noto nel cestino, una
-        destinazione occupata nel frattempo)."""
+    def __bool__(self) -> bool:
+        return bool(self.ops)
+
+    # -- persistenza
+
+    def _touched(self) -> dict[str, str]:
+        """Percorsi toccati (vero → etichetta) da controllare prima di annullare."""
+        out: dict[str, str] = {}
+        for op in self.ops:
+            out.setdefault(op["path"], op.get("label") or Path(op["path"]).name)
+            if op["kind"] == "move":
+                out.setdefault(op["dst"], op.get("target") or Path(op["dst"]).name)
+        return out
+
+    def save(self, folder: Path) -> None:
+        """Copie e `journal.json` in `folder` (nuova), con lo stato finale."""
+        folder.mkdir(parents=True, exist_ok=False)
+        os.chmod(folder, 0o700)
+        for op in self.ops:
+            if op.get("copy") and self._dir is not None:
+                shutil.move(str(self._dir / op["copy"]), str(folder / op["copy"]))
+        self.final = {p: _fingerprint(Path(p)) for p in self._touched()}
+        data = {"version": 1, "ops": self.ops, "final": self.final}
+        (folder / "journal.json").write_text(json.dumps(data, ensure_ascii=False, indent=1))
+        self.discard()
+        self._dir = folder
+        self._saved = True
+
+    @classmethod
+    def load(cls, folder: Path) -> WriteJournal | None:
+        try:
+            data = json.loads((folder / "journal.json").read_text())
+            ops = [op for op in data["ops"] if isinstance(op, dict) and op.get("kind")]
+            final = dict(data.get("final") or {})
+        except (OSError, ValueError, KeyError, TypeError):
+            return None
+        return cls(ops=ops, final=final, _dir=folder, _saved=True)
+
+    def changed_since(self) -> list[str]:
+        """Etichette dei percorsi cambiati dopo `save` (annullando si perdono
+        quelle modifiche)."""
+        touched = self._touched()
+        return [touched[p] for p, fp in self.final.items()
+                if p in touched and _fingerprint(Path(p)) != fp]
+
+    def undo(self) -> list[str]:
+        """Rimette tutto com'era; restituisce le etichette dei percorsi che non
+        è riuscito a ripristinare (un file cestinato senza posto noto nel
+        cestino, una destinazione occupata nel frattempo)."""
         failed = []
         for op in reversed(self.ops):
-            kind, path = op[0], op[1]
+            kind, path = op["kind"], Path(op["path"])
             try:
                 if kind == "write":
-                    if op[2] is None:
+                    if op.get("copy") is None:
                         path.unlink(missing_ok=True)
                     else:
-                        _atomic_write(path, op[2].read_bytes())
+                        if self._dir is None:
+                            raise OSError("copy missing")
+                        _atomic_write(path, (self._dir / op["copy"]).read_bytes())
                 elif kind == "mkdir":
                     try:
                         path.rmdir()          # solo se vuota: niente perdite
@@ -136,19 +194,36 @@ class WriteJournal:
                 elif kind == "move":
                     if path.exists() or path.is_symlink():
                         raise OSError("destination taken")
-                    shutil.move(str(op[2]), str(path))
+                    shutil.move(op["dst"], str(path))
                 elif kind == "trash":
-                    _restore_from_trash(path, op[2])
+                    where = op.get("where")
+                    _restore_from_trash(path, Path(where) if where else None)
             except OSError:
-                failed.append(path)
+                failed.append(op.get("label") or path.name)
         self.ops.clear()
         self.discard()
         return failed
 
     def discard(self) -> None:
+        """Toglie le copie (temporanee o salvate)."""
         if self._dir is not None:
             shutil.rmtree(self._dir, ignore_errors=True)
             self._dir = None
+
+
+def _fingerprint(path: Path) -> str | None:
+    """Stato di un percorso: None se non c'è, "dir" per una cartella,
+    l'hash del contenuto per un file."""
+    try:
+        if path.is_symlink():
+            return "link"
+        if path.is_dir():
+            return "dir"
+        if not path.exists():
+            return None
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError:
+        return "?"
 
 
 def move_to_trash(path: Path) -> Path | None:
@@ -465,7 +540,7 @@ def make_write_tools(shared: list[Shared], approve: Callable[[Change], bool] | N
             except OSError as e:
                 raise ToolError(f"cannot create the folder of '{label}': "
                                 f"{e.strerror or e}") from None
-        jr.remember(real)
+        jr.remember(real, label)
         try:
             _atomic_write(real, data)
         except OSError as e:
@@ -641,7 +716,7 @@ def make_write_tools(shared: list[Shared], approve: Callable[[Change], bool] | N
             shutil.move(str(src), str(dst))
         except OSError as e:
             raise ToolError(f"cannot move '{label1}': {e.strerror or e}") from None
-        jr.moved(src, dst)
+        jr.moved(src, dst, label1, label2)
         verb = "Renamed" if src.parent == dst.parent else "Moved"
         return f"{verb} {label1}{'/' if is_dir else ''} to {label2}{'/' if is_dir else ''}."
 
@@ -667,7 +742,7 @@ def make_write_tools(shared: list[Shared], approve: Callable[[Change], bool] | N
         except OSError as e:
             raise ToolError(f"cannot move '{label}' to the trash: {e}. Nothing was "
                             "deleted.") from None
-        jr.trashed(real, where)
+        jr.trashed(real, where, label)
         return f"Moved {what} to the trash."
 
     path_prop = {"type": "string",

@@ -486,7 +486,9 @@ def phone_tools(calls: list[dict]) -> list[dict]:
                     "result": result, "error": bool(c.get("error")),
                     "running": c.get("state") in ("running", "waiting"),
                     # modifica ai file che aspetta la conferma (solo dal PC)
-                    "waiting": c.get("state") == "waiting"})
+                    "waiting": c.get("state") == "waiting",
+                    # esito di una modifica ai file: applied, rejected, failed, undone
+                    "outcome": c.get("outcome", "")})
     return out
 
 
@@ -573,6 +575,8 @@ class EventHub(QObject):
         e.generation_finished.connect(self._on_finished)
         e.notice.connect(lambda cid, text: self._push(cid, "notice", {"text": text}))
         e.chats_changed.connect(lambda: self._push("", "chats", {}))
+        # modifiche ai file annullate dal PC: il telefono ricarica la chat
+        e.answer_undone.connect(lambda cid, _i: self._push(cid, "undone", {}))
 
     def _on_finished(self, chat_id: str, outcome: str, stats: str, err: str) -> None:
         # arriva prima del salvataggio della risposta: l'ultimo messaggio è

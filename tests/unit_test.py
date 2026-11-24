@@ -3305,6 +3305,58 @@ def test_full_access_tools():
         assert "Move or rename" in write_tools.FULL_NOTE.replace("move or rename", "Move or rename")
 
 
+def test_undo_journal_saved_and_outcomes():
+    """0.5, W4: registro salvato nella cartella dell'app, file cambiati dopo,
+    esito delle modifiche nella bolla e sul telefono."""
+    from olladesk import companion, tools, write_tools
+    from olladesk.widgets import message
+
+    with tempfile.TemporaryDirectory() as tmp:
+        base = Path(tmp)
+        a = base / "a.txt"
+        a.write_text("uno\n")
+        jr = write_tools.WriteJournal()
+        jr.remember(a, "p/a.txt")
+        a.write_text("due\n")
+        new = base / "n.txt"
+        jr.remember(new, "p/n.txt")
+        new.write_text("nuovo\n")
+        store = base / "undo" / "x"
+        jr.save(store)
+        assert (store / "journal.json").is_file() and oct(store.stat().st_mode)[-3:] == "700"
+        loaded = write_tools.WriteJournal.load(store)
+        assert loaded is not None and len(loaded.ops) == 2 and loaded.changed_since() == []
+        a.write_text("tre\n")
+        assert loaded.changed_since() == ["p/a.txt"]
+        assert loaded.undo() == []
+        assert a.read_text() == "uno\n" and not new.exists() and not store.exists()
+        assert write_tools.WriteJournal.load(store) is None
+        broken = base / "rotto"
+        broken.mkdir()
+        (broken / "journal.json").write_text("{")
+        assert write_tools.WriteJournal.load(broken) is None
+
+    calls = [{"name": "edit_file", "arguments": {}, "result": "ok", "error": False},
+             {"name": "write_file", "arguments": {}, "result": "Error: the user rejected this",
+              "error": True},
+             {"name": "make_dir", "arguments": {}, "result": "ok", "error": False,
+              "undone": True},
+             {"name": "read_file", "arguments": {}, "result": "x", "error": False}]
+    view = tools.calls_view([{"calls": calls}])
+    assert [c.get("outcome") for c in view] == ["applied", "rejected", "undone", None]
+    assert [c["outcome"] for c in companion.phone_tools(view)] == [
+        "applied", "rejected", "undone", ""]
+    from PySide6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    w = message.MessageWidget("assistant", "ok", tool_calls=view)
+    text = w._tools_text()
+    assert "— rifiutata" in text and "↶ make_dir" in text and "— annullata" in text
+    assert w.undo_btn.isHidden()
+    w.set_undo_available(True)
+    assert not w.undo_btn.isHidden()
+    w.deleteLater()
+
+
 def test_change_approval_gate_and_card():
     """0.5, W2: conferma delle modifiche tra il thread dei tool e la UI."""
     import threading

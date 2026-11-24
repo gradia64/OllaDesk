@@ -40,6 +40,9 @@ MAX_ARGS_CHARS = 4_000
 # i tool di scrittura portano il testo del file negli argomenti
 MAX_WRITE_ARGS_CHARS = 200_000
 LARGE_ARGS_TOOLS = frozenset({"write_file", "edit_file"})
+# tool che cambiano i file (0.5): la vista ne mostra l'esito
+WRITE_TOOL_NAMES = frozenset({"write_file", "edit_file", "make_dir", "move_file",
+                              "delete_file"})
 # tetto del risultato di una chiamata, nel turno corrente e nel file della chat
 MAX_RESULT_CHARS = 16_000
 # nei messaggi vecchi (prima dell'ultima risposta) i risultati si accorciano:
@@ -360,7 +363,9 @@ def calls_view(rounds, open_round: dict | None = None) -> list[dict]:
     [{"name", "arguments", "result", "error", "state"}] con state "done"
     per i giri completi (`tool_rounds`) e, per il giro in corso, "running"
     finché non arriva il risultato ("waiting" mentre una modifica aspetta la
-    conferma dell'utente). Giri malformati (chat modificate a mano)
+    conferma dell'utente). Le chiamate dei tool di scrittura concluse hanno
+    anche "outcome": "applied", "rejected" (dall'utente), "failed" o
+    "undone" (annullata dopo con il pulsante della risposta). Giri malformati (chat modificate a mano)
     si saltano.
     """
     out: list[dict] = []
@@ -379,14 +384,25 @@ def calls_view(rounds, open_round: dict | None = None) -> list[dict]:
             else:
                 state = "waiting" if c.get("waiting") else "running"
             args = c.get("arguments")
-            out.append({
+            item = {
                 "name": c["name"],
                 "arguments": args if isinstance(args, dict) else {},
                 "result": str(c.get("result") or ""),
                 "error": bool(c.get("error")),
                 "state": state,
-            })
+            }
+            if c["name"] in WRITE_TOOL_NAMES and state == "done":
+                item["outcome"] = change_outcome(c)
+            out.append(item)
     return out
+
+
+def change_outcome(call: dict) -> str:
+    """Esito di una chiamata di scrittura conclusa."""
+    if not call.get("error"):
+        return "undone" if call.get("undone") else "applied"
+    return "rejected" if "the user rejected" in str(call.get("result") or "") or \
+        "already rejected" in str(call.get("result") or "") else "failed"
 
 
 _WEB_TITLE_RE = re.compile(r"^\[\d+\] ")

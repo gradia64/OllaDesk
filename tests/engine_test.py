@@ -740,10 +740,39 @@ assert wait_until(lambda: not engine.busy())
 assert len(requests) == 3
 assert (shared_dir / "f.txt").read_text() == "e\n" and not (shared_dir / "e.txt").exists()
 assert not (shared_dir / "vecchio.txt").exists() and (trash_dir / "vecchio.txt").exists()
+print("9h4. accesso completo: spostare e cestinare con conferma OK")
+
+# 9h5. annullare (0.5, W4): le copie si salvano con la risposta, «Annulla»
+# rimette tutto com'era (anche dopo un riavvio) e segna le chiamate
+saved = config.load_chat(c9h)["messages"]
+idx = len(saved) - 1
+undo_id = saved[idx]["undo"]
+assert (config.config_dir() / "undo" / c9h / undo_id / "journal.json").is_file()
+assert engine.undo_status(c9h, idx) == {"count": 3, "changed": []}, engine.undo_status(c9h, idx)
+assert engine.undo_status(c9h, 0) is None                      # messaggio dell'utente
+# un file cambiato dopo la risposta viene segnalato
+(shared_dir / "f.txt").write_text("cambiato a mano\n")
+assert engine.undo_status(c9h, idx)["changed"] == ["condivisa/f.txt"]
+undone: list = []
+engine.answer_undone.connect(lambda cid, i: undone.append((cid, i)))
+engine2 = ChatEngine(settings)                                  # come dopo un riavvio
+assert engine2.undo_status(c9h, idx)["count"] == 3
+assert engine.undo_answer(c9h, idx) == []
+assert undone == [(c9h, idx)]
+assert not (shared_dir / "f.txt").exists() and not (shared_dir / "e.txt").exists()
+assert (shared_dir / "vecchio.txt").read_text() == "v\n"
+assert not (config.config_dir() / "undo" / c9h / undo_id).exists()
+msg = config.load_chat(c9h)["messages"][idx]
+assert "undo" not in msg
+outcomes = [c["outcome"] for c in tools.calls_view(msg["tool_rounds"])]
+assert outcomes == ["undone", "undone", "undone"], outcomes
+assert engine.undo_answer(c9h, idx) is None and engine.undo_status(c9h, idx) is None
+# una risposta che rifiuta non ha niente da annullare; con risposta in corso no
+assert engine.undo_status(c9h, idx - 2) is None
 write_tools.move_to_trash = real_trash
 fake.write_rounds = []
 engine.set_chat_tools(c9h, True)
-print("9h4. accesso completo: spostare e cestinare con conferma OK")
+print("9h5. annullare le modifiche di una risposta OK")
 
 # 9i. ricerca web come tool (T4): con 🌐 e i tool attivi niente ricerca prima
 # della risposta, il modello chiama web_search; senza 🌐 il tool non c'è

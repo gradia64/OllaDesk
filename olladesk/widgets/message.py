@@ -145,6 +145,8 @@ class ChangeCard(QFrame):
 
 
 class MessageWidget(QFrame):
+    undoRequested = Signal()   # «Annulla le modifiche» della risposta
+
     def __init__(
         self,
         role: str,
@@ -291,6 +293,18 @@ class MessageWidget(QFrame):
 
         meta_row = QHBoxLayout()
         meta_row.setContentsMargins(0, 0, 0, 0)
+        # annulla le modifiche ai file fatte da questa risposta (0.5, W4)
+        self.undo_btn = QToolButton(self)
+        self.undo_btn.setText(_("↶ Annulla le modifiche"))
+        self.undo_btn.setToolTip(_("Rimette i file com'erano prima di questa risposta"))
+        self.undo_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.undo_btn.setStyleSheet(
+            "QToolButton { border: none; background: transparent; "
+            f"color: {theme.TOOLS_WRITE_COLOR}; padding: 0; }}"
+        )
+        self.undo_btn.clicked.connect(self.undoRequested)
+        self.undo_btn.hide()
+        meta_row.addWidget(self.undo_btn)
         meta_row.addStretch(1)
         self.meta = QLabel(self)
         self.meta.setObjectName("metaLabel")
@@ -464,10 +478,15 @@ class MessageWidget(QFrame):
 
     def _tools_text(self) -> str:
         blocks = []
+        outcomes = {"rejected": _("rifiutata"), "undone": _("annullata")}
         for c in self._tool_calls:
+            outcome = c.get("outcome")
             mark = "…" if c.get("state") in ("running", "waiting") else \
-                ("✗" if c.get("error") else "✓")
-            lines = [f"{mark} {c['name']}({arguments_summary(c.get('arguments') or {})})"]
+                "↶" if outcome == "undone" else ("✗" if c.get("error") else "✓")
+            head = f"{mark} {c['name']}({arguments_summary(c.get('arguments') or {})})"
+            if outcome in outcomes:
+                head += f" — {outcomes[outcome]}"
+            lines = [head]
             result = result_preview(c["name"], c.get("result") or "")
             if result:
                 preview = result[:TOOL_PREVIEW_CHARS].splitlines()[:TOOL_PREVIEW_LINES]
@@ -478,6 +497,9 @@ class MessageWidget(QFrame):
                     lines.append("    …")
             blocks.append("\n".join(lines))
         return "\n\n".join(blocks)
+
+    def set_undo_available(self, on: bool) -> None:
+        self.undo_btn.setVisible(on)
 
     def show_change(self, view: dict) -> ChangeCard:
         """Mostra la richiesta di conferma (sostituisce quella di prima)."""

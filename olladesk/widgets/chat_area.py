@@ -221,6 +221,7 @@ class ChatArea(QWidget):
     thinkingToggled = Signal(bool)
     toolsLevelChanged = Signal(str)   # livello dei tool: off, read, write, full
     changeDecided = Signal(int, str)  # richiesta di modifica: id, scelta dell'utente
+    undoRequested = Signal(int)       # «Annulla le modifiche»: indice della risposta
 
     def __init__(self, theme_name: str = "dark", show_ts: bool = False, parent=None):
         super().__init__(parent)
@@ -520,11 +521,16 @@ class ChatArea(QWidget):
         thinking: str = "",
         sources: list[dict] | None = None,
         tool_calls: list[dict] | None = None,
+        undo_index: int | None = None,
     ) -> MessageWidget:
         w = MessageWidget(
             role, text, ts, self.show_ts, self.theme_name, attachments, web, self,
             thinking=thinking, sources=sources, tool_calls=tool_calls,
         )
+        if undo_index is not None:
+            # risposta con modifiche ai file ancora annullabili
+            w.set_undo_available(True)
+            w.undoRequested.connect(lambda i=undo_index: self.undoRequested.emit(i))
         if stats:
             w.set_stats(stats)
         self._apply_widths(w)
@@ -532,6 +538,20 @@ class ChatArea(QWidget):
         self.stack.setCurrentWidget(self.scroll)
         QTimer.singleShot(0, self, self._scroll_to_bottom)
         return w
+
+    def mark_last_answer_undo(self, index: int) -> bool:
+        """L'ultima bolla, se è una risposta, riceve «Annulla le modifiche»
+        per la risposta `index`. False se l'ultima bolla non è una risposta."""
+        for j in range(self.msgs.count() - 1, 0, -1):
+            item = self.msgs.itemAt(j)
+            w = self._row_widget(item.widget() if item else None)
+            if isinstance(w, MessageWidget):
+                if w.role != "assistant" or not w.undo_btn.isHidden():
+                    return False
+                w.set_undo_available(True)
+                w.undoRequested.connect(lambda i=index: self.undoRequested.emit(i))
+                return True
+        return False
 
     def add_system_note(self, text: str) -> None:
         w = SystemNoteWidget(text, self)

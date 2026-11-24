@@ -260,8 +260,10 @@ function setTools(target, calls) {
       : "🔧 " + trf("Strumenti usati ({n})", { n: calls.length });
   const rows = calls.map((c) => {
     const row = el("div", "call" + (c.error ? " error" : ""));
-    const mark = c.running ? "…" : (c.error ? "✗" : "✓");
-    row.append(el("div", "head", mark + " " + c.name + "(" + (c.args || "") + ")"));
+    const mark = c.running ? "…" : (c.outcome === "undone" ? "↶" : (c.error ? "✗" : "✓"));
+    const outcome = c.outcome === "rejected" ? " — " + tr("rifiutata")
+      : (c.outcome === "undone" ? " — " + tr("annullata") : "");
+    row.append(el("div", "head", mark + " " + c.name + "(" + (c.args || "") + ")" + outcome));
     if (c.result) row.append(el("pre", "result", c.result));
     return row;
   });
@@ -468,6 +470,8 @@ function openStream(id, after, noticesAfter) {
   });
   on("done", (d) => { finishPending(d); activeHere = false; updateComposer(); });
   on("notice", (d) => addNote(d.text));
+  // modifiche ai file annullate sul PC: la conversazione si ricarica
+  on("undone", () => { if (currentId === id && !pending) showChat(id).catch(() => {}); });
   let goneTimer = null;
   on("chats", () => {
     // la conversazione aperta è stata eliminata sul PC? (una nuova in

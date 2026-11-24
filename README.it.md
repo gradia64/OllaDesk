@@ -109,7 +109,10 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   mandarli nel cestino del sistema (mai cancellati per sempre): queste
   operazioni chiedono sempre conferma, una per una, anche dopo «Consenti per il
   resto della risposta», e una cartella con dentro file nascosti, esclusi o
-  collegamenti non si sposta né si cancella. La chiave inglese è grigia,
+  collegamenti non si sposta né si cancella. Sotto la risposta «↶ Annulla le modifiche» rimette i file com'erano
+  prima (anche dopo un riavvio; avvisa se nel frattempo un file è cambiato), e
+  il blocco «🔧 Strumenti usati» dice per ogni modifica se è stata rifiutata o
+  annullata. La chiave inglese è grigia,
   blu o ambra secondo il livello. Sempre e solo ciò che è stato allegato, con
   le stesse esclusioni della cartella come contesto anche per scrivere
   (nascosti, dipendenze, `.gitignore`, credenziali, collegamenti che escono);
