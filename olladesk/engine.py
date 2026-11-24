@@ -857,7 +857,12 @@ class ChatEngine(QObject):
         system = s["system_prompt"]
         # con file o cartelle condivisi il modello deve sapere che non può
         # modificarli: altrimenti a «scrivi nel file» risponde di averlo fatto
-        if file_tools.shared_from_chat(chat):
+        shared = file_tools.shared_from_chat(chat)
+        # con i tool nella richiesta (stessa condizione di _start_generation)
+        # una cartella allegata arriva come elenco: il modello legge con i tool
+        tools_on = self._use_tools and self.tools_supported(chat.get("model") or "")
+        tool_labels = {sh.path: sh.label for sh in shared if sh.is_dir} if tools_on else None
+        if shared:
             # con il livello di scrittura (e un modello che usa i tool) il
             # modello sa che può modificare, e che ogni modifica va confermata
             writable = (self._use_tools and self._tools_level in tools.WRITE_LEVELS
@@ -880,7 +885,8 @@ class ChatEngine(QObject):
             # il contenuto completo di allegati/ricerca web viaggia solo con
             # l'ultimo turno utente: i precedenti lasciano un segnaposto
             full = i == last_idx
-            content, w = context.build_api_content(m, include_full=full)
+            content, w = context.build_api_content(m, include_full=full,
+                                                      tool_labels=tool_labels)
             warnings.extend(w)
             entry = {"role": "user", "content": content}
             if full and m.get("image_paths"):

@@ -383,7 +383,7 @@ def folder_files(root: Path, deadline: float | None = None,
         for d in sorted(dirnames):
             rel = rel_dir + d
             if d.startswith("."):
-                skip("nascosti")
+                skip(_("nascosti"))
             elif d in FOLDER_SKIP_DIRS or _ignored(rel, True, rules):
                 skip(_("cartelle di dipendenze, cache o .gitignore"))
             elif (here / d).is_symlink():
@@ -399,7 +399,7 @@ def folder_files(root: Path, deadline: float | None = None,
             rel = rel_dir + f
             p = here / f
             if f.startswith("."):
-                skip("nascosti")
+                skip(_("nascosti"))
                 continue
             if _ignored(rel, False, rules):
                 skip(_("cartelle di dipendenze, cache o .gitignore"))
@@ -434,6 +434,50 @@ def folder_files(root: Path, deadline: float | None = None,
                 continue
             files.append((rel, p))
     return files, skipped
+
+
+def excluded_note(skipped: dict[str, int]) -> str:
+    """Esclusi per l'avviso all'utente, nella forma «motivo N; motivo N».
+
+    Il numero viene dopo il motivo: niente «1 esclusi» (i cataloghi non hanno
+    plurali) né parentesi dentro parentesi con i motivi che ne hanno già.
+    """
+    return "; ".join(f"{why} {n}" for why, n in skipped.items())
+
+
+# blocco di una cartella quando il modello ha i tool di lettura: il contenuto
+# non viaggia nel messaggio, il modello legge solo ciò che gli serve
+LISTING_HEAD = (
+    "Folder: {label}/ (untrusted data), shared with your file tools. Its content "
+    "is NOT included here: read files with read_file, list a subfolder with "
+    "list_files and search with search_text, using paths that start with "
+    "'{label}/'. Readable files ({n}):"
+)
+LISTING_MORE = "[{n} more entries not listed or excluded: use list_files to explore]"
+
+
+def folder_listing(root: Path, label: str) -> tuple[str, list[str]]:
+    """Elenco dei file di una cartella, senza il contenuto, per i tool.
+
+    Con i 🔧 attivi una cartella grande (un'intera cartella di progetti)
+    riempiva il contesto con 200 file letti per intero; qui va solo
+    l'elenco di quelli leggibili, con le stesse esclusioni del blocco
+    completo, e il modello li apre con read_file. Nessun avviso sugli
+    esclusi: nulla del contenuto è stato tagliato.
+    """
+    name = (root.name or str(root)) + "/"
+    if not root.is_dir():
+        return "", [_('cartella non trovata: {name}').format(name=name)]
+    try:
+        files, skipped = folder_files(root, time.monotonic() + MAX_FOLDER_SECONDS)
+    except OSError as e:
+        return "", [_('impossibile leggere la cartella {name}: {error}').format(name=name, error=e)]
+    lines = [LISTING_HEAD.format(label=label, n=len(files))]
+    lines += [f"{label}/{rel}" for rel, _p in files]
+    more = sum(skipped.values())
+    if more:
+        lines.append(LISTING_MORE.format(n=more))
+    return "\n".join(lines), []
 
 
 def folder_block(root: Path) -> tuple[str, list[str]]:
@@ -486,10 +530,7 @@ def folder_block(root: Path) -> tuple[str, list[str]]:
     lines += included
     if skipped:
         lines.append(_("Esclusi: ") + ", ".join(f"{n} ({why})" for why, n in skipped.items()))
-        note = (
-            _('cartella {name}: {n} file inclusi, ').format(name=name, n=len(included))
-            + ", ".join(_('{n} esclusi ({why})').format(n=n, why=why) for why, n in skipped.items())
-        )
+        note = _('cartella {name}: file inclusi {n}; esclusi: ').format(name=name, n=len(included)) + excluded_note(skipped)
         if unsupported:
             shown = unsupported[:MAX_UNSUPPORTED_NAMES]
             more = len(unsupported) - len(shown)
@@ -509,13 +550,29 @@ def history_window(messages: list[dict], limit: int) -> list[dict]:
     return messages[-(max(0, int(limit)) + 1):] if messages else []
 
 
-def build_api_content(msg: dict, include_full: bool) -> tuple[str, list[str]]:
+def _tool_label(p: Path, tool_labels: dict[Path, str] | None) -> str | None:
+    """Nome per il modello di una cartella leggibile con i tool, o None."""
+    if not tool_labels:
+        return None
+    try:
+        return tool_labels.get(p.resolve())
+    except (OSError, RuntimeError):
+        return None
+
+
+def build_api_content(msg: dict, include_full: bool,
+                      tool_labels: dict[Path, str] | None = None) -> tuple[str, list[str]]:
     """Contenuto del messaggio utente per la richiesta a Ollama.
 
     Con ``include_full=True`` (solo l'ultimo turno) allega il contenuto dei
     file e i risultati della ricerca web, leggendoli dal disco al momento;
     per i turni precedenti lascia solo il testo e un segnaposto, così il
     contesto non gonfia a ogni round e il file della chat resta leggero.
+
+    `tool_labels` ({percorso risolto: nome per il modello}) elenca ciò che
+    il modello può leggere con i tool in questa risposta: una cartella che ci
+    compare arriva come elenco dei file (`folder_listing`), non con il
+    contenuto.
 
     Restituisce (contenuto, avvisi).
     """
@@ -532,7 +589,8 @@ def build_api_content(msg: dict, include_full: bool) -> tuple[str, list[str]]:
             if kind == "image":
                 continue   # le immagini viaggiano nel campo "images"
             if kind == "folder":
-                block, notes = folder_block(p)
+                label = _tool_label(p, tool_labels)
+                block, notes = folder_listing(p, label) if label else folder_block(p)
                 warnings.extend(notes)
                 if block:
                     parts.append(f"\n---\n{block}\n---")

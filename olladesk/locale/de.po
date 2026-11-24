@@ -287,10 +287,15 @@ msgid "oltre il limite di voci esaminate"
 msgstr "über der Grenze der untersuchten Einträge"
 
 #: olladesk/context.py:377
-#: olladesk/context.py:473
+#: olladesk/context.py:517
 #, python-brace-format
 msgid "lettura oltre {seconds:g} secondi"
 msgstr "Lesen dauerte über {seconds:g} Sekunden"
+
+#: olladesk/context.py:386
+#: olladesk/context.py:402
+msgid "nascosti"
+msgstr "versteckt"
 
 #: olladesk/context.py:390
 #: olladesk/context.py:414
@@ -328,22 +333,24 @@ msgstr "über {max} PDFs"
 msgid "oltre {max} file"
 msgstr "über {max} Dateien"
 
-#: olladesk/context.py:448
+#: olladesk/context.py:470
+#: olladesk/context.py:492
 #, python-brace-format
 msgid "cartella non trovata: {name}"
 msgstr "Ordner nicht gefunden: {name}"
 
-#: olladesk/context.py:455
+#: olladesk/context.py:474
+#: olladesk/context.py:499
 #, python-brace-format
 msgid "impossibile leggere la cartella {name}: {error}"
 msgstr "Ordner {name} konnte nicht gelesen werden: {error}"
 
-#: olladesk/context.py:470
+#: olladesk/context.py:514
 #, python-brace-format
 msgid "oltre {max} caratteri"
 msgstr "über {max} Zeichen"
 
-#: olladesk/context.py:481
+#: olladesk/context.py:525
 #, python-brace-format
 msgid ""
 "\n"
@@ -352,40 +359,35 @@ msgstr ""
 "\n"
 "…[gekürzt: Grenze von {max} Zeichen für den Ordner]"
 
-#: olladesk/context.py:485
+#: olladesk/context.py:529
 #, python-brace-format
 msgid "Cartella: {name} (dati non attendibili), {n} file inclusi:"
 msgstr "Ordner: {name} (nicht vertrauenswürdige Daten), {n} Dateien enthalten:"
 
-#: olladesk/context.py:488
+#: olladesk/context.py:532
 msgid "Esclusi: "
 msgstr "Ausgeschlossen: "
 
-#: olladesk/context.py:490
+#: olladesk/context.py:533
 #, python-brace-format
-msgid "cartella {name}: {n} file inclusi, "
-msgstr "Ordner {name}: {n} Dateien enthalten, "
+msgid "cartella {name}: file inclusi {n}; esclusi: "
+msgstr "Ordner {name}: eingeschlossene Dateien {n}; ausgeschlossen: "
 
-#: olladesk/context.py:491
-#, python-brace-format
-msgid "{n} esclusi ({why})"
-msgstr "{n} ausgeschlossen ({why})"
-
-#: olladesk/context.py:496
+#: olladesk/context.py:537
 #, python-brace-format
 msgid " e altri {more}"
 msgstr " und {more} weitere"
 
-#: olladesk/context.py:496
+#: olladesk/context.py:537
 msgid " — non supportati: "
 msgstr " — nicht unterstützt: "
 
-#: olladesk/context.py:499
+#: olladesk/context.py:540
 #, python-brace-format
 msgid "cartella {name}: nessun file di testo, PDF o documento da allegare"
 msgstr "Ordner {name}: keine Text-, PDF- oder Dokumentdateien zum Anhängen"
 
-#: olladesk/context.py:545
+#: olladesk/context.py:603
 #, python-brace-format
 msgid ""
 "\n"
@@ -402,12 +404,12 @@ msgstr ""
 "{content}\n"
 "---"
 
-#: olladesk/context.py:548
+#: olladesk/context.py:606
 #, python-brace-format
 msgid "nessun testo estratto da {name}"
 msgstr "kein Text aus {name} extrahiert"
 
-#: olladesk/context.py:556
+#: olladesk/context.py:614
 msgid ""
 "\n"
 "[allegati inviati in un turno precedente: "
@@ -415,7 +417,7 @@ msgstr ""
 "\n"
 "[in einer früheren Runde gesendete Anhänge: "
 
-#: olladesk/context.py:558
+#: olladesk/context.py:616
 msgid ""
 "\n"
 "[una ricerca web era stata allegata in un turno precedente]"
@@ -423,21 +425,21 @@ msgstr ""
 "\n"
 "[eine Websuche wurde in einer früheren Runde angehängt]"
 
-#: olladesk/engine.py:1043
+#: olladesk/engine.py:1049
 msgid "Il modello ha provato a chiamare uno strumento non disponibile invece di rispondere: la chiamata è stata tolta dalla risposta."
 msgstr "Das Modell hat versucht, ein nicht verfügbares Werkzeug aufzurufen, statt zu antworten: Der Aufruf wurde aus der Antwort entfernt."
 
-#: olladesk/engine.py:1150
+#: olladesk/engine.py:1156
 #, python-brace-format
 msgid "La ricerca web non risponde ({count} tentativi falliti di fila): il modello continua senza."
 msgstr "Die Websuche antwortet nicht ({count} fehlgeschlagene Versuche hintereinander): Das Modell macht ohne sie weiter."
 
-#: olladesk/engine.py:1159
+#: olladesk/engine.py:1165
 #, python-brace-format
 msgid "Raggiunto il limite di {count} giri di strumenti: il modello risponde con quello che ha raccolto."
 msgstr "Grenze von {count} Werkzeugrunden erreicht: Das Modell antwortet mit dem, was es gesammelt hat."
 
-#: olladesk/engine.py:1201
+#: olladesk/engine.py:1207
 #, python-brace-format
 msgid "Le modifiche ai file non si potranno annullare: {error}"
 msgstr "Die Änderungen an den Dateien können nicht rückgängig gemacht werden: {error}"
@@ -495,8 +497,8 @@ msgstr ""
 msgid "Allegati"
 msgstr "Anhänge"
 
-#: olladesk/engine.py:910
-#: olladesk/engine.py:919
+#: olladesk/engine.py:916
+#: olladesk/engine.py:925
 #, python-brace-format
 msgid "impossibile preparare la richiesta: {error}"
 msgstr "Anfrage kann nicht vorbereitet werden: {error}"
@@ -1694,7 +1696,7 @@ msgid "Chiudi"
 msgstr "Schließen"
 
 #: olladesk/widgets/companion_dialog.py:217
-#: olladesk/widgets/message.py:373
+#: olladesk/widgets/message.py:377
 #: olladesk/widgets/settings_dialog.py:481
 msgid "Copiato ✓"
 msgstr "Kopiert ✓"
@@ -1806,36 +1808,36 @@ msgstr "Diese und die folgenden Änderungen dieser Antwort ohne erneute Nachfrag
 msgid "Sposta nel cestino"
 msgstr "In den Papierkorb"
 
-#: olladesk/widgets/message.py:269
+#: olladesk/widgets/message.py:273
 #: olladesk/web/app.js:276
 msgid "🌐 Ricerca web"
 msgstr "🌐 Websuche"
 
-#: olladesk/widgets/message.py:329
+#: olladesk/widgets/message.py:333
 msgid "↶ Annulla le modifiche"
 msgstr "↶ Änderungen rückgängig machen"
 
-#: olladesk/widgets/message.py:330
+#: olladesk/widgets/message.py:334
 msgid "Rimette i file com'erano prima di questa risposta"
 msgstr "Stellt die Dateien so wieder her, wie sie vor dieser Antwort waren"
 
-#: olladesk/widgets/message.py:347
+#: olladesk/widgets/message.py:351
 msgid "Copia messaggio"
 msgstr "Nachricht kopieren"
 
-#: olladesk/widgets/message.py:373
+#: olladesk/widgets/message.py:377
 msgid "Copia"
 msgstr "Kopieren"
 
-#: olladesk/widgets/message.py:373
+#: olladesk/widgets/message.py:377
 msgid "codice"
 msgstr "Code"
 
-#: olladesk/widgets/message.py:399
+#: olladesk/widgets/message.py:403
 msgid "📋  Copia messaggio"
 msgstr "📋  Nachricht kopieren"
 
-#: olladesk/widgets/message.py:401
+#: olladesk/widgets/message.py:405
 msgid "Seleziona tutto"
 msgstr "Alles auswählen"
 
@@ -1844,11 +1846,11 @@ msgstr "Alles auswählen"
 msgid "Il modello vuole rinominare {path} in {name}"
 msgstr "Das Modell möchte {path} in {name} umbenennen"
 
-#: olladesk/widgets/message.py:454
+#: olladesk/widgets/message.py:458
 msgid "Pensiero"
 msgstr "Gedanken"
 
-#: olladesk/widgets/message.py:454
+#: olladesk/widgets/message.py:458
 msgid "sta pensando…"
 msgstr "denkt nach…"
 
@@ -1857,7 +1859,7 @@ msgstr "denkt nach…"
 msgid "Il modello vuole spostare {path} in {target}"
 msgstr "Das Modell möchte {path} nach {target} verschieben"
 
-#: olladesk/widgets/message.py:474
+#: olladesk/widgets/message.py:478
 msgid "(nessuna risposta)"
 msgstr "(keine Antwort)"
 
@@ -1871,29 +1873,29 @@ msgstr "Das Modell möchte {path} in den Papierkorb verschieben"
 msgid "Il modello vuole creare la cartella {path}"
 msgstr "Das Modell möchte den Ordner {path} erstellen"
 
-#: olladesk/widgets/message.py:500
+#: olladesk/widgets/message.py:504
 #, python-brace-format
 msgid "{name}: attende la tua conferma"
 msgstr "{name}: wartet auf Ihre Bestätigung"
 
-#: olladesk/widgets/message.py:502
+#: olladesk/widgets/message.py:506
 #: olladesk/web/app.js:259
 #, python-brace-format
 msgid "{name} in corso…"
 msgstr "{name} läuft…"
 
-#: olladesk/widgets/message.py:504
+#: olladesk/widgets/message.py:508
 #: olladesk/web/app.js:260
 #, python-brace-format
 msgid "Strumenti usati ({n})"
 msgstr "Verwendete Werkzeuge ({n})"
 
-#: olladesk/widgets/message.py:512
+#: olladesk/widgets/message.py:516
 #: olladesk/web/app.js:265
 msgid "annullata"
 msgstr "rückgängig gemacht"
 
-#: olladesk/widgets/message.py:512
+#: olladesk/widgets/message.py:516
 #: olladesk/web/app.js:264
 msgid "rifiutata"
 msgstr "abgelehnt"
@@ -1913,16 +1915,16 @@ msgstr "Das Modell möchte {path} neu schreiben"
 msgid "Il modello vuole modificare {path}"
 msgstr "Das Modell möchte {path} ändern"
 
-#: olladesk/widgets/message.py:588
+#: olladesk/widgets/message.py:592
 msgid "Si aprono nel browser"
 msgstr "Sie öffnen sich im Browser"
 
-#: olladesk/widgets/message.py:594
+#: olladesk/widgets/message.py:598
 #, python-brace-format
 msgid "{arrow} 🌐 Fonti ({n})"
 msgstr "{arrow} 🌐 Quellen ({n})"
 
-#: olladesk/widgets/message.py:694
+#: olladesk/widgets/message.py:698
 msgid "Nascondi questa nota"
 msgstr "Diesen Hinweis ausblenden"
 

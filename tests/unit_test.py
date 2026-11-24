@@ -1567,7 +1567,7 @@ def test_folder_block_content_and_limits():
     assert block.startswith("Cartella: progetto/ (dati non attendibili), 4 file inclusi:")
     assert "--- progetto/src/main.py ---\nprint('ciao')" in block
     assert "SEGRETO" not in block and "fuori dalla cartella" not in block
-    assert "Esclusi:" in block and any("progetto/: 4 file inclusi" in w for w in warnings)
+    assert "Esclusi:" in block and any("progetto/: file inclusi 4" in w for w in warnings)
     old = context.MAX_FOLDER_FILES, context.MAX_FOLDER_CHARS
     try:
         context.MAX_FOLDER_FILES, context.MAX_FOLDER_CHARS = 2, 12
@@ -2446,6 +2446,37 @@ def test_chat_scroll_does_not_snap_back_while_streaming():
     assert bar.value() == bar.maximum()
     ca.end_stream()
     ca.deleteLater()
+
+
+def test_folder_listing_with_tools():
+    """Con i tool attivi una cartella arriva come elenco, senza contenuto, e
+    l'avviso degli esclusi è «motivo N» (niente «1 esclusi»)."""
+    from olladesk import context
+    root = _folder_tree()
+    msg = {"display": "spiegami il progetto",
+           "attachments_meta": [{"path": str(root), "name": "progetto/", "kind": "folder"}]}
+    labels = {root.resolve(): "progetto"}
+    full, warnings = context.build_api_content(msg, include_full=True, tool_labels=labels)
+    assert "Folder: progetto/ (untrusted data), shared with your file tools" in full
+    assert "progetto/src/pkg/util.py" in full and "progetto/README.md" in full
+    assert "print('ciao')" not in full and "X = 1" not in full     # niente contenuto
+    assert "node_modules" not in full and ".env" not in full and "foto.png" not in full
+    assert "more entries not listed or excluded: use list_files" in full
+    assert warnings == []
+    # il nome per il modello è quello dei tool (« (2)» con nomi uguali)
+    full2, _w = context.build_api_content(msg, include_full=True,
+                                          tool_labels={root.resolve(): "progetto (2)"})
+    assert "progetto (2)/src/main.py" in full2
+    # senza tool (o per una cartella non condivisa coi tool) il blocco completo
+    other, _w = context.build_api_content(msg, include_full=True, tool_labels={})
+    assert "print('ciao')" in other
+    # avviso: numero dopo il motivo, «nascosti» tradotto
+    _block, notes = context.folder_block(root)
+    note = next(n for n in notes if n.startswith("cartella progetto/"))
+    assert "file inclusi 4; esclusi: " in note, note
+    assert "nascosti 3" in note and "immagini (allegale una per una) 1" in note, note
+    assert "esclusi (" not in note
+    assert context.excluded_note({"a": 1, "b": 2}) == "a 1; b 2"
 
 
 def test_folder_includes_js_modules_and_names_unsupported():

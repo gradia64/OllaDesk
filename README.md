@@ -84,7 +84,10 @@ License: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   entries examined (files and folders), 2 seconds between visiting and reading
   (text files first, then documents, then PDFs). A warning summarizes what was left out, and
   the model receives the same list. The folder is read at send time: only the
-  path remains in the conversation.
+  path remains in the conversation. With the tools (🔧) on and a model that
+  supports them, the folder's content is not sent: the model receives only the
+  list of readable files and opens the ones it needs with the tools, so a large
+  folder does not fill the context.
 - **Reasoning (thinking)**: with models that support it (qwen3, deepseek-r1…)
   the 🧠 button in the input enables or disables reasoning, and the model's
   thought appears in the bubble in a "💭 Thinking" block in streaming,

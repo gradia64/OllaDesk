@@ -328,7 +328,7 @@ assert "images" not in sent   # le immagini della cartella non partono
 saved = config.load_chat(cf)["messages"][0]
 assert saved["attachments_meta"] == [{"path": folder, "name": "progetto/", "kind": "folder"}]
 assert "dalla cartella" not in str(saved)   # nel file della chat solo il percorso
-assert any("1 esclusi (immagini" in e[2] for e in events if e[0] == "notice" and e[1] == cf)
+assert any("esclusi: immagini (allegale una per una) 1" in e[2] for e in events if e[0] == "notice" and e[1] == cf)
 engine.delete_chat(cf)
 assert os.path.isdir(folder)   # eliminare la chat non tocca la cartella
 print("8b. cartella come contesto OK")
@@ -385,6 +385,20 @@ assert not engine.tools_supported("finto-due") and not engine.tools_supported("a
 engine.send(None, "usa lo strumento", "finto")
 assert wait_until(lambda: not engine.busy())
 assert "tools" not in payloads[-1] and not tool_runs
+
+# 9a2. con i tool una cartella allegata arriva come elenco, senza contenuto
+events.clear()
+n0 = len(payloads)
+cl = engine.send(None, "cosa fa?", "finto", tools=True,
+                 attachments=[{"path": folder, "name": "progetto/", "kind": "folder"}])
+assert wait_until(lambda: not engine.busy())
+sent = payloads[n0]["messages"][-1]["content"]
+assert "Folder: progetto/ (untrusted data), shared with your file tools" in sent
+assert "progetto/src/main.py" in sent and "dalla cartella" not in sent
+assert "read_file" in [t["function"]["name"] for t in payloads[n0]["tools"]]
+assert not any(e[0] == "notice" and e[1] == cl and "esclusi" in e[2] for e in events)
+engine.delete_chat(cl)
+print("9a2. cartella come elenco con i tool OK")
 
 # 9b. un giro: chiamata, risultato al modello, risposta finale nella stessa bolla
 events.clear()

@@ -81,13 +81,14 @@ Restituisce gli ultimi `limit` messaggi **precedenti** più il messaggio corrent
 - Con `limit = 0`, o con un valore negativo trattato come 0, viene inviato comunque l'ultimo messaggio.
 - Con una lista vuota restituisce `[]`.
 
-### `build_api_content(msg: dict, include_full: bool) -> tuple[str, list[str]]`
+### `build_api_content(msg: dict, include_full: bool, tool_labels=None) -> tuple[str, list[str]]`
 Costruisce il testo del messaggio utente da inviare a Ollama e restituisce `(contenuto, avvisi)`. La base è `msg["display"]`; se manca, si usa `msg["content"]`.
 
 **Con `include_full=True`**, usato solo per l'ultimo turno:
 - Gli allegati vengono letti da disco al momento. Le voci di `attachments_meta` che non sono dizionari o non hanno `path` vengono ignorate.
 - Il tipo di allegato è `att["kind"]`; se manca, viene calcolato con `classify`.
 - Le immagini vengono saltate, perché viaggiano nel campo `"images"`.
+- Una cartella diventa il blocco di `folder_block` (contenuto dei file e avviso sugli esclusi, nella forma «motivo N»). Se però compare in `tool_labels` (`{percorso risolto: nome per il modello}`, che il motore passa quando i tool di lettura vanno nella richiesta), si usa `folder_listing`: solo l'elenco dei file leggibili, con i percorsi dei tool, e il modello li apre con `read_file`. Nessun avviso, perché non si taglia contenuto.
 - Per gli altri allegati viene chiamata `extract_text`, e la sua nota, se c'è, finisce negli avvisi.
 - Se il testo estratto non è vuoto, viene aggiunto in un blocco delimitato da `---` con l'intestazione `Allegato: <nome> (dati non attendibili)`.
 - Se il testo è vuoto e non c'è una nota, viene aggiunto l'avviso `nessun testo estratto da <nome>`.

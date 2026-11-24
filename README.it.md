@@ -88,7 +88,11 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   cartelle), 2 secondi tra visita e lettura (prima i file di testo, poi i
   documenti, infine i PDF). Un avviso riassume cosa è rimasto fuori, e il
   modello riceve lo stesso elenco. La cartella si legge al momento
-  dell'invio: nella conversazione resta solo il percorso.
+  dell'invio: nella conversazione resta solo il percorso. Con gli strumenti
+  (🔧) attivi e un modello che li supporta il contenuto della cartella non
+  parte: il modello riceve solo l'elenco dei file leggibili e apre con gli
+  strumenti quelli che gli servono, così una cartella grande non riempie il
+  contesto.
 - **Ragionamento (thinking)**: con i modelli che lo supportano (qwen3,
   deepseek-r1…) il pulsante 🧠 dell'input abilita o disattiva il ragionamento
   e il pensiero del modello compare nella bolla in un blocco «💭 Pensiero»
