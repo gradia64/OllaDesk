@@ -3182,6 +3182,129 @@ def test_write_tools():
     assert "write_file" in write_tools.WRITE_NOTE and "approves" in write_tools.WRITE_NOTE
 
 
+def test_full_access_tools():
+    """0.5, W3: spostare, rinominare e cestinare, con conferma e annullamento."""
+    from olladesk import file_tools, tools, write_tools
+    from olladesk.widgets import message
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp) / "progetto"
+        (root / "src").mkdir(parents=True)
+        (root / "docs").mkdir()
+        (root / "docs" / "a.md").write_text("A\n")
+        (root / "docs" / "img").mkdir()
+        (root / "docs" / "img" / "b.png").write_bytes(b"\x89PNG")
+        (root / "src" / "calc.py").write_text("x = 1\n")
+        (root / "conf").mkdir()
+        (root / "conf" / ".segreto").write_text("s")
+        (root / "node_modules").mkdir()
+        (root / "node_modules" / "m.js").write_text("m")
+        (root / "conlink").mkdir()
+        (root / "conlink" / "l").symlink_to(root / "src" / "calc.py")
+        solo = Path(tmp) / "nota.txt"
+        solo.write_text("nota\n")
+        bin_ = Path(tmp) / "cestino"
+        bin_.mkdir()
+
+        def fake_trash(path):
+            where = bin_ / "files" / path.name
+            where.parent.mkdir(exist_ok=True)
+            os.rename(path, where)
+            return where
+
+        shared = [file_tools.Shared("progetto", root, True),
+                  file_tools.Shared("nota.txt", solo, False)]
+        changes: list = []
+        decision = {"ok": True}
+
+        def approve(ch):
+            changes.append(ch)
+            return decision["ok"]
+
+        # «Scrivere file»: niente move_file né delete_file
+        names = {t.name for t in write_tools.make_write_tools(shared, approve)}
+        assert "move_file" not in names and "delete_file" not in names
+        journal = write_tools.WriteJournal()
+        reg = tools.ToolRegistry(write_tools.make_write_tools(
+            shared, approve, journal, full=True, trash=fake_trash))
+
+        def call(name, **args):
+            return tools.run_call(reg, {"name": name, "arguments": args})
+
+        # rinomina un file
+        out, err = call("move_file", source="progetto/src/calc.py",
+                        destination="progetto/src/conti.py")
+        assert not err and out.startswith("Renamed"), out
+        assert (root / "src" / "conti.py").read_text() == "x = 1\n"
+        ch = changes[-1]
+        assert (ch.kind, ch.label, ch.target) == ("move", "progetto/src/calc.py",
+                                                  "progetto/src/conti.py")
+        # sposta una cartella in una nuova sottocartella (creata)
+        out, err = call("move_file", source="progetto/docs", destination="progetto/old/docs")
+        assert not err and out.startswith("Moved") and (root / "old" / "docs" / "img").is_dir(), out
+        # niente sovrascritture, niente cartelle dentro sé stesse
+        out, err = call("move_file", source="progetto/src/conti.py",
+                        destination="progetto/old/docs/a.md")
+        assert err and "already exists" in out
+        out, err = call("move_file", source="progetto/old", destination="progetto/old/x/old")
+        assert err and "inside itself" in out
+        # cartelle con dentro qualcosa che il modello non vede: rifiutate
+        for src in ("progetto/conf", "progetto/conlink"):
+            out, err = call("move_file", source=src, destination="progetto/altro")
+            assert err and "fixed rule" in out, out
+        out, err = call("delete_file", path="progetto/node_modules")
+        assert err and "dependency" in out and (root / "node_modules").is_dir(), out
+        out, err = call("delete_file", path="progetto/.git")
+        assert err and "hidden" in out, out
+        # un file allegato da solo si cambia ma non si sposta
+        out, err = call("move_file", source="nota.txt", destination="progetto/nota.txt")
+        assert err and "single shared file" in out
+        # nel cestino: file di testo (il diff mostra cosa sparisce) e cartella
+        n = len(changes)
+        out, err = call("delete_file", path="progetto/src/conti.py")
+        assert not err and "trash" in out and not (root / "src" / "conti.py").exists(), out
+        assert changes[n].kind == "delete" and "-x = 1" in changes[n].diff
+        out, err = call("delete_file", path="progetto/old/docs")
+        assert not err and "(3 items inside)" in out, out
+        assert "img/b.png" in changes[-1].diff and "a.md" in changes[-1].diff
+        # rifiutato: resta tutto
+        decision["ok"] = False
+        out, err = call("delete_file", path="progetto/src")
+        assert err and "rejected" in out and (root / "src").is_dir()
+        decision["ok"] = True
+        # cestino che non funziona: niente cancellazione per sempre
+        reg_ko = tools.ToolRegistry(write_tools.make_write_tools(
+            shared, approve, full=True, trash=lambda p: (_ for _ in ()).throw(OSError("no"))))
+        out, err = tools.run_call(reg_ko, {"name": "delete_file",
+                                           "arguments": {"path": "progetto/src"}})
+        assert err and "Nothing was deleted" in out and (root / "src").is_dir()
+        # annulla tutto, dall'ultima operazione alla prima
+        assert journal.undo() == []
+        assert (root / "src" / "calc.py").read_text() == "x = 1\n"
+        assert (root / "docs" / "img" / "b.png").exists() and not (root / "old").exists()
+        assert not any((bin_ / "files").iterdir())
+
+        # la conferma: «consenti per il resto» non copre spostare e cestinare
+        gate = write_tools.ApprovalGate()
+        gate._allow_rest = True
+        assert gate.ask(write_tools.Change("edit", "p/a", Path("/x")))
+        req_view = write_tools.Request(1, write_tools.Change(
+            "delete", "p/a", Path("/x"), "-a")).view()
+        assert req_view["allow_rest"] is False and req_view["kind"] == "delete"
+
+        from PySide6.QtWidgets import QApplication
+        QApplication.instance() or QApplication([])
+        card = message.ChangeCard(req_view, "dark")
+        assert card.rest_btn.isHidden() and "cestino" in card.title.text()
+        assert card.apply_btn.text() == "Sposta nel cestino" and "+" not in card.title.text()
+        mv = {"id": 2, "kind": "move", "label": "p/src/a.py", "target": "p/src/b.py",
+              "diff": "", "allow_rest": False}
+        assert "rinominare p/src/a.py in b.py" in message.change_title(mv)
+        assert "spostare p/src/a.py in p/old/a.py" in message.change_title(
+            {**mv, "target": "p/old/a.py"})
+        assert "Move or rename" in write_tools.FULL_NOTE.replace("move or rename", "Move or rename")
+
+
 def test_change_approval_gate_and_card():
     """0.5, W2: conferma delle modifiche tra il thread dei tool e la UI."""
     import threading
@@ -3203,7 +3326,7 @@ def test_change_approval_gate_and_card():
 
     def ask_in_thread(change):
         out: list = []
-        t = threading.Thread(target=run, args=(change, out))
+        t = threading.Thread(target=run, args=(change, out), daemon=True)
         t.start()
         for _ in range(200):
             if gate.pending() is not None or out:
@@ -3215,7 +3338,8 @@ def test_change_approval_gate_and_card():
     t, out = ask_in_thread(ch)
     req = gate.pending()
     assert req is not None and asked == [req] and req.view() == {
-        "id": 1, "kind": "edit", "label": "p/a.txt", "diff": ch.diff, "added": 1, "removed": 1}
+        "id": 1, "kind": "edit", "label": "p/a.txt", "target": "", "diff": ch.diff,
+        "added": 1, "removed": 1, "allow_rest": True}
     assert not gate.resolve(2, "apply") and not gate.resolve(1, "boh")
     assert gate.resolve(1, "apply")
     t.join(2)

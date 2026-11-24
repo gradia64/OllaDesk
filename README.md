@@ -101,8 +101,11 @@ License: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   request, but you confirm only on the PC, and a rejected change is not
   proposed again in the same answer. Atomic writes, text files only, up to
   512 KB; a file attached on its own can be changed, but nothing can be
-  created next to it. "Full access" is for now the same as "Write files"
-  (moving and deleting files will come later). The wrench is grey, blue or
+  created next to it. "Full access" also lets the model move or rename files and folders and
+  move them to the system trash (never deleted permanently): these always ask
+  for confirmation, one by one, even after "Allow for the rest of the
+  answer", and a folder with hidden or excluded files or links inside cannot
+  be moved or deleted. The wrench is grey, blue or
   amber depending on the level. Always limited to what was attached, with the
   same exclusions as a folder as context, for writing too (hidden files,
   dependencies, `.gitignore`, credentials, links that leave the folder); no

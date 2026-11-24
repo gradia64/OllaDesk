@@ -707,6 +707,44 @@ fake.write_rounds = []
 engine.set_chat_tools(c9h, True)
 print("9h3. conferma: Stop durante l'attesa OK")
 
+# 9h4. «Accesso completo» (0.5, W3): anche move_file e delete_file, nota
+# apposita; spostare e cestinare chiedono anche dopo «consenti per il resto».
+# Il cestino è finto: i test non toccano quello vero
+trash_dir = Path(tempfile.mkdtemp()) / "cestino"
+trash_dir.mkdir()
+real_trash = write_tools.move_to_trash
+write_tools.move_to_trash = lambda p: p.rename(trash_dir / p.name) or trash_dir / p.name
+(shared_dir / "vecchio.txt").write_text("v\n")
+fake.write_rounds = [
+    [{"name": "write_file", "arguments": {"path": "condivisa/e.txt", "content": "e\n"}}],
+    [{"name": "move_file", "arguments": {"source": "condivisa/e.txt",
+                                         "destination": "condivisa/f.txt"}}],
+    [{"name": "delete_file", "arguments": {"path": "condivisa/vecchio.txt"}}]]
+requests.clear()
+n0 = len(payloads)
+engine.send(c9h, "modifica, sposta e cancella", "finto", tools="full")
+assert wait_until(lambda: engine.pending_change() is not None)
+assert [t["function"]["name"] for t in payloads[n0]["tools"]] == [
+    "delete_file", "edit_file", "list_files", "make_dir", "move_file", "read_file",
+    "search_text", "write_file"]
+assert payloads[n0]["messages"][0]["content"] == "sei un test\n\n" + write_tools.FULL_NOTE
+assert engine.resolve_change(engine.pending_change()["id"], "allow_rest")
+assert wait_until(lambda: engine.pending_change() is not None)
+view = engine.pending_change()
+assert (view["kind"], view["target"], view["allow_rest"]) == ("move", "condivisa/f.txt", False)
+assert engine.resolve_change(view["id"], "apply")
+assert wait_until(lambda: engine.pending_change() is not None)
+assert engine.pending_change()["kind"] == "delete"
+assert engine.resolve_change(engine.pending_change()["id"], "apply")
+assert wait_until(lambda: not engine.busy())
+assert len(requests) == 3
+assert (shared_dir / "f.txt").read_text() == "e\n" and not (shared_dir / "e.txt").exists()
+assert not (shared_dir / "vecchio.txt").exists() and (trash_dir / "vecchio.txt").exists()
+write_tools.move_to_trash = real_trash
+fake.write_rounds = []
+engine.set_chat_tools(c9h, True)
+print("9h4. accesso completo: spostare e cestinare con conferma OK")
+
 # 9i. ricerca web come tool (T4): con 🌐 e i tool attivi niente ricerca prima
 # della risposta, il modello chiama web_search; senza 🌐 il tool non c'è
 searches: list[str] = []

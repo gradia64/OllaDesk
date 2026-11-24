@@ -109,7 +109,7 @@ msgid "nessuno scaricamento in corso"
 msgstr "kein Download aktiv"
 
 #: olladesk/companion.py:438
-#: olladesk/engine.py:405
+#: olladesk/engine.py:407
 msgid "modello non installato"
 msgstr "Modell nicht installiert"
 
@@ -211,7 +211,7 @@ msgid "nome del modello non valido"
 msgstr "ungültiger Modellname"
 
 #: olladesk/config.py:348
-#: olladesk/engine.py:443
+#: olladesk/engine.py:445
 #: olladesk/widgets/sidebar.py:225
 #: olladesk/web/app.js:164
 #: olladesk/web/app.js:482
@@ -423,57 +423,57 @@ msgstr ""
 "\n"
 "[eine Websuche wurde in einer früheren Runde angehängt]"
 
-#: olladesk/engine.py:1058
+#: olladesk/engine.py:1062
 #, python-brace-format
 msgid "La ricerca web non risponde ({count} tentativi falliti di fila): il modello continua senza."
 msgstr "Die Websuche antwortet nicht ({count} fehlgeschlagene Versuche hintereinander): Das Modell macht ohne sie weiter."
 
-#: olladesk/engine.py:1067
+#: olladesk/engine.py:1071
 #, python-brace-format
 msgid "Raggiunto il limite di {count} giri di strumenti: il modello risponde con quello che ha raccolto."
 msgstr "Grenze von {count} Werkzeugrunden erreicht: Das Modell antwortet mit dem, was es gesammelt hat."
 
-#: olladesk/engine.py:381
-#: olladesk/engine.py:401
+#: olladesk/engine.py:383
+#: olladesk/engine.py:403
 msgid "OllaDesk si sta chiudendo"
 msgstr "OllaDesk wird beendet"
 
-#: olladesk/engine.py:383
+#: olladesk/engine.py:385
 msgid "nome del modello mancante"
 msgstr "Modellname fehlt"
 
-#: olladesk/engine.py:385
-#: olladesk/engine.py:403
+#: olladesk/engine.py:387
+#: olladesk/engine.py:405
 msgid "un'altra operazione sui modelli è già in corso"
 msgstr "ein anderer Modellvorgang läuft bereits"
 
-#: olladesk/engine.py:407
+#: olladesk/engine.py:409
 msgid "il PC sta rispondendo: riprova alla fine"
 msgstr "der PC antwortet gerade: versuchen Sie es danach erneut"
 
-#: olladesk/engine.py:424
+#: olladesk/engine.py:426
 msgid "scaricamento annullato"
 msgstr "Download abgebrochen"
 
-#: olladesk/engine.py:439
+#: olladesk/engine.py:441
 msgid "⚠ Impossibile salvare la conversazione su disco: spazio esaurito o permessi mancanti?"
 msgstr "⚠ Unterhaltung konnte nicht auf der Festplatte gespeichert werden: Speicher voll oder fehlende Berechtigungen?"
 
-#: olladesk/engine.py:565
+#: olladesk/engine.py:567
 #, python-brace-format
 msgid "il modello «{model}» è in eliminazione"
 msgstr "das Modell „{model}“ wird gerade gelöscht"
 
-#: olladesk/engine.py:595
+#: olladesk/engine.py:597
 #, python-brace-format
 msgid "file non leggibile: {name}"
 msgstr "Datei nicht lesbar: {name}"
 
-#: olladesk/engine.py:599
+#: olladesk/engine.py:601
 msgid "Ricerca web saltata: scrivi una domanda insieme agli allegati."
 msgstr "Websuche übersprungen: schreiben Sie eine Frage zu den Anhängen."
 
-#: olladesk/engine.py:700
+#: olladesk/engine.py:702
 #, python-brace-format
 msgid ""
 "⚠ Ricerca web non riuscita ({err}).\n"
@@ -482,17 +482,17 @@ msgstr ""
 "⚠ Websuche fehlgeschlagen ({err}).\n"
 "Es wird ohne Webergebnisse fortgefahren."
 
-#: olladesk/engine.py:726
+#: olladesk/engine.py:728
 msgid "Allegati"
 msgstr "Anhänge"
 
-#: olladesk/engine.py:818
-#: olladesk/engine.py:827
+#: olladesk/engine.py:822
+#: olladesk/engine.py:831
 #, python-brace-format
 msgid "impossibile preparare la richiesta: {error}"
 msgstr "Anfrage kann nicht vorbereitet werden: {error}"
 
-#: olladesk/engine.py:951
+#: olladesk/engine.py:955
 msgid "Il modello ha provato a chiamare uno strumento non disponibile invece di rispondere: la chiamata è stata tolta dalla risposta."
 msgstr "Das Modell hat versucht, ein nicht verfügbares Werkzeug aufzurufen, statt zu antworten: Der Aufruf wurde aus der Antwort entfernt."
 
@@ -1612,7 +1612,7 @@ msgid "Porta:"
 msgstr "Port:"
 
 #: olladesk/widgets/companion_dialog.py:116
-#: olladesk/widgets/message.py:110
+#: olladesk/widgets/message.py:122
 msgid "Applica"
 msgstr "Anwenden"
 
@@ -1649,7 +1649,7 @@ msgid "Chiudi"
 msgstr "Schließen"
 
 #: olladesk/widgets/companion_dialog.py:217
-#: olladesk/widgets/message.py:312
+#: olladesk/widgets/message.py:328
 #: olladesk/widgets/settings_dialog.py:481
 msgid "Copiato ✓"
 msgstr "Kopiert ✓"
@@ -1723,109 +1723,128 @@ msgstr "Alle gekoppelten Geräte trennen? Um den Companion wieder zu nutzen, mü
 msgid "Dispositivi scollegati."
 msgstr "Geräte getrennt."
 
-#: olladesk/widgets/message.py:112
+#: olladesk/widgets/message.py:103
+#, python-brace-format
+msgid "(+{added} −{removed})"
+msgstr "(+{added} −{removed})"
+
+#: olladesk/widgets/message.py:124
 msgid "Rifiuta"
 msgstr "Ablehnen"
 
-#: olladesk/widgets/message.py:113
+#: olladesk/widgets/message.py:125
 msgid "Consenti per il resto della risposta"
 msgstr "Für den Rest der Antwort erlauben"
 
-#: olladesk/widgets/message.py:114
+#: olladesk/widgets/message.py:126
 msgid "Applica questa modifica e le prossime di questa risposta senza chiedere di nuovo."
 msgstr "Diese und die folgenden Änderungen dieser Antwort ohne erneute Nachfrage anwenden."
 
-#: olladesk/widgets/message.py:220
+#: olladesk/widgets/message.py:134
+msgid "Sposta nel cestino"
+msgstr "In den Papierkorb"
+
+#: olladesk/widgets/message.py:236
 #: olladesk/web/app.js:274
 msgid "🌐 Ricerca web"
 msgstr "🌐 Websuche"
 
-#: olladesk/widgets/message.py:286
+#: olladesk/widgets/message.py:302
 msgid "Copia messaggio"
 msgstr "Nachricht kopieren"
 
-#: olladesk/widgets/message.py:312
+#: olladesk/widgets/message.py:328
 msgid "Copia"
 msgstr "Kopieren"
 
-#: olladesk/widgets/message.py:312
+#: olladesk/widgets/message.py:328
 msgid "codice"
 msgstr "Code"
 
-#: olladesk/widgets/message.py:338
+#: olladesk/widgets/message.py:354
 msgid "📋  Copia messaggio"
 msgstr "📋  Nachricht kopieren"
 
-#: olladesk/widgets/message.py:340
+#: olladesk/widgets/message.py:356
 msgid "Seleziona tutto"
 msgstr "Alles auswählen"
 
-#: olladesk/widgets/message.py:393
+#: olladesk/widgets/message.py:409
 msgid "Pensiero"
 msgstr "Gedanken"
 
-#: olladesk/widgets/message.py:393
+#: olladesk/widgets/message.py:409
 msgid "sta pensando…"
 msgstr "denkt nach…"
 
-#: olladesk/widgets/message.py:40
-#, python-brace-format
-msgid "Il modello vuole creare la cartella {path}"
-msgstr "Das Modell möchte den Ordner {path} erstellen"
-
-#: olladesk/widgets/message.py:413
+#: olladesk/widgets/message.py:429
 msgid "(nessuna risposta)"
 msgstr "(keine Antwort)"
 
-#: olladesk/widgets/message.py:42
+#: olladesk/widgets/message.py:43
 #, python-brace-format
-msgid "Il modello vuole creare {path}"
-msgstr "Das Modell möchte {path} erstellen"
+msgid "Il modello vuole rinominare {path} in {name}"
+msgstr "Das Modell möchte {path} in {name} umbenennen"
 
-#: olladesk/widgets/message.py:439
+#: olladesk/widgets/message.py:45
+#, python-brace-format
+msgid "Il modello vuole spostare {path} in {target}"
+msgstr "Das Modell möchte {path} nach {target} verschieben"
+
+#: olladesk/widgets/message.py:455
 #, python-brace-format
 msgid "{name}: attende la tua conferma"
 msgstr "{name}: wartet auf Ihre Bestätigung"
 
-#: olladesk/widgets/message.py:44
-#, python-brace-format
-msgid "Il modello vuole riscrivere {path}"
-msgstr "Das Modell möchte {path} neu schreiben"
-
-#: olladesk/widgets/message.py:441
+#: olladesk/widgets/message.py:457
 #: olladesk/web/app.js:259
 #, python-brace-format
 msgid "{name} in corso…"
 msgstr "{name} läuft…"
 
-#: olladesk/widgets/message.py:443
+#: olladesk/widgets/message.py:459
 #: olladesk/web/app.js:260
 #, python-brace-format
 msgid "Strumenti usati ({n})"
 msgstr "Verwendete Werkzeuge ({n})"
 
-#: olladesk/widgets/message.py:45
+#: olladesk/widgets/message.py:47
+#, python-brace-format
+msgid "Il modello vuole spostare nel cestino {path}"
+msgstr "Das Modell möchte {path} in den Papierkorb verschieben"
+
+#: olladesk/widgets/message.py:49
+#, python-brace-format
+msgid "Il modello vuole creare la cartella {path}"
+msgstr "Das Modell möchte den Ordner {path} erstellen"
+
+#: olladesk/widgets/message.py:51
+#, python-brace-format
+msgid "Il modello vuole creare {path}"
+msgstr "Das Modell möchte {path} erstellen"
+
+#: olladesk/widgets/message.py:53
+#, python-brace-format
+msgid "Il modello vuole riscrivere {path}"
+msgstr "Das Modell möchte {path} neu schreiben"
+
+#: olladesk/widgets/message.py:535
+msgid "Si aprono nel browser"
+msgstr "Sie öffnen sich im Browser"
+
+#: olladesk/widgets/message.py:54
 #, python-brace-format
 msgid "Il modello vuole modificare {path}"
 msgstr "Das Modell möchte {path} ändern"
 
-#: olladesk/widgets/message.py:517
-msgid "Si aprono nel browser"
-msgstr "Sie öffnen sich im Browser"
-
-#: olladesk/widgets/message.py:523
+#: olladesk/widgets/message.py:541
 #, python-brace-format
 msgid "{arrow} 🌐 Fonti ({n})"
 msgstr "{arrow} 🌐 Quellen ({n})"
 
-#: olladesk/widgets/message.py:621
+#: olladesk/widgets/message.py:639
 msgid "Nascondi questa nota"
 msgstr "Diesen Hinweis ausblenden"
-
-#: olladesk/widgets/message.py:92
-#, python-brace-format
-msgid "(+{added} −{removed})"
-msgstr "(+{added} −{removed})"
 
 #: olladesk/widgets/model_manager.py:106
 msgid "Dimensione"

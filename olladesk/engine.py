@@ -230,14 +230,16 @@ class ChatEngine(QObject):
         # query che ne ripete un pezzo (non deve uscire verso il motore)
         read_log: list[str] = []
         shared = file_tools.shared_from_chat(chat)
-        writable = chat_tools_level(chat) in tools.WRITE_LEVELS
+        level = chat_tools_level(chat)
+        writable = level in tools.WRITE_LEVELS
         extra = file_tools.make_tools(shared, read_log, writable=writable)
         self._close_gate()
         if writable:
             self._journal.discard()
             self._journal = write_tools.WriteJournal()
             self._gate = write_tools.ApprovalGate(self._change_asked.emit)
-            extra += write_tools.make_write_tools(shared, self._gate.ask, self._journal)
+            extra += write_tools.make_write_tools(shared, self._gate.ask, self._journal,
+                                                  full=level == "full")
         if web:
             extra.append(web_search.web_tool(**self._search_settings(), file_texts=read_log))
             # fetch_page apre solo le pagine uscite dalle ricerche di questa
@@ -772,7 +774,9 @@ class ChatEngine(QObject):
             # modello sa che può modificare, e che ogni modifica va confermata
             writable = (self._use_tools and self._tools_level in tools.WRITE_LEVELS
                         and self.tools_supported(chat.get("model") or ""))
-            note = write_tools.WRITE_NOTE if writable else file_tools.READ_ONLY_NOTE
+            note = (file_tools.READ_ONLY_NOTE if not writable
+                    else write_tools.FULL_NOTE if self._tools_level == "full"
+                    else write_tools.WRITE_NOTE)
             system = (system + "\n\n" if system else "") + note
         if system:
             messages.append({"role": "system", "content": system})

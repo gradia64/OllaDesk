@@ -37,6 +37,14 @@ def change_title(view: dict) -> str:
     """Titolo della richiesta di conferma (`Request.view()`)."""
     label = view.get("label", "")
     kind = view.get("kind")
+    if kind == "move":
+        target = view.get("target", "")
+        if target.rpartition("/")[0] == label.rpartition("/")[0]:
+            return _("Il modello vuole rinominare {path} in {name}").format(
+                path=label, name=target.rpartition("/")[2])
+        return _("Il modello vuole spostare {path} in {target}").format(path=label, target=target)
+    if kind == "delete":
+        return _("Il modello vuole spostare nel cestino {path}").format(path=label)
     if kind == "mkdir":
         return _("Il modello vuole creare la cartella {path}").format(path=label)
     if kind == "create":
@@ -91,7 +99,7 @@ class ChangeCard(QFrame):
         lay.setContentsMargins(10, 8, 10, 8)
         lay.setSpacing(6)
         title = change_title(view)
-        if view.get("kind") != "mkdir":
+        if view.get("kind") in ("create", "replace", "edit"):
             title += "  " + _("(+{added} −{removed})").format(
                 added=view.get("added", 0), removed=view.get("removed", 0))
         self.title = QLabel(title, self)
@@ -122,6 +130,10 @@ class ChangeCard(QFrame):
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.clicked.connect(lambda _c=False, d=decision: self._decide(d))
             row.addWidget(btn)
+        if view.get("kind") == "delete":
+            self.apply_btn.setText(_("Sposta nel cestino"))
+        # spostare e cestinare chiedono sempre, una per una
+        self.rest_btn.setVisible(view.get("allow_rest", True) is not False)
         row.addStretch(1)
         lay.addLayout(row)
 

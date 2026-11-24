@@ -1,7 +1,9 @@
-"""Tool di scrittura sui file condivisi in chat (0.5, voce W2).
+"""Tool di scrittura sui file condivisi in chat (0.5, voci W2 e W3).
 
 Il modello può creare o sostituire un file di testo (`write_file`),
-cambiarne un pezzo esatto (`edit_file`) e creare cartelle (`make_dir`),
+cambiarne un pezzo esatto (`edit_file`) e creare cartelle (`make_dir`);
+con «Accesso completo» anche spostare o rinominare (`move_file`) e
+mandare nel cestino (`delete_file`) file e cartelle,
 solo dentro le cartelle e i file allegati alla conversazione e con le
 stesse esclusioni della lettura (`file_tools`): nascosti, dipendenze,
 `.gitignore`, credenziali, collegamenti. Un file allegato da solo si può
@@ -48,60 +50,98 @@ WRITE_NOTE = (
     "commands. Never claim a change that a tool did not confirm."
 )
 
+# con il livello «full»: anche spostare e cestinare
+FULL_NOTE = (
+    "You can create and change text files in the folders and files shared in this "
+    "conversation with write_file, edit_file and make_dir, move or rename files and "
+    "folders with move_file and move them to the trash with delete_file. Read a file with "
+    "read_file before changing it. For a small change use edit_file with an exact piece "
+    "of the current text; use write_file only for new files or to rewrite a whole short "
+    "file. The user sees and approves every change: if a change is rejected, do not try "
+    "the same change again. Move or delete only what the user asked for. You cannot run "
+    "commands. Never claim a change that a tool did not confirm."
+)
+
+# modifiche coperte da «consenti per il resto della risposta»: spostare e
+# cestinare chiedono sempre
+ALLOW_REST_KINDS = frozenset({"create", "replace", "edit", "mkdir"})
+# voci di una cartella da spostare o cestinare: oltre, la si rifiuta
+MAX_TREE_ENTRIES = 2000
+MAX_LISTED_ENTRIES = 60          # voci elencate nella conferma di una cartella
+
 
 @dataclass
 class Change:
     """Una modifica proposta, per la conferma."""
 
-    kind: str          # "create", "replace", "edit", "mkdir"
+    kind: str          # "create", "replace", "edit", "mkdir", "move", "delete"
     label: str         # percorso per il modello e per l'utente (progetto/src/a.py)
     path: Path         # percorso vero
-    diff: str = ""     # diff unificato (vuoto per mkdir)
+    diff: str = ""     # diff unificato (vuoto per mkdir e move; contenuto per delete)
+    target: str = ""   # destinazione di move (etichetta)
 
 
 @dataclass
 class WriteJournal:
     """Modifiche applicate in una risposta, per annullarle.
 
-    Per ogni file toccato la prima volta si tiene una copia (o il segno che
-    non esisteva); `undo` rimette tutto com'era, dall'ultima modifica alla
-    prima. Le copie stanno in una cartella temporanea privata.
+    Un elenco di operazioni nell'ordine in cui sono avvenute: prima di ogni
+    scrittura una copia del file (o il segno che non esisteva), le cartelle
+    create, gli spostamenti, i file mandati nel cestino (con il posto nel
+    cestino, se noto). `undo` le disfa dall'ultima alla prima. Le copie
+    stanno in una cartella temporanea privata.
     """
 
-    backups: dict[Path, Path | None] = field(default_factory=dict)
-    created_dirs: list[Path] = field(default_factory=list)
+    ops: list[tuple] = field(default_factory=list)
     _dir: Path | None = None
 
     def remember(self, path: Path) -> None:
-        if path in self.backups:
-            return
+        """Stato di `path` prima di una scrittura."""
         if not path.exists():
-            self.backups[path] = None
+            self.ops.append(("write", path, None))
             return
         if self._dir is None:
             self._dir = Path(tempfile.mkdtemp(prefix="olladesk-undo-"))
-        copy = self._dir / str(len(self.backups))
+        copy = self._dir / str(len(self.ops))
         shutil.copy2(path, copy)
-        self.backups[path] = copy
+        self.ops.append(("write", path, copy))
+
+    def created_dir(self, path: Path) -> None:
+        self.ops.append(("mkdir", path))
+
+    def moved(self, src: Path, dst: Path) -> None:
+        self.ops.append(("move", src, dst))
+
+    def trashed(self, path: Path, where: Path | None) -> None:
+        self.ops.append(("trash", path, where))
 
     def undo(self) -> list[Path]:
-        """Ripristina i file; restituisce quelli che non è riuscito a toccare."""
+        """Rimette tutto com'era; restituisce i percorsi che non è riuscito a
+        ripristinare (un file cestinato senza posto noto nel cestino, una
+        destinazione occupata nel frattempo)."""
         failed = []
-        for path, copy in reversed(list(self.backups.items())):
+        for op in reversed(self.ops):
+            kind, path = op[0], op[1]
             try:
-                if copy is None:
-                    path.unlink(missing_ok=True)
-                else:
-                    _atomic_write(path, copy.read_bytes())
+                if kind == "write":
+                    if op[2] is None:
+                        path.unlink(missing_ok=True)
+                    else:
+                        _atomic_write(path, op[2].read_bytes())
+                elif kind == "mkdir":
+                    try:
+                        path.rmdir()          # solo se vuota: niente perdite
+                    except OSError:
+                        pass
+                elif kind == "move":
+                    if path.exists() or path.is_symlink():
+                        raise OSError("destination taken")
+                    shutil.move(str(op[2]), str(path))
+                elif kind == "trash":
+                    _restore_from_trash(path, op[2])
             except OSError:
                 failed.append(path)
-        for d in reversed(self.created_dirs):
-            try:
-                d.rmdir()          # solo se vuota: niente perdite
-            except OSError:
-                pass
-        self.backups.clear()
-        self.created_dirs.clear()
+        self.ops.clear()
         self.discard()
         return failed
 
@@ -109,6 +149,66 @@ class WriteJournal:
         if self._dir is not None:
             shutil.rmtree(self._dir, ignore_errors=True)
             self._dir = None
+
+
+def move_to_trash(path: Path) -> Path | None:
+    """Manda `path` nel cestino del sistema; restituisce dove è finito (None
+    se il cestino non lo dice, come il portale del Flatpak). OSError se non
+    riesce: non si cancella mai per sempre."""
+    if _in_flatpak():
+        _portal_trash(path)
+        return None
+    from PySide6.QtCore import QFile
+
+    f = QFile(str(path))
+    if not f.moveToTrash():
+        raise OSError(f.errorString() or "the trash is not available")
+    return Path(f.fileName())
+
+
+def _in_flatpak() -> bool:
+    return os.path.exists("/.flatpak-info")
+
+
+def _portal_trash(path: Path) -> None:
+    """Cestino attraverso il portale Trash (Flatpak): dentro la sandbox il
+    cestino dell'host non si raggiunge con i file."""
+    try:
+        from jeepney import DBusAddress, MessageType, new_method_call
+        from jeepney.fds import FileDescriptor
+        from jeepney.io.blocking import open_dbus_connection
+    except ImportError:
+        raise OSError("the trash portal is not available") from None
+    flags = os.O_RDONLY | os.O_NOFOLLOW | (os.O_DIRECTORY if path.is_dir() else 0)
+    fd = os.open(path, flags)
+    addr = DBusAddress("/org/freedesktop/portal/desktop",
+                       bus_name="org.freedesktop.portal.Desktop",
+                       interface="org.freedesktop.portal.Trash")
+    try:
+        with open_dbus_connection(bus="SESSION", enable_fds=True) as conn:
+            reply = conn.send_and_get_reply(
+                new_method_call(addr, "TrashFile", "h", (FileDescriptor(fd),)), timeout=10)
+    except OSError:
+        raise
+    except Exception as e:  # noqa: BLE001 — bus assente, tempo scaduto
+        raise OSError(str(e) or "the trash portal did not answer") from None
+    finally:
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+    if reply.header.message_type == MessageType.error or not reply.body or reply.body[0] != 1:
+        raise OSError("the trash portal refused the file")
+
+
+def _restore_from_trash(path: Path, where: Path | None) -> None:
+    if where is None or not (where.exists() or where.is_symlink()):
+        raise OSError("not found in the trash")
+    if path.exists() or path.is_symlink():
+        raise OSError("destination taken")
+    os.rename(where, path)
+    info = where.parent.parent / "info" / (where.name + ".trashinfo")
+    info.unlink(missing_ok=True)
 
 
 # scelte dell'utente su una modifica proposta
@@ -134,7 +234,10 @@ class Request:
             elif line.startswith("-") and not line.startswith("---"):
                 removed += 1
         return {"id": self.id, "kind": self.change.kind, "label": self.change.label,
-                "diff": self.change.diff, "added": added, "removed": removed}
+                "target": self.change.target, "diff": self.change.diff,
+                "added": added, "removed": removed,
+                # spostare e cestinare chiedono sempre: niente «consenti per il resto»
+                "allow_rest": self.change.kind in ALLOW_REST_KINDS}
 
 
 class ApprovalGate:
@@ -160,7 +263,7 @@ class ApprovalGate:
 
     @staticmethod
     def _key(change: Change) -> str:
-        return "\0".join((change.kind, change.label, change.diff))
+        return "\0".join((change.kind, change.label, change.target, change.diff))
 
     def ask(self, change: Change) -> bool:
         key = self._key(change)
@@ -171,7 +274,7 @@ class ApprovalGate:
                 raise ToolError(f"the user already rejected this same change to {change.label} "
                                 "earlier in this answer, so it was not proposed again. Do not "
                                 "repeat it: tell the user or ask what they want instead.")
-            if self._allow_rest:
+            if self._allow_rest and change.kind in ALLOW_REST_KINDS:
                 return True
             self._next += 1
             req = self._pending = Request(self._next, change)
@@ -313,11 +416,15 @@ class _Targets:
 
 
 def make_write_tools(shared: list[Shared], approve: Callable[[Change], bool] | None = None,
-                     journal: WriteJournal | None = None) -> list[Tool]:
+                     journal: WriteJournal | None = None, *, full: bool = False,
+                     trash: Callable[[Path], Path | None] | None = None) -> list[Tool]:
     """I tool di scrittura sulle voci condivise; nessuno se non c'è nulla.
 
     `approve` decide ogni modifica (None = approvate tutte: solo prototipo e
-    test). `journal` raccoglie le copie per l'annullamento.
+    test). `journal` raccoglie le copie per l'annullamento. Con `full`
+    (livello «Accesso completo») anche `move_file` e `delete_file`; `trash`
+    manda nel cestino (predefinito: `move_to_trash`; i test ne passano uno
+    finto, per non riempire il cestino vero).
     """
     if not shared:
         return []
@@ -382,7 +489,8 @@ def make_write_tools(shared: list[Shared], approve: Callable[[Change], bool] | N
         if missing:
             def make_parents() -> None:
                 real.parent.mkdir(parents=True, exist_ok=True)
-                jr.created_dirs.extend(reversed(missing))
+                for d in reversed(missing):
+                    jr.created_dir(d)
 
             pending_dirs.append(make_parents)
         try:
@@ -451,12 +559,120 @@ def make_write_tools(shared: list[Shared], approve: Callable[[Change], bool] | N
             real.mkdir(parents=True)
         except OSError as e:
             raise ToolError(f"cannot create '{label}': {e.strerror or e}") from None
-        jr.created_dirs.extend(reversed(missing))
+        for d in reversed(missing):
+            jr.created_dir(d)
         return f"Created folder {label}/."
+
+    trash_fn = trash or move_to_trash
+
+    def existing(raw) -> tuple[Shared, str, Path, str]:
+        # una cartella si controlla con le regole delle cartelle
+        # (`node_modules/`, `.git/`), un file con quelle dei file
+        dir_error: ToolError | None = None
+        try:
+            s, rel, real = targets.resolve(raw, want_dir=True)
+            is_dir = s.is_dir and real.is_dir() and not real.is_symlink()
+        except ToolError as e:
+            dir_error, is_dir = e, False
+        if not is_dir:
+            s, rel, real = targets.resolve(raw)
+            if dir_error is not None and real.is_dir():
+                raise dir_error
+        label = _label_path(s, rel)
+        if not (real.exists() or real.is_symlink()):
+            raise ToolError(f"'{label}' does not exist.")
+        if not is_dir and not stat.S_ISREG(real.stat().st_mode):
+            raise ToolError(f"'{label}' is not a regular file or folder.")
+        return s, rel, real, label
+
+    def check_tree(s: Shared, rel: str, real: Path, label: str) -> list[str]:
+        """Voci di una cartella da spostare o cestinare. Dentro non ci deve
+        essere nulla che il modello non vede (nascosti, `.git/`, dipendenze,
+        credenziali, link): sposterebbe o cancellerebbe alla cieca."""
+        out: list[str] = []
+        base = rel.split("/") if rel else []
+        for dirpath, dirnames, filenames in os.walk(real):
+            sub = list(Path(dirpath).relative_to(real).parts)
+            for name, is_dir in [(n, True) for n in sorted(dirnames)] + \
+                    [(n, False) for n in sorted(filenames)]:
+                item = "/".join(sub + [name])
+                if (Path(dirpath) / name).is_symlink():
+                    raise ToolError(f"'{label}' contains a link ({item}): it cannot be moved "
+                                    "or deleted. This is a fixed rule: do not try again, "
+                                    "tell the user.")
+                reason = targets.files.excluded(s, base + sub + [name], is_dir)
+                if reason:
+                    why = reason.split(":")[0]
+                    raise ToolError(f"'{label}' contains {item}, which {why}: the folder "
+                                    "cannot be moved or deleted. This is a fixed rule: do "
+                                    "not try again, tell the user.")
+                out.append(item + ("/" if is_dir else ""))
+                if len(out) > MAX_TREE_ENTRIES:
+                    raise ToolError(f"'{label}' has more than {MAX_TREE_ENTRIES} files and "
+                                    "folders: it is too large to move or delete here.")
+        return out
+
+    def move_file(args: dict) -> str:
+        s1, rel1, src, label1 = existing(args.get("source"))
+        if not s1.is_dir:
+            raise ToolError(f"'{label1}' is a single shared file: it can be changed but not "
+                            "moved or renamed.")
+        is_dir = src.is_dir()
+        s2, rel2, dst = targets.resolve(args.get("destination"), want_dir=is_dir)
+        label2 = _label_path(s2, rel2)
+        if dst.exists() or dst.is_symlink():
+            raise ToolError(f"'{label2}' already exists: choose another destination "
+                            "(nothing is overwritten).")
+        if is_dir and src in dst.parents:
+            raise ToolError("a folder cannot be moved inside itself.")
+        if is_dir:
+            check_tree(s1, rel1, src, label1)
+        missing = _missing_dirs(dst.parent, s2.path.resolve())
+        if any(p.exists() for p in missing):
+            raise ToolError(f"the folder of '{label2}' is a file.")
+        ask(Change("move", label1, src, target=label2))
+        try:
+            dst.parent.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            raise ToolError(f"cannot create the folder of '{label2}': {e.strerror or e}") from None
+        for d in reversed(missing):
+            jr.created_dir(d)
+        try:
+            shutil.move(str(src), str(dst))
+        except OSError as e:
+            raise ToolError(f"cannot move '{label1}': {e.strerror or e}") from None
+        jr.moved(src, dst)
+        verb = "Renamed" if src.parent == dst.parent else "Moved"
+        return f"{verb} {label1}{'/' if is_dir else ''} to {label2}{'/' if is_dir else ''}."
+
+    def delete_file(args: dict) -> str:
+        s, rel, real, label = existing(args.get("path"))
+        if real.is_dir():
+            entries = check_tree(s, rel, real, label)
+            shown = entries[:MAX_LISTED_ENTRIES]
+            preview = "\n".join(shown)
+            if len(entries) > len(shown):
+                preview += f"\n… (+{len(entries) - len(shown)})"
+            what = f"{label}/ ({len(entries)} items inside)"
+        else:
+            try:   # il testo che sparisce, se è un file di testo non enorme
+                preview = _diff(label, current_text(real, label), "") \
+                    if context.classify(real) == "text" else ""
+            except (ToolError, OSError):
+                preview = ""
+            what = label
+        ask(Change("delete", label, real, preview))
+        try:
+            where = trash_fn(real)
+        except OSError as e:
+            raise ToolError(f"cannot move '{label}' to the trash: {e}. Nothing was "
+                            "deleted.") from None
+        jr.trashed(real, where)
+        return f"Moved {what} to the trash."
 
     path_prop = {"type": "string",
                  "description": f"Path starting with a shared name. Shared: {names}"}
-    return [
+    result = [
         Tool("write_file",
              "Create a new text file, or replace the WHOLE content of an existing one, in "
              f"the shared folders ({names}); missing folders are created. For small changes to an existing file use "
@@ -487,6 +703,28 @@ def make_write_tools(shared: list[Shared], approve: Callable[[Change], bool] | N
              {"type": "object", "required": ["path"], "properties": {"path": path_prop}},
              read_only=False),
     ]
+    if full:
+        result += [
+            Tool("move_file",
+                 f"Move or rename a file or folder inside the shared folders ({names}). The "
+                 "destination must not exist (nothing is overwritten); missing folders are "
+                 "created. The user approves every move.",
+                 move_file,
+                 {"type": "object", "required": ["source", "destination"], "properties": {
+                     "source": path_prop,
+                     "destination": {"type": "string",
+                                     "description": "New path, starting with a shared name"},
+                 }},
+                 read_only=False),
+            Tool("delete_file",
+                 "Move a file or folder from the shared folders to the system trash (it can "
+                 "be restored from there: nothing is deleted permanently). Delete only what "
+                 "the user asked for. The user approves every deletion.",
+                 delete_file,
+                 {"type": "object", "required": ["path"], "properties": {"path": path_prop}},
+                 read_only=False),
+        ]
+    return result
 
 
 def _missing_dirs(path: Path, root: Path) -> list[Path]:

@@ -105,8 +105,11 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   il telefono mostra la richiesta, ma si conferma solo dal PC, e una modifica
   rifiutata non si ripropone nella stessa risposta. Scrittura atomica, solo
   file di testo fino a 512 KB; un file allegato da solo si può modificare, ma
-  accanto non si crea nulla. «Accesso completo» per ora vale come «Scrivere
-  file» (spostare e cancellare arriveranno dopo). La chiave inglese è grigia,
+  accanto non si crea nulla. «Accesso completo» permette anche di spostare o rinominare file e cartelle e di
+  mandarli nel cestino del sistema (mai cancellati per sempre): queste
+  operazioni chiedono sempre conferma, una per una, anche dopo «Consenti per il
+  resto della risposta», e una cartella con dentro file nascosti, esclusi o
+  collegamenti non si sposta né si cancella. La chiave inglese è grigia,
   blu o ambra secondo il livello. Sempre e solo ciò che è stato allegato, con
   le stesse esclusioni della cartella come contesto anche per scrivere
   (nascosti, dipendenze, `.gitignore`, credenziali, collegamenti che escono);
