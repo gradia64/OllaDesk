@@ -24,10 +24,13 @@ import difflib
 import hashlib
 import json
 import os
+import re
+import secrets
 import shutil
 import stat
 import tempfile
 import threading
+import unicodedata
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -40,6 +43,12 @@ MAX_WRITE_BYTES = 512 * 1024     # dimensione massima di un file scritto
 MAX_DIFF_LINES = 400             # righe del diff mostrate per la conferma
 DIFF_CUT_MARK = "[... "          # inizio dell'ultima riga di un diff tagliato
 MAX_REPLY_CONTEXT = 3            # righe di contesto nella risposta di edit_file
+# righe più lunghe nella scheda: di una riga cambiata si mostra solo il pezzo
+# attorno alla modifica, con EXCERPT_MARK al posto delle parti uguali
+LONG_LINE = 500
+EXCERPT_CONTEXT = 120
+EXCERPT_MARK = "⟪…⟫"
+MAX_REJECTS_PER_PATH = 3         # rifiuti su un percorso, poi non si chiede più
 
 # nota di sistema al posto di file_tools.READ_ONLY_NOTE quando la chat
 # permette la scrittura
@@ -104,15 +113,30 @@ class WriteJournal:
     final: dict[str, str | None] = field(default_factory=dict)   # percorso → impronta
     _dir: Path | None = None
     _saved: bool = False
+    # il thread dei tool scrive tenendo `lock`; il motore lo prende per
+    # salvare o scartare il registro e lo chiude: dopo, nessuna scrittura
+    # (Stop o chiusura subito dopo «Applica»)
+    lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
+    closed: bool = False
+    in_trash: list[str] = field(default_factory=list)   # rimasti nel cestino dopo undo
 
-    def remember(self, path: Path, label: str = "") -> None:
-        """Stato di `path` prima di una scrittura."""
+    def close(self) -> None:
+        with self.lock:
+            self.closed = True
+
+    def remember(self, path: Path, label: str = "", data: bytes | None = None) -> None:
+        """Stato di `path` prima di una scrittura: `data` è il contenuto
+        attuale già letto (None: lo legge qui, se il file c'è)."""
         op = {"kind": "write", "path": str(path), "label": label, "copy": None}
-        if path.exists():
+        if data is None and path.exists():
+            data = path.read_bytes()
+        if data is not None:
             if self._dir is None:
                 self._dir = Path(tempfile.mkdtemp(prefix="olladesk-undo-"))
             copy = self._dir / f"copy-{len(self.ops)}"
-            shutil.copy2(path, copy)
+            fd = os.open(copy, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC, 0o600)
+            with os.fdopen(fd, "wb") as fh:
+                fh.write(data)
             op["copy"] = copy.name
         self.ops.append(op)
 
@@ -150,36 +174,59 @@ class WriteJournal:
                 shutil.move(str(self._dir / op["copy"]), str(folder / op["copy"]))
         self.final = {p: _fingerprint(Path(p)) for p in self._touched()}
         data = {"version": 1, "ops": self.ops, "final": self.final}
-        (folder / "journal.json").write_text(json.dumps(data, ensure_ascii=False, indent=1))
+        (folder / "journal.json").write_text(json.dumps(data, ensure_ascii=False, indent=1),
+                                             encoding="utf-8")
         self.discard()
         self._dir = folder
         self._saved = True
 
     @classmethod
     def load(cls, folder: Path) -> WriteJournal | None:
+        """Registro salvato, o None se manca o non è valido. Il file sta
+        nella cartella dell'app ma si tratta come non attendibile: un
+        registro con un campo strano si rifiuta tutto, e `undo` controlla
+        comunque che ogni percorso stia nelle cartelle condivise."""
         try:
-            data = json.loads((folder / "journal.json").read_text())
-            ops = [op for op in data["ops"] if isinstance(op, dict) and op.get("kind")]
-            final = dict(data.get("final") or {})
-        except (OSError, ValueError, KeyError, TypeError):
+            data = json.loads((folder / "journal.json").read_text(encoding="utf-8"))
+            if data.get("version") != 1:
+                return None
+            ops = data["ops"]
+            final = data.get("final") or {}
+            if not isinstance(ops, list) or not isinstance(final, dict) \
+                    or not all(_valid_op(op) for op in ops) \
+                    or not all(isinstance(k, str) and (v is None or isinstance(v, str))
+                               for k, v in final.items()):
+                return None
+        except (OSError, ValueError, KeyError, TypeError, AttributeError):
             return None
-        return cls(ops=ops, final=final, _dir=folder, _saved=True)
+        return cls(ops=ops, final=dict(final), _dir=folder, _saved=True)
 
-    def changed_since(self) -> list[str]:
+    def changed_since(self, roots: list[Path] | None = None) -> list[str]:
         """Etichette dei percorsi cambiati dopo `save` (annullando si perdono
-        quelle modifiche)."""
+        quelle modifiche); con `roots`, solo quelli dentro le condivisioni."""
         touched = self._touched()
         return [touched[p] for p, fp in self.final.items()
-                if p in touched and _fingerprint(Path(p)) != fp]
+                if p in touched and (roots is None or _inside(Path(p), roots))
+                and _fingerprint(Path(p)) != fp]
 
-    def undo(self) -> list[str]:
+    def undo(self, roots: list[Path] | None = None) -> list[str]:
         """Rimette tutto com'era; restituisce le etichette dei percorsi che non
-        è riuscito a ripristinare (un file cestinato senza posto noto nel
-        cestino, una destinazione occupata nel frattempo)."""
+        è riuscito a ripristinare (una destinazione occupata nel frattempo, un
+        cestino svuotato, un percorso fuori da `roots`, le cartelle condivise
+        dalla chat). I file cestinati senza posto noto nel cestino (portale
+        del Flatpak) finiscono in `in_trash`: si ripristinano dal cestino."""
         failed = []
+        self.in_trash = []
         for op in reversed(self.ops):
             kind, path = op["kind"], Path(op["path"])
             try:
+                if roots is not None and not (
+                        _inside(path, roots)
+                        and (kind != "move" or _inside(Path(op["dst"]), roots))):
+                    raise OSError("outside the shared folders")
+                if kind == "trash" and op.get("where") is None:
+                    self.in_trash.append(op.get("label") or path.name)
+                    continue
                 if kind == "write":
                     if op.get("copy") is None:
                         path.unlink(missing_ok=True)
@@ -199,7 +246,7 @@ class WriteJournal:
                 elif kind == "trash":
                     where = op.get("where")
                     _restore_from_trash(path, Path(where) if where else None)
-            except OSError:
+            except Exception:  # noqa: BLE001 — un'operazione non blocca le altre
                 failed.append(op.get("label") or path.name)
         self.ops.clear()
         self.discard()
@@ -212,6 +259,39 @@ class WriteJournal:
             self._dir = None
 
 
+_COPY_NAME = re.compile(r"^copy-[0-9]{1,6}$")
+
+
+def _valid_op(op) -> bool:
+    """Un'operazione di `journal.json` con i campi del tipo giusto."""
+    if not isinstance(op, dict) or not isinstance(op.get("label", ""), str):
+        return False
+    kind, path = op.get("kind"), op.get("path")
+    if not (isinstance(path, str) and os.path.isabs(path)):
+        return False
+    if kind == "write":
+        copy = op.get("copy")
+        return copy is None or (isinstance(copy, str) and bool(_COPY_NAME.match(copy)))
+    if kind == "mkdir":
+        return True
+    if kind == "move":
+        dst = op.get("dst")
+        return isinstance(dst, str) and os.path.isabs(dst) and isinstance(op.get("target", ""), str)
+    if kind == "trash":
+        where = op.get("where")
+        if where is None:
+            return True
+        # solo una voce della cartella files/ di un cestino
+        return isinstance(where, str) and os.path.isabs(where) and \
+            Path(where).parent.name == "files"
+    return False
+
+
+def _inside(path: Path, roots: list[Path]) -> bool:
+    """`path` è una delle voci condivise o sta dentro una cartella condivisa."""
+    return any(path == r or r in path.parents for r in roots)
+
+
 def _fingerprint(path: Path) -> str | None:
     """Stato di un percorso: None se non c'è, "dir" per una cartella,
     l'hash del contenuto per un file."""
@@ -222,9 +302,22 @@ def _fingerprint(path: Path) -> str | None:
             return "dir"
         if not path.exists():
             return None
-        return hashlib.sha256(path.read_bytes()).hexdigest()
+        h = hashlib.sha256()
+        with open(path, "rb") as fh:
+            for chunk in iter(lambda: fh.read(1 << 20), b""):
+                h.update(chunk)
+        return h.hexdigest()
     except OSError:
         return "?"
+
+
+def _stat_key(path: Path) -> tuple | None:
+    """Identità di un file da spostare o cestinare (senza leggerlo tutto)."""
+    try:
+        st = path.lstat()
+    except OSError:
+        return None
+    return (st.st_ino, st.st_mode, st.st_size, st.st_mtime_ns)
 
 
 def move_to_trash(path: Path) -> Path | None:
@@ -285,7 +378,9 @@ def _restore_from_trash(path: Path, where: Path | None) -> None:
         raise OSError("not found in the trash")
     if path.exists() or path.is_symlink():
         raise OSError("destination taken")
-    os.rename(where, path)
+    if where.parent.name != "files" or not (where.parent.parent / "info").is_dir():
+        raise OSError("not a trash folder")
+    shutil.move(str(where), str(path))     # il cestino può stare su un altro disco
     info = where.parent.parent / "info" / (where.name + ".trashinfo")
     info.unlink(missing_ok=True)
 
@@ -305,21 +400,58 @@ class Request:
     event: threading.Event = field(default_factory=threading.Event)
 
     def view(self) -> dict:
-        """La richiesta per l'interfaccia e il telefono (solo testo)."""
+        """La richiesta per l'interfaccia e il telefono (solo testo).
+
+        I caratteri invisibili o di controllo (bidi, larghezza zero, a capo
+        dentro un nome) si mostrano come ⟦U+XXXX⟧: chi approva deve vedere
+        il testo com'è, non come lo dispone il bidi (Trojan Source).
+        """
         added = removed = 0
-        for line in self.change.diff.splitlines():
-            if line.startswith("+") and not line.startswith("+++"):
+        lines = self.change.diff.splitlines()
+        head = 2 if lines[:1] and lines[0].startswith("--- ") and \
+            lines[1:2] and lines[1].startswith("+++ ") else 0
+        for line in lines[head:]:
+            if line.startswith("+"):
                 added += 1
-            elif line.startswith("-") and not line.startswith("---"):
+            elif line.startswith("-"):
                 removed += 1
-        return {"id": self.id, "kind": self.change.kind, "label": self.change.label,
-                "target": self.change.target, "diff": self.change.diff,
+        diff, n_diff = visible(self.change.diff)
+        label, n_label = visible(self.change.label)
+        target, n_target = visible(self.change.target)
+        return {"id": self.id, "kind": self.change.kind, "label": label,
+                "target": target, "diff": diff,
                 "added": added, "removed": removed,
-                # diff tagliato a MAX_DIFF_LINES: la scheda lo dice chiaramente
-                "truncated": self.change.kind != "delete" and any(
-                    line.startswith(DIFF_CUT_MARK) for line in self.change.diff.splitlines()[-1:]),
+                # diff (o elenco) tagliato: la scheda lo dice chiaramente
+                "truncated": any(line.startswith(DIFF_CUT_MARK) for line in lines[-1:]),
+                # righe lunghe o accorciate attorno alla modifica
+                "long_lines": EXCERPT_MARK in diff or any(len(line) > LONG_LINE for line in lines),
+                "hidden": n_diff + n_label + n_target,
                 # spostare e cestinare chiedono sempre: niente «consenti per il resto»
                 "allow_rest": self.change.kind in ALLOW_REST_KINDS}
+
+
+def _hidden_char(ch: str) -> bool:
+    return ch not in "\n\t" and unicodedata.category(ch) in ("Cc", "Cf", "Zl", "Zp")
+
+
+def visible(text: str) -> tuple[str, int]:
+    """`text` con i caratteri invisibili o di controllo scritti come
+    ⟦U+XXXX⟧ (un a capo CRLF resta a capo) e quanti sono."""
+    out, n = [], 0
+    for i, ch in enumerate(text):
+        if ch == "\r" and text[i + 1:i + 2] == "\n":
+            continue
+        if _hidden_char(ch):
+            out.append(f"⟦U+{ord(ch):04X}⟧")
+            n += 1
+        else:
+            out.append(ch)
+    return "".join(out), n
+
+
+def bad_name(name: str) -> bool:
+    """Un nome di file con caratteri invisibili o di controllo."""
+    return any(_hidden_char(ch) or ch == "\n" or ch == "\t" for ch in name)
 
 
 class ApprovalGate:
@@ -341,6 +473,7 @@ class ApprovalGate:
         self._closed = False
         self._allow_rest = False
         self._rejected: set[str] = set()
+        self._rejects: dict[str, int] = {}      # rifiuti per percorso
         self._next = 0
 
     @staticmethod
@@ -356,6 +489,10 @@ class ApprovalGate:
                 raise ToolError(f"the user already rejected this same change to {change.label} "
                                 "earlier in this answer, so it was not proposed again. Do not "
                                 "repeat it: tell the user or ask what they want instead.")
+            if self._rejects.get(change.label, 0) >= MAX_REJECTS_PER_PATH:
+                raise ToolError(f"the user rejected {MAX_REJECTS_PER_PATH} changes to "
+                                f"{change.label} in this answer, so no more changes to it are "
+                                "proposed. Stop and ask the user what they want.")
             if self._allow_rest and change.kind in ALLOW_REST_KINDS:
                 return True
             self._next += 1
@@ -368,6 +505,7 @@ class ApprovalGate:
                 self._pending = None
             if req.decision == REJECT:
                 self._rejected.add(key)
+                self._rejects[change.label] = self._rejects.get(change.label, 0) + 1
             elif req.decision == ALLOW_REST:
                 self._allow_rest = True
         if not req.decision:
@@ -404,25 +542,84 @@ class ApprovalGate:
 
 
 def _atomic_write(path: Path, data: bytes) -> None:
-    """File temporaneo nella stessa cartella + rename; mantiene i permessi."""
+    """Scrittura atomica di `path` (per l'annullamento)."""
+    dfd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
     try:
-        mode = stat.S_IMODE(path.stat().st_mode)
+        _atomic_write_at(dfd, path.name, data)
+    finally:
+        os.close(dfd)
+
+
+def _atomic_write_at(dfd: int, name: str, data: bytes) -> None:
+    """File temporaneo nella cartella aperta `dfd` + rename; mantiene
+    permessi e gruppo. Tutto relativo al descrittore: un link messo al
+    posto di una cartella del percorso non si segue."""
+    try:
+        st = os.stat(name, dir_fd=dfd, follow_symlinks=False)
+        mode, gid = stat.S_IMODE(st.st_mode), st.st_gid
     except FileNotFoundError:
-        mode = 0o644 & ~_umask()
-    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".olladesk-", suffix=".tmp")
+        mode, gid = 0o644 & ~_umask(), None
+    tmp = f".olladesk-{secrets.token_hex(8)}.tmp"
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC,
+                 0o600, dir_fd=dfd)
     try:
         with os.fdopen(fd, "wb") as fh:
             fh.write(data)
             fh.flush()
+            if gid is not None:
+                try:
+                    os.fchown(fh.fileno(), -1, gid)
+                except OSError:
+                    pass
+            os.fchmod(fh.fileno(), mode)
             os.fsync(fh.fileno())
-        os.chmod(tmp, mode)
-        os.replace(tmp, path)
+        os.replace(tmp, name, src_dir_fd=dfd, dst_dir_fd=dfd)
     except BaseException:
         try:
-            os.unlink(tmp)
+            os.unlink(tmp, dir_fd=dfd)
         except OSError:
             pass
         raise
+
+
+def _open_dir(root: Path, parts, create: bool = False) -> tuple[int, list[Path]]:
+    """Apre la cartella `root/parts` scendendo un nome alla volta senza
+    seguire link (O_NOFOLLOW); con `create` crea quelle che mancano.
+    Restituisce il descrittore e le cartelle create, dall'alto in basso."""
+    fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
+    created: list[Path] = []
+    cur = root
+    try:
+        for name in parts:
+            cur = cur / name
+            if create:
+                try:
+                    os.mkdir(name, 0o777, dir_fd=fd)
+                    created.append(cur)
+                except FileExistsError:
+                    pass
+            nfd = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC,
+                          dir_fd=fd)
+            os.close(fd)
+            fd = nfd
+    except BaseException:
+        os.close(fd)
+        raise
+    return fd, created
+
+
+def _read_at(dfd: int, name: str) -> bytes | None:
+    """Contenuto del file `name` nella cartella `dfd` (None se non c'è);
+    OSError se è un link o non è un file regolare."""
+    try:
+        fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC,
+                     dir_fd=dfd)
+    except FileNotFoundError:
+        return None
+    with os.fdopen(fd, "rb") as fh:
+        if not stat.S_ISREG(os.fstat(fh.fileno()).st_mode):
+            raise OSError("not a regular file")
+        return fh.read()
 
 
 def _umask() -> int:
@@ -432,12 +629,55 @@ def _umask() -> int:
 
 
 def _diff(label: str, old: str, new: str) -> str:
-    lines = list(difflib.unified_diff(
+    lines = _excerpt_long(list(difflib.unified_diff(
         old.splitlines(keepends=True), new.splitlines(keepends=True),
-        fromfile=label if old else "/dev/null", tofile=label, n=2))
+        fromfile=label if old else "/dev/null", tofile=label, n=2)))
     if len(lines) > MAX_DIFF_LINES:
         lines = lines[:MAX_DIFF_LINES] + [f"{DIFF_CUT_MARK}{len(lines) - MAX_DIFF_LINES} more diff lines]\n"]
     return "".join(line if line.endswith("\n") else line + "\n" for line in lines)
+
+
+def _excerpt_long(lines: list[str]) -> list[str]:
+    """Una riga lunga cambiata (una «-» seguita dalla sua «+») si accorcia
+    attorno al punto che cambia: in un JSON o un file minimizzato su una
+    riga la modifica altrimenti sta migliaia di caratteri più in là."""
+    out = lines[:2]
+    i = 2
+    while i < len(lines):
+        j = i
+        while j < len(lines) and lines[j].startswith("-"):
+            j += 1
+        k = j
+        while k < len(lines) and lines[k].startswith("+"):
+            k += 1
+        if j > i and k - j == j - i:
+            pairs = [_cut_pair(a, b) if max(len(a), len(b)) > LONG_LINE else (a, b)
+                     for a, b in zip(lines[i:j], lines[j:k])]
+            out += [a for a, _b in pairs] + [b for _a, b in pairs]
+            i = k
+        else:
+            out.extend(lines[i:max(k, i + 1)])
+            i = max(k, i + 1)
+    return out
+
+
+def _cut_pair(a: str, b: str) -> tuple[str, str]:
+    """Le due righe ("-…", "+…") ridotte alla parte diversa, con
+    EXCERPT_CONTEXT caratteri attorno e EXCERPT_MARK dove si taglia."""
+    ta, tb = a[1:].rstrip("\n"), b[1:].rstrip("\n")
+    p = 0
+    while p < min(len(ta), len(tb)) and ta[p] == tb[p]:
+        p += 1
+    q = 0
+    while q < min(len(ta), len(tb)) - p and ta[-1 - q] == tb[-1 - q]:
+        q += 1
+    start = max(0, p - EXCERPT_CONTEXT)
+
+    def cut(t: str) -> str:
+        end = min(len(t), len(t) - q + EXCERPT_CONTEXT)
+        return (EXCERPT_MARK if start else "") + t[start:end] + (EXCERPT_MARK if end < len(t) else "")
+
+    return a[0] + cut(ta) + "\n", b[0] + cut(tb) + "\n"
 
 
 class _Targets:
@@ -473,8 +713,9 @@ class _Targets:
             raise ToolError(f"'{match}' is the shared folder itself: give a path inside it.")
         if ".." in parts:
             raise ToolError("Paths with '..' are not allowed.")
-        if any("\\" in p or "\0" in p for p in parts):
-            raise ToolError("Invalid characters in the path.")
+        if any("\\" in p or "\0" in p or bad_name(p) for p in parts):
+            raise ToolError("Invalid characters in the path (control or invisible "
+                            "characters are not allowed in file names).")
         rel = "/".join(parts)
         root = s.path.resolve()
         target = s.path.joinpath(*parts)
@@ -510,21 +751,43 @@ def make_write_tools(shared: list[Shared], approve: Callable[[Change], bool] | N
     """
     if not shared:
         return []
-    targets = _Targets(_Files(shared))
+    targets = _Targets(_Files(shared, writable=True))
     jr = journal if journal is not None else WriteJournal()
     names = ", ".join(s.label + ("/" if s.is_dir else "") for s in shared)
-    pending_dirs: list[Callable[[], None]] = []   # cartelle da creare dopo la conferma
+    stopped = "the answer was stopped by the user: nothing was changed."
 
     def ask(change: Change) -> None:
         if approve is not None and not approve(change):
             raise ToolError(f"the user rejected this change to {change.label}. "
                             "Do not try the same change again.")
 
+    def changed(label: str) -> ToolError:
+        return ToolError(f"'{label}' changed while the user was deciding, so nothing was "
+                         "changed. Look at it again (read_file or list_files) before "
+                         "proposing a change.")
+
+    def again(raw, real: Path, want_dir: bool = False) -> None:
+        # dopo l'attesa della conferma (anche minuti) il percorso deve
+        # portare allo stesso posto, sempre dentro la condivisione
+        try:
+            _s, _rel, now = targets.resolve(raw, want_dir=want_dir)
+        except ToolError:
+            now = None
+        if now != real:
+            raise changed(str(raw))
+
+    def dir_of(s: Shared, real: Path) -> tuple[Path, tuple]:
+        """Cartella condivisa da cui scendere e nomi fino alla cartella di `real`."""
+        root = s.path.resolve() if s.is_dir else real.parent
+        return root, real.parent.relative_to(root).parts
+
     def current_text(real: Path, label: str) -> str:
         if not stat.S_ISREG(real.stat().st_mode):
             raise ToolError(f"'{label}' is not a regular file.")
         if real.stat().st_size > MAX_WRITE_BYTES:
             raise ToolError(f"'{label}' is too large to change ({real.stat().st_size} bytes).")
+        if not os.access(real, os.W_OK):
+            raise ToolError(f"'{label}' is read-only: it cannot be changed. Tell the user.")
         try:
             return real.read_bytes().decode("utf-8")
         except UnicodeDecodeError:
@@ -535,26 +798,43 @@ def make_write_tools(shared: list[Shared], approve: Callable[[Change], bool] | N
             raise ToolError(f"'{label}' is not a text or code file: only text files "
                             "can be written.")
 
-    def apply(real: Path, label: str, old: str | None, new: str, kind: str) -> None:
+    def apply(s: Shared, raw, real: Path, label: str, old: str | None, new: str,
+              kind: str) -> None:
         data = new.encode("utf-8")
         if len(data) > MAX_WRITE_BYTES:
             raise ToolError(f"the new content is too large ({len(data)} bytes, at most "
                             f"{MAX_WRITE_BYTES}).")
         ask(Change(kind, label, real, _diff(label, old or "", new)))
-        for make in pending_dirs:
+        again(raw, real)
+        root, parts = dir_of(s, real)
+        with jr.lock:
+            if jr.closed:
+                raise ToolError(stopped)
             try:
-                make()
+                dfd, created = _open_dir(root, parts, create=True)
             except OSError as e:
                 raise ToolError(f"cannot create the folder of '{label}': "
                                 f"{e.strerror or e}") from None
-        jr.remember(real, label)
-        try:
-            _atomic_write(real, data)
-        except OSError as e:
-            raise ToolError(f"cannot write '{label}': {e.strerror or e}") from None
+            try:
+                for d in created:
+                    jr.created_dir(d)
+                try:
+                    now = _read_at(dfd, real.name)
+                except OSError:
+                    raise changed(label) from None
+                # il file è ancora quello del diff mostrato all'utente?
+                if now != (old.encode("utf-8") if old is not None else None):
+                    raise changed(label)
+                jr.remember(real, label, now)
+                _atomic_write_at(dfd, real.name, data)
+            except OSError as e:
+                raise ToolError(f"cannot write '{label}': {e.strerror or e}") from None
+            finally:
+                os.close(dfd)
 
     def write_file(args: dict) -> str:
-        s, rel, real = targets.resolve(args.get("path"))
+        raw = args.get("path")
+        s, rel, real = targets.resolve(raw)
         label = _label_path(s, rel)
         content = args.get("content")
         if not isinstance(content, str):
@@ -568,23 +848,14 @@ def make_write_tools(shared: list[Shared], approve: Callable[[Change], bool] | N
         missing = _missing_dirs(real.parent, s.path.resolve())
         if any(p.exists() for p in missing):
             raise ToolError(f"the folder of '{label}' is a file.")
-        if missing:
-            def make_parents() -> None:
-                real.parent.mkdir(parents=True, exist_ok=True)
-                for d in reversed(missing):
-                    jr.created_dir(d)
-
-            pending_dirs.append(make_parents)
-        try:
-            apply(real, label, old, content, "replace" if old is not None else "create")
-        finally:
-            pending_dirs.clear()
+        apply(s, raw, real, label, old, content, "replace" if old is not None else "create")
         n = content.count("\n") + (0 if content.endswith("\n") or not content else 1)
         verb = "Replaced" if old is not None else "Created"
         return f"{verb} {label} ({n} lines, {len(content.encode('utf-8'))} bytes)."
 
     def edit_file(args: dict) -> str:
-        s, rel, real = targets.resolve(args.get("path"))
+        raw = args.get("path")
+        s, rel, real = targets.resolve(raw)
         label = _label_path(s, rel)
         old_text = args.get("old_text")
         new_text = args.get("new_text")
@@ -596,6 +867,9 @@ def make_write_tools(shared: list[Shared], approve: Callable[[Change], bool] | N
             raise ToolError(f"'{label}' does not exist: create it with write_file.")
         check_kind(real, label)
         old = current_text(real, label)
+        if "\r\n" in old and old.count("\r\n") == old.count("\n"):
+            # file con a capo CRLF: il modello scrive «\n», il file resta CRLF
+            old_text, new_text = _crlf(old_text), _crlf(new_text)
         count = old.count(old_text)
         replace_all = args.get("replace_all") is True
         note = ""
@@ -619,7 +893,7 @@ def make_write_tools(shared: list[Shared], approve: Callable[[Change], bool] | N
             first = old.find(old_text)
         if new == old:
             return "old_text and new_text are the same: nothing changed."
-        apply(real, label, old, new, "edit")
+        apply(s, raw, real, label, old, new, "edit")
         start = old[:first].count("\n") + 1   # prima sostituzione
         lines = new.splitlines()
         lo = max(1, start - MAX_REPLY_CONTEXT)
@@ -628,21 +902,31 @@ def make_write_tools(shared: list[Shared], approve: Callable[[Change], bool] | N
         times = f"{count} occurrences" if replace_all and count > 1 else "1 occurrence"
         return f"Replaced {times} in {label}{note}. Lines {lo}-{hi} now:\n{snippet}"
 
+    def make_dirs(s: Shared, real: Path, label: str) -> None:
+        """Crea `real` e le cartelle che mancano, senza seguire link."""
+        root = s.path.resolve()
+        try:
+            dfd, created = _open_dir(root, real.relative_to(root).parts, create=True)
+        except OSError as e:
+            raise ToolError(f"cannot create '{label}': {e.strerror or e}") from None
+        os.close(dfd)
+        for d in created:
+            jr.created_dir(d)
+
     def make_dir(args: dict) -> str:
-        s, rel, real = targets.resolve(args.get("path"), want_dir=True)
+        raw = args.get("path")
+        s, rel, real = targets.resolve(raw, want_dir=True)
         label = _label_path(s, rel)
         if real.is_dir():
             return f"{label}/ already exists."
         if real.exists():
             raise ToolError(f"'{label}' exists and is a file.")
         ask(Change("mkdir", label, real))
-        missing = _missing_dirs(real, s.path.resolve())
-        try:
-            real.mkdir(parents=True)
-        except OSError as e:
-            raise ToolError(f"cannot create '{label}': {e.strerror or e}") from None
-        for d in reversed(missing):
-            jr.created_dir(d)
+        again(raw, real, want_dir=True)
+        with jr.lock:
+            if jr.closed:
+                raise ToolError(stopped)
+            make_dirs(s, real, label)
         return f"Created folder {label}/."
 
     trash_fn = trash or move_to_trash
@@ -670,7 +954,8 @@ def make_write_tools(shared: list[Shared], approve: Callable[[Change], bool] | N
     def check_tree(s: Shared, rel: str, real: Path, label: str) -> list[str]:
         """Voci di una cartella da spostare o cestinare. Dentro non ci deve
         essere nulla che il modello non vede (nascosti, `.git/`, dipendenze,
-        credenziali, link): sposterebbe o cancellerebbe alla cieca."""
+        credenziali, link, file speciali): sposterebbe o cancellerebbe alla
+        cieca."""
         out: list[str] = []
         base = rel.split("/") if rel else []
         for dirpath, dirnames, filenames in os.walk(real):
@@ -678,10 +963,15 @@ def make_write_tools(shared: list[Shared], approve: Callable[[Change], bool] | N
             for name, is_dir in [(n, True) for n in sorted(dirnames)] + \
                     [(n, False) for n in sorted(filenames)]:
                 item = "/".join(sub + [name])
-                if (Path(dirpath) / name).is_symlink():
+                entry = Path(dirpath) / name
+                if entry.is_symlink():
                     raise ToolError(f"'{label}' contains a link ({item}): it cannot be moved "
                                     "or deleted. This is a fixed rule: do not try again, "
                                     "tell the user.")
+                if not is_dir and not stat.S_ISREG(entry.lstat().st_mode):
+                    raise ToolError(f"'{label}' contains a special file ({item}): it cannot "
+                                    "be moved or deleted. This is a fixed rule: do not try "
+                                    "again, tell the user.")
                 reason = targets.files.excluded(s, base + sub + [name], is_dir)
                 if reason:
                     why = reason.split(":")[0]
@@ -694,48 +984,68 @@ def make_write_tools(shared: list[Shared], approve: Callable[[Change], bool] | N
                                     "folders: it is too large to move or delete here.")
         return out
 
+    def snapshot(s: Shared, rel: str, real: Path, label: str):
+        """Ciò che l'utente approva: l'elenco di una cartella, l'identità di
+        un file. Dopo la conferma deve essere uguale."""
+        if real.is_dir() and not real.is_symlink():
+            return check_tree(s, rel, real, label)
+        return _stat_key(real)
+
+    def still(raw, real: Path, label: str, before) -> Shared:
+        try:
+            s, rel, now, _l = existing(raw)
+        except ToolError:
+            raise changed(label) from None
+        if now != real or snapshot(s, rel, now, label) != before:
+            raise changed(label)
+        return s
+
     def move_file(args: dict) -> str:
-        s1, rel1, src, label1 = existing(args.get("source"))
+        raw_src, raw_dst = args.get("source"), args.get("destination")
+        s1, rel1, src, label1 = existing(raw_src)
         if not s1.is_dir:
             raise ToolError(f"'{label1}' is a single shared file: it can be changed but not "
                             "moved or renamed.")
         is_dir = src.is_dir()
-        s2, rel2, dst = targets.resolve(args.get("destination"), want_dir=is_dir)
+        s2, rel2, dst = targets.resolve(raw_dst, want_dir=is_dir)
         label2 = _label_path(s2, rel2)
         if dst.exists() or dst.is_symlink():
             raise ToolError(f"'{label2}' already exists: choose another destination "
                             "(nothing is overwritten).")
         if is_dir and src in dst.parents:
             raise ToolError("a folder cannot be moved inside itself.")
-        if is_dir:
-            check_tree(s1, rel1, src, label1)
+        before = snapshot(s1, rel1, src, label1)
         missing = _missing_dirs(dst.parent, s2.path.resolve())
         if any(p.exists() for p in missing):
             raise ToolError(f"the folder of '{label2}' is a file.")
         ask(Change("move", label1, src, target=label2))
-        try:
-            dst.parent.mkdir(parents=True, exist_ok=True)
-        except OSError as e:
-            raise ToolError(f"cannot create the folder of '{label2}': {e.strerror or e}") from None
-        for d in reversed(missing):
-            jr.created_dir(d)
-        try:
-            shutil.move(str(src), str(dst))
-        except OSError as e:
-            raise ToolError(f"cannot move '{label1}': {e.strerror or e}") from None
-        jr.moved(src, dst, label1, label2)
+        still(raw_src, src, label1, before)
+        again(raw_dst, dst, want_dir=is_dir)
+        with jr.lock:
+            if jr.closed:
+                raise ToolError(stopped)
+            if dst.exists() or dst.is_symlink():
+                raise changed(label2)
+            if missing:
+                make_dirs(s2, dst.parent, label2)
+            try:
+                shutil.move(str(src), str(dst))
+            except OSError as e:
+                raise ToolError(f"cannot move '{label1}': {e.strerror or e}") from None
+            jr.moved(src, dst, label1, label2)
         verb = "Renamed" if src.parent == dst.parent else "Moved"
         return f"{verb} {label1}{'/' if is_dir else ''} to {label2}{'/' if is_dir else ''}."
 
     def delete_file(args: dict) -> str:
-        s, rel, real, label = existing(args.get("path"))
-        if real.is_dir():
-            entries = check_tree(s, rel, real, label)
-            shown = entries[:MAX_LISTED_ENTRIES]
-            preview = "\n".join(shown)
-            if len(entries) > len(shown):
-                preview += f"\n… (+{len(entries) - len(shown)})"
-            what = f"{label}/ ({len(entries)} items inside)"
+        raw = args.get("path")
+        s, rel, real, label = existing(raw)
+        before = snapshot(s, rel, real, label)
+        if isinstance(before, list):
+            shown = before[:MAX_LISTED_ENTRIES]
+            preview = "\n".join(shown) + "\n"
+            if len(before) > len(shown):
+                preview += f"{DIFF_CUT_MARK}+{len(before) - len(shown)} more]\n"
+            what = f"{label}/ ({len(before)} items inside)"
         else:
             try:   # il testo che sparisce, se è un file di testo non enorme
                 preview = _diff(label, current_text(real, label), "") \
@@ -744,12 +1054,16 @@ def make_write_tools(shared: list[Shared], approve: Callable[[Change], bool] | N
                 preview = ""
             what = label
         ask(Change("delete", label, real, preview))
-        try:
-            where = trash_fn(real)
-        except OSError as e:
-            raise ToolError(f"cannot move '{label}' to the trash: {e}. Nothing was "
-                            "deleted.") from None
-        jr.trashed(real, where, label)
+        still(raw, real, label, before)
+        with jr.lock:
+            if jr.closed:
+                raise ToolError(stopped)
+            try:
+                where = trash_fn(real)
+            except OSError as e:
+                raise ToolError(f"cannot move '{label}' to the trash: {e}. Nothing was "
+                                "deleted.") from None
+            jr.trashed(real, where, label)
         return f"Moved {what} to the trash."
 
     path_prop = {"type": "string",
@@ -817,6 +1131,10 @@ def _missing_dirs(path: Path, root: Path) -> list[Path]:
         out.append(p)
         p = p.parent
     return out
+
+
+def _crlf(text: str) -> str:
+    return text.replace("\r\n", "\n").replace("\n", "\r\n")
 
 
 def _indent_match(text: str, old_text: str, new_text: str) -> tuple[int, int, str] | None:

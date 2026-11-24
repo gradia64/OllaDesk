@@ -5,7 +5,7 @@ import html
 import time
 
 from PySide6.QtCore import QEvent, Qt, QTimer, QUrl, Signal
-from PySide6.QtGui import QDesktopServices, QGuiApplication
+from PySide6.QtGui import QDesktopServices, QGuiApplication, QTextOption
 from PySide6.QtWidgets import (
     QFrame,
     QGraphicsOpacityEffect,
@@ -28,6 +28,7 @@ _ANIM_FRAMES = ["·", "··", "···"]
 TOOL_PREVIEW_LINES = 6       # righe del risultato di un tool mostrate nella bolla
 TOOL_PREVIEW_CHARS = 500
 DIFF_MAX_HEIGHT = 300        # altezza massima del diff nella scheda di conferma
+DIFF_MEASURE_WIDTH = 600
 # righe aggiunte e tolte del diff: (tema scuro, tema chiaro), leggibili su entrambi
 DIFF_ADD_COLORS = ("#4ade80", "#15803d")
 DIFF_DEL_COLORS = ("#f87171", "#b91c1c")
@@ -72,7 +73,7 @@ def diff_html(diff: str, dim: str, dark: bool = True) -> str:
             color = ""
         text = html.escape(line) or "&nbsp;"
         rows.append(f'<span style="color:{color}">{text}</span>' if color else text)
-    return ('<pre style="margin:0; font-family: monospace; white-space: pre;">'
+    return ('<pre style="margin:0; font-family: monospace; white-space: pre-wrap;">'
             + "<br>".join(rows) + "</pre>")
 
 
@@ -109,21 +110,34 @@ class ChangeCard(QFrame):
         lay.addWidget(self.title)
         self.diff = QTextEdit(self)
         self.diff.setReadOnly(True)
-        self.diff.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
+        # a capo anche dentro le parole: una riga lunga si legge tutta
+        self.diff.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
+        self.diff.setWordWrapMode(QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
         self.diff.setHtml(diff_html(view.get("diff", ""), t["dim"],
                                     theme.palette_for(theme_name) is theme.palette_for("dark")))
-        # alto quanto il diff, fino al tetto (poi si scorre)
+        # alto quanto il diff, fino al tetto (poi si scorre); misurato a una
+        # larghezza tipica della bolla, prima che la scheda abbia la sua
+        self.diff.document().setTextWidth(DIFF_MEASURE_WIDTH)
         doc_h = int(self.diff.document().size().height())
         self.diff.setFixedHeight(min(DIFF_MAX_HEIGHT, doc_h + 2 * self.diff.frameWidth() + 2))
         self.diff.setVisible(bool(view.get("diff")))
         lay.addWidget(self.diff)
         # una modifica lunga si vede solo in parte: chi approva deve saperlo
-        self.cut_note = QLabel(_("Modifica troppo lunga: qui ne vedi solo una parte. Se non "
-                                 "sai cosa cambia nel resto del file, rifiutala."), self)
-        self.cut_note.setWordWrap(True)
-        self.cut_note.setStyleSheet(f"color: {theme.TOOLS_WRITE_COLOR}; font-weight: 600;")
-        self.cut_note.setVisible(bool(view.get("truncated")))
-        lay.addWidget(self.cut_note)
+        if view.get("kind") == "delete":
+            cut = _("Elenco incompleto: finisce nel cestino anche ciò che qui non vedi.")
+        else:
+            cut = _("Modifica troppo lunga: qui ne vedi solo una parte. Se non "
+                    "sai cosa cambia nel resto del file, rifiutala.")
+        self.cut_note = self._note(lay, cut, view.get("truncated"))
+        self.long_note = self._note(lay, _(
+            "Righe molto lunghe: delle righe cambiate vedi il pezzo attorno alla modifica "
+            "(⟪…⟫ segna le parti uguali omesse). Leggi tutto prima di applicare."),
+            view.get("long_lines"))
+        hidden = int(view.get("hidden") or 0)
+        self.hidden_note = self._note(lay, _(
+            "Contiene {n} caratteri invisibili o di controllo, mostrati come ⟦U+…⟧: possono "
+            "far sembrare il testo diverso da com'è. Se non sai perché ci sono, "
+            "rifiuta.").format(n=hidden), hidden > 0)
         row = QHBoxLayout()
         row.setSpacing(6)
         self.apply_btn = QPushButton(_("Applica"), self)
@@ -143,6 +157,16 @@ class ChangeCard(QFrame):
         self.rest_btn.setVisible(view.get("allow_rest", True) is not False)
         row.addStretch(1)
         lay.addLayout(row)
+
+    def _note(self, lay, text: str, show) -> QLabel:
+        """Avviso in ambra sotto il diff: chi approva deve saperlo."""
+        note = QLabel(text, self)
+        note.setTextFormat(Qt.TextFormat.PlainText)
+        note.setWordWrap(True)
+        note.setStyleSheet(f"color: {theme.TOOLS_WRITE_COLOR}; font-weight: 600;")
+        note.setVisible(bool(show))
+        lay.addWidget(note)
+        return note
 
     def _decide(self, decision: str) -> None:
         for btn in (self.apply_btn, self.reject_btn, self.rest_btn):
@@ -659,6 +683,8 @@ class SystemNoteWidget(QFrame):
         lay.setContentsMargins(14, 8, 10, 8)
         lay.setSpacing(8)
         self.label = QLabel(text, self)
+        # i testi delle note contengono nomi di file: mai interpretati come HTML
+        self.label.setTextFormat(Qt.TextFormat.PlainText)
         self.label.setProperty("error", True)
         self.label.setWordWrap(True)
         self.label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)

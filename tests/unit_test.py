@@ -3209,6 +3209,7 @@ def test_full_access_tools():
         def fake_trash(path):
             where = bin_ / "files" / path.name
             where.parent.mkdir(exist_ok=True)
+            (bin_ / "info").mkdir(exist_ok=True)   # come un cestino vero
             os.rename(path, where)
             return where
 
@@ -3391,7 +3392,7 @@ def test_change_approval_gate_and_card():
     req = gate.pending()
     assert req is not None and asked == [req] and req.view() == {
         "id": 1, "kind": "edit", "label": "p/a.txt", "target": "", "diff": ch.diff,
-        "added": 1, "removed": 1, "allow_rest": True, "truncated": False}
+        "added": 1, "removed": 1, "allow_rest": True, "truncated": False, "long_lines": False, "hidden": 0}
     assert not gate.resolve(2, "apply") and not gate.resolve(1, "boh")
     assert gate.resolve(1, "apply")
     t.join(2)
@@ -3915,6 +3916,233 @@ def test_flathub_no_app_update_check():
             patch.object(app_update, "AppUpdateCheckWorker", lambda *a: started.append(a)):
         MainWindow._maybe_check_app_update(Fake())
     assert started == []
+
+
+
+def test_write_review_050():
+    """Revisione esterna della 0.5: il file o il percorso che cambiano durante
+    la conferma, caratteri invisibili e righe lunghe nella scheda, CRLF,
+    registro ostile, cartella dell'app condivisa, Stop subito dopo «Applica»."""
+    import shutil
+    import threading
+    from unittest.mock import patch
+
+    from PySide6.QtWidgets import QApplication
+
+    QApplication.instance() or QApplication([])
+    from olladesk import config, engine as engine_mod, file_tools, tools, write_tools
+    from olladesk.widgets import message
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp) / "p"
+        (root / "src").mkdir(parents=True)
+        (root / "src" / "a.txt").write_text("alpha\nbeta\n")
+        fuori = Path(tmp) / "fuori"
+        fuori.mkdir()
+        (fuori / "a.txt").write_text("esterno\n")
+        shared = [file_tools.Shared("p", root, True)]
+        bin_ = Path(tmp) / "bin"
+
+        def fake_trash(path):
+            (bin_ / "info").mkdir(parents=True, exist_ok=True)
+            (bin_ / "files").mkdir(exist_ok=True)
+            where = bin_ / "files" / path.name
+            os.rename(path, where)
+            return where
+
+        during = {"fn": None}
+
+        def approve(ch):
+            if during["fn"] is not None:
+                during["fn"]()
+            return True
+
+        jr = write_tools.WriteJournal()
+        reg = tools.ToolRegistry(write_tools.make_write_tools(
+            shared, approve, jr, full=True, trash=fake_trash))
+
+        def call(name, **args):
+            return tools.run_call(reg, {"name": name, "arguments": args})
+
+        # il file cambia mentre l'utente decide: niente scrittura
+        during["fn"] = lambda: (root / "src" / "a.txt").write_text("alpha\nMIO\n")
+        out, err = call("edit_file", path="p/src/a.txt", old_text="beta", new_text="gamma")
+        assert err and "changed while the user was deciding" in out, out
+        assert (root / "src" / "a.txt").read_text() == "alpha\nMIO\n"
+        during["fn"] = lambda: (root / "src" / "a.txt").write_text("alpha\nMIO 2\n")
+        out, err = call("write_file", path="p/src/a.txt", content="nuovo\n")
+        assert err and (root / "src" / "a.txt").read_text() == "alpha\nMIO 2\n"
+        (root / "src" / "a.txt").write_text("alpha\nMIO\n")
+        during["fn"] = lambda: (root / "src" / "nuovo.txt").write_text("altro\n")
+        out, err = call("write_file", path="p/src/nuovo.txt", content="mio\n")
+        assert err and (root / "src" / "nuovo.txt").read_text() == "altro\n"
+        (root / "src" / "nuovo.txt").unlink()
+
+        # la cartella diventa un link verso fuori durante l'attesa
+        def swap():
+            shutil.move(str(root / "src"), str(Path(tmp) / "src.bak"))
+            (root / "src").symlink_to(fuori, target_is_directory=True)
+
+        for name, args in (("write_file", {"path": "p/src/x.txt", "content": "x"}),
+                           ("edit_file", {"path": "p/src/a.txt", "old_text": "MIO",
+                                          "new_text": "X"}),
+                           ("make_dir", {"path": "p/src/d"}),
+                           ("move_file", {"source": "p/src/a.txt",
+                                          "destination": "p/b.txt"}),
+                           ("delete_file", {"path": "p/src/a.txt"})):
+            during["fn"] = swap
+            out, err = call(name, **args)
+            assert err and "changed while the user was deciding" in out, (name, out)
+            assert sorted(x.name for x in fuori.iterdir()) == ["a.txt"], name
+            assert (fuori / "a.txt").read_text() == "esterno\n"
+            (root / "src").unlink()
+            shutil.move(str(Path(tmp) / "src.bak"), str(root / "src"))
+        # una cartella che cambia dopo la conferma non si cestina
+        (root / "old").mkdir()
+        (root / "old" / "a.txt").write_text("a")
+        during["fn"] = lambda: (root / "old" / "b.txt").write_text("b")
+        out, err = call("delete_file", path="p/old")
+        assert err and (root / "old" / "b.txt").exists()
+        during["fn"] = None
+        # una FIFO dentro: la cartella non si sposta né si cestina
+        os.mkfifo(root / "old" / "tubo")
+        out, err = call("delete_file", path="p/old")
+        assert err and "special file" in out and (root / "old").is_dir()
+        (root / "old" / "tubo").unlink()
+        assert not jr.ops
+
+        # nomi con a capo o caratteri invisibili: rifiutati
+        for bad in ("p/riga1\nriga2.txt", "p/a‮.txt", "p/a​.txt"):
+            out, err = call("write_file", path=bad, content="x")
+            assert err and "Invalid characters" in out, bad
+        # gli errori non dicono più «(read-only)»
+        out, err = call("write_file", path="altro/x.txt", content="x")
+        assert err and "read-only" not in out
+
+        # la scheda mostra i caratteri invisibili e avvisa
+        ch = write_tools.Change("create", "p/c.py", root / "c.py",
+                                write_tools._diff("p/c.py", "", "x = 1  # ok‮;rm -rf ~/‬\n"))
+        view = write_tools.Request(1, ch).view()
+        assert view["hidden"] == 2 and "⟦U+202E⟧" in view["diff"] and "‮" not in view["diff"]
+        card = message.ChangeCard(view, "dark")
+        assert not card.hidden_note.isHidden() and card.long_note.isHidden()
+        assert "2" in card.hidden_note.text()
+        # CRLF: niente segni sugli a capo
+        assert write_tools.visible("a\r\nb\rc")[0] == "a\nb⟦U+000D⟧c"
+        # riga lunga cambiata: si vede il punto della modifica, con l'avviso
+        old = '{"k": "' + "A" * 5000 + 'VALORE_DA_CAMBIARE' + "B" * 5000 + '"}\n'
+        diff = write_tools._diff("p/d.json", old, old.replace("VALORE_DA_CAMBIARE", "nuovo"))
+        view = write_tools.Request(2, write_tools.Change("edit", "p/d.json", root, diff)).view()
+        assert view["long_lines"] and "VALORE_DA_CAMBIARE" in diff and "nuovo" in diff
+        assert all(len(line) < 400 for line in diff.splitlines()), diff
+        assert view["added"] == 1 and view["removed"] == 1
+        card = message.ChangeCard(view, "dark")
+        assert not card.long_note.isHidden()
+        # cestinare una cartella con molte voci: elenco tagliato e detto
+        (root / "molti").mkdir()
+        for i in range(70):
+            (root / "molti" / f"f{i}.txt").write_text("x")
+        seen = []
+        reg2 = tools.ToolRegistry(write_tools.make_write_tools(
+            shared, lambda c: seen.append(c) or False, full=True, trash=fake_trash))
+        tools.run_call(reg2, {"name": "delete_file", "arguments": {"path": "p/molti"}})
+        view = write_tools.Request(3, seen[-1]).view()
+        assert view["truncated"] and "+10 more" in view["diff"]
+        card = message.ChangeCard(view, "dark")
+        assert not card.cut_note.isHidden() and "cestino" in card.cut_note.text()
+
+        # CRLF: edit_file mantiene gli a capo del file
+        (root / "w.txt").write_bytes(b"uno\r\ndue\r\ntre\r\n")
+        out, err = call("edit_file", path="p/w.txt", old_text="due\ntre\n",
+                        new_text="DUE\nTRE\n")
+        assert not err and (root / "w.txt").read_bytes() == b"uno\r\nDUE\r\nTRE\r\n", out
+        out, err = call("edit_file", path="p/w.txt", old_text="  DUE\n",
+                        new_text="  DUE\n  mezzo\n")
+        assert not err and (root / "w.txt").read_bytes() == b"uno\r\nDUE\r\nmezzo\r\nTRE\r\n"
+        # sola lettura: si rifiuta, con un errore chiaro
+        (root / "ro.txt").write_text("r\n")
+        os.chmod(root / "ro.txt", 0o444)
+        out, err = call("write_file", path="p/ro.txt", content="w\n")
+        assert (err and "read-only" in out) or os.geteuid() == 0, out
+
+        # dopo tre rifiuti sullo stesso file non si chiede più
+        gate = write_tools.ApprovalGate()
+        for i in range(3):
+            req_ch = write_tools.Change("edit", "p/a.txt", root, f"diff {i}")
+            t = threading.Thread(target=lambda c=req_ch: _try(gate.ask, c), daemon=True)
+            t.start()
+            while gate.pending() is None:
+                threading.Event().wait(0.005)
+            gate.resolve(gate.pending().id, "reject")
+            t.join(2)
+        try:
+            gate.ask(write_tools.Change("edit", "p/a.txt", root, "diff 9"))
+            raise AssertionError("una quarta richiesta non doveva arrivare")
+        except tools.ToolError as e:
+            assert "rejected 3 changes" in str(e)
+
+        # registro chiuso (Stop o chiusura subito dopo «Applica»): niente scrittura
+        jr.close()
+        out, err = call("write_file", path="p/tardi.txt", content="x")
+        assert err and "stopped" in out and not (root / "tardi.txt").exists()
+
+        # registro ostile: campi strani rifiutati, percorsi fuori ignorati
+        store = Path(tmp) / "store"
+        store.mkdir()
+        vittima = Path(tmp) / "vittima"
+        vittima.write_text("v")
+        for ops in ([{"kind": "write", "path": str(vittima), "copy": "../x"}],
+                    [{"kind": "write", "path": "relativo", "copy": None}],
+                    [{"kind": "boh", "path": str(vittima)}],
+                    [{"kind": "trash", "path": str(vittima), "where": "/tmp/x"}],
+                    [{"kind": "write", "path": 3}]):
+            (store / "journal.json").write_text(json.dumps({"version": 1, "ops": ops}))
+            assert write_tools.WriteJournal.load(store) is None, ops
+        (store / "journal.json").write_text(json.dumps(
+            {"version": 1, "ops": [{"kind": "write", "path": str(vittima), "copy": None}],
+             "final": {}}))
+        loaded = write_tools.WriteJournal.load(store)
+        assert loaded is not None and loaded.undo([root]) == ["vittima"] and vittima.exists()
+
+        # cartella dell'app dentro una cartella condivisa: esclusa
+        base = Path(tmp) / "home"
+        cfg = base / "olladesk"
+        (cfg / "chats").mkdir(parents=True)
+        (cfg / "chats" / "c.json").write_text("{}")
+        (cfg / "attachments").mkdir()
+        (cfg / "attachments" / "foto.txt").write_text("ok")
+        with patch.object(config, "config_dir", lambda: cfg):
+            sh = [file_tools.Shared("home", base, True)]
+            reg3 = tools.ToolRegistry(file_tools.make_tools(sh, writable=True)
+                                      + write_tools.make_write_tools(sh, None))
+            out, err = tools.run_call(reg3, {"name": "write_file", "arguments": {
+                "path": "home/olladesk/chats/c.json", "content": "x"}})
+            assert err and "OllaDesk's own data" in out
+            out, err = tools.run_call(reg3, {"name": "read_file", "arguments": {
+                "path": "home/olladesk/chats/c.json"}})
+            assert err
+            out, err = tools.run_call(reg3, {"name": "list_files", "arguments": {
+                "path": "home"}})
+            assert "olladesk/" not in out, out
+            out, err = tools.run_call(reg3, {"name": "read_file", "arguments": {
+                "path": "home/olladesk/attachments/foto.txt"}})
+            assert not err, out
+
+        # una chiamata annullata lo dice al modello nella cronologia
+        msgs = engine_mod._assistant_messages({"content": "fatto", "tool_rounds": [{
+            "content": "", "calls": [{"name": "write_file", "arguments": {}, "result": "Created x",
+                                      "undone": True}]}]}, True)
+        assert "undid this change" in msgs[1]["content"]
+        # le note di sistema non interpretano l'HTML
+        note = message.SystemNoteWidget("<b>foto</b>")
+        assert note.label.textFormat() == message.Qt.TextFormat.PlainText
+
+
+def _try(fn, *args):
+    try:
+        fn(*args)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 if __name__ == "__main__":

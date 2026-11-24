@@ -239,6 +239,7 @@ class ChatEngine(QObject):
         extra = file_tools.make_tools(shared, read_log, writable=writable)
         self._close_gate()
         if writable:
+            self._journal.close()
             self._journal.discard()   # copie di una risposta mai salvata
             self._journal = write_tools.WriteJournal()
             self._gate = write_tools.ApprovalGate(self._change_asked.emit)
@@ -550,39 +551,76 @@ class ChatEngine(QObject):
 
     # --------------------------------------------- annullare una risposta
 
+    def _answer_journal(self, chat_id: str, msg) -> object | None:
+        undo_id = msg.get("undo") if isinstance(msg, dict) and msg.get("role") == "assistant" \
+            else None
+        if not isinstance(undo_id, str) or not _SAFE_ID.match(undo_id):
+            return None
+        return write_tools.WriteJournal.load(_undo_dir(chat_id, undo_id))
+
+    def has_undo(self, chat_id: str, msg: dict) -> bool:
+        """La risposta ha un registro per annullare (una chat importata porta
+        il campo "undo" ma non le copie)."""
+        undo_id = msg.get("undo")
+        try:
+            return isinstance(undo_id, str) and \
+                (_undo_dir(chat_id, undo_id) / "journal.json").is_file()
+        except OSError:
+            return False
+
     def _undo_journal(self, chat_id: str, index: int) -> tuple[dict, dict, object] | None:
         chat = self.chat(chat_id)
         if chat is None or not (0 <= index < len(chat["messages"])):
             return None
         msg = chat["messages"][index]
-        undo_id = msg.get("undo") if msg.get("role") == "assistant" else None
-        if not isinstance(undo_id, str) or not _SAFE_ID.match(undo_id):
-            return None
-        journal = write_tools.WriteJournal.load(_undo_dir(chat_id, undo_id))
+        journal = self._answer_journal(chat_id, msg)
         return (chat, msg, journal) if journal is not None else None
+
+    @staticmethod
+    def _undo_roots(chat: dict) -> list[Path]:
+        """Le voci condivise dalla chat: si annulla solo lì dentro (il
+        registro è un file che si tratta come non attendibile)."""
+        return [s.path for s in file_tools.shared_from_chat(chat)]
+
+    def _later_overlap(self, chat: dict, index: int, journal) -> bool:
+        """Una risposta successiva, ancora annullabile, ha toccato gli stessi
+        percorsi: annullare prima questa rimetterebbe i file in uno stato
+        sbagliato (ognuna ripristina il suo «prima»)."""
+        mine = set(journal._touched())
+        for later in chat["messages"][index + 1:]:
+            other = self._answer_journal(chat["id"], later)
+            if other is not None and mine & set(other._touched()):
+                return True
+        return False
 
     def undo_status(self, chat_id: str, index: int) -> dict | None:
         """Si possono annullare le modifiche della risposta `index`? None se
         no; altrimenti {"count": operazioni, "changed": [file cambiati dopo
-        la risposta, che annullando tornerebbero indietro]}."""
+        la risposta, che annullando tornerebbero indietro], "later": True se
+        prima va annullata una risposta successiva sugli stessi file}."""
         found = self._undo_journal(chat_id, index)
         if found is None:
             return None
-        journal = found[2]
-        return {"count": len(journal.ops), "changed": journal.changed_since()}
+        chat, _msg, journal = found
+        return {"count": len(journal.ops),
+                "changed": journal.changed_since(self._undo_roots(chat)),
+                "later": self._later_overlap(chat, index, journal)}
 
-    def undo_answer(self, chat_id: str, index: int) -> list[str] | None:
+    def undo_answer(self, chat_id: str, index: int) -> dict | None:
         """Annulla le modifiche ai file della risposta `index`. None se non si
-        può (nulla da annullare, o il PC sta rispondendo); altrimenti i file
-        che non è riuscito a ripristinare. Le chiamate annullate restano
-        nella risposta, segnate come annullate."""
+        può (nulla da annullare, il PC sta rispondendo, prima va annullata
+        una risposta successiva); altrimenti {"failed": file non
+        ripristinati, "in_trash": file rimasti nel cestino del sistema}. Le
+        chiamate annullate restano nella risposta, segnate come annullate."""
         if self.busy():
             return None
         found = self._undo_journal(chat_id, index)
         if found is None:
             return None
         chat, msg, journal = found
-        failed = journal.undo()
+        if self._later_overlap(chat, index, journal):
+            return None
+        failed = journal.undo(self._undo_roots(chat))
         for rnd in msg.get("tool_rounds") or []:
             for c in rnd.get("calls") or []:
                 if c.get("name") in tools.WRITE_TOOL_NAMES and not c.get("error"):
@@ -590,7 +628,7 @@ class ChatEngine(QObject):
         msg.pop("undo", None)
         self._persist(chat)
         self.answer_undone.emit(chat_id, index)
-        return failed
+        return {"failed": failed, "in_trash": list(journal.in_trash)}
 
     def delete_chat(self, chat_id: str) -> None:
         if chat_id == self._active_id:
@@ -1142,6 +1180,9 @@ class ChatEngine(QObject):
         # con delle modifiche ai file si salva sempre: il pulsante «Annulla»
         # vive nella risposta
         journal, self._journal = self._journal, write_tools.WriteJournal()
+        # dopo, il thread dei tool non scrive più: una scrittura approvata
+        # un attimo prima di Stop o della chiusura finisce nel registro
+        journal.close()
         if (text or (rounds and stats is not None) or journal) and chat is not None:
             msg = {"role": "assistant", "content": text, "ts": config.now()}
             if thinking:
@@ -1214,7 +1255,14 @@ class ChatEngine(QObject):
         # i pochi caratteri tenuti per un possibile marcatore sono testo
         tail, self._tail = self._tail, ""
         self._emit_text(tail)
-        if self._pending_stream or self._journal:
+        # una scrittura approvata un attimo prima di Stop: si aspetta che
+        # finisca (tiene il lucchetto) e finisce nel registro; se non è
+        # ancora partita, il registro chiuso la ferma
+        with self._journal.lock:
+            changed = bool(self._journal)
+            if not changed:
+                self._journal.closed = True
+        if self._pending_stream or changed:
             # conserva il testo già prodotto e le modifiche già fatte ai file
             # (la risposta porta il pulsante per annullarle)
             self._finalize("stopped", None)
@@ -1255,6 +1303,15 @@ class ChatEngine(QObject):
         # thread dei tool non resta fermo e si può attendere
         self._close_gate()
         return self._workers.all()
+
+    def save_on_exit(self) -> None:
+        """Dopo aver fermato i worker: una risposta che ha già cambiato dei
+        file si salva, con il suo «Annulla», come dopo uno Stop."""
+        if self._active_id is not None and self._journal:
+            self._save_assistant(None)
+        else:
+            self._journal.close()
+            self._journal.discard()
 
 
 # id delle chat e degli annullamenti: diventano nomi di cartelle
@@ -1302,6 +1359,9 @@ def _assistant_messages(m: dict, full_results: bool) -> list[dict]:
             result = c.get("result") if isinstance(c.get("result"), str) else ""
             if not full_results:
                 result = tools.shorten(result, tools.OLD_RESULT_CHARS)
+            if c.get("undone"):
+                # il modello deve sapere che il file non è più così
+                result += "\n[The user later undid this change: it is no longer applied.]"
             tool_msg = {"role": "tool", "tool_name": c["name"], "content": result}
             if isinstance(c.get("id"), str):
                 entry["id"] = tool_msg["tool_call_id"] = c["id"]

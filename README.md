@@ -98,21 +98,17 @@ License: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   confirmation: the bubble shows the diff with *Apply*, *Reject* and *Allow
   for the rest of the answer*, and the answer stays paused until you choose
   (Stop or closing the app count as a rejection); the phone shows the
-  request, but you confirm only on the PC, and a rejected change is not
-  proposed again in the same answer. Atomic writes, text files only, up to
-  512 KB; a file attached on its own can be changed, but nothing can be
+  request, but you confirm only on the PC, a change identical to a rejected one is not proposed again, and after three rejections on the same file the model cannot propose more changes to it in the same answer. If the file changes while you decide, the change is not applied; the card warns when the diff is cut, when there are very long lines (for changed lines it shows the part around the change) and when there are invisible or control characters (shown as ⟦U+…⟧). Atomic writes, text files only, up to 512 KB (rewriting a whole file, about 200 KB at a time); a file attached on its own can be changed, but nothing can be
   created next to it. "Full access" also lets the model move or rename files and folders and
   move them to the system trash (never deleted permanently): these always ask
   for confirmation, one by one, even after "Allow for the rest of the
-  answer", and a folder with hidden or excluded files or links inside cannot
-  be moved or deleted. Under the answer, "↶ Undo the changes" puts the files back as they were
-  (also after a restart; it warns if a file changed in the meantime), and the
+  answer", and a folder with hidden or excluded files, links or special files inside cannot be moved or deleted. Under the answer, "↶ Undo the changes" puts the files back as they were
+  (also after a restart or if you close the app during the answer; it warns if a file changed in the meantime; with several answers on the same files you undo from the most recent). The copies for undoing stay in the configuration folder until you undo or delete the conversation; in the Flatpak a file moved to the trash does not come back with "Undo": restore it from the system trash. and the
   "🔧 Tools used" block says for each change whether it was rejected or
   undone. The wrench is grey, blue or
   amber depending on the level. Always limited to what was attached, with the
   same exclusions as a folder as context, for writing too (hidden files,
-  dependencies, `.gitignore`, credentials, links that leave the folder); no
-  commands and no git.
+  dependencies, `.gitignore`, credentials, links that leave the folder, OllaDesk's own folder even inside a shared folder); no commands and no git.
   With web search (🌐) on, the model also searches the web when
   it needs to, with the provider from the settings and a query it writes
   itself, instead of the automatic search before the answer,

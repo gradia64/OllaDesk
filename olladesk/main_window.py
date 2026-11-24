@@ -549,7 +549,8 @@ class MainWindow(QMainWindow):
                 m["role"], m.get("display", m.get("content", "")), m.get("ts"),
                 m.get("attachments"), bool(m.get("web")), m.get("stats"),
                 thinking=m.get("thinking", ""), sources=sources, tool_calls=calls,
-                undo_index=i if is_answer and m.get("undo") else None,
+                undo_index=i if is_answer and m.get("undo")
+                and self.engine.has_undo(chat["id"], m) else None,
             )
 
     # durante una generazione si può navigare: la risposta continua in
@@ -785,6 +786,11 @@ class MainWindow(QMainWindow):
             self.chat_area.add_system_note(
                 _("Le modifiche di questa risposta non si possono più annullare."))
             return
+        if status.get("later"):
+            self.chat_area.add_system_note(
+                _("Una risposta successiva ha cambiato gli stessi file: annulla prima "
+                  "le sue modifiche."))
+            return
         text = _("Rimettere i file com'erano prima di questa risposta? "
                  "Operazioni da annullare: {n}.").format(n=status["count"])
         if status["changed"]:
@@ -798,11 +804,17 @@ class MainWindow(QMainWindow):
         box.setDefaultButton(QMessageBox.StandardButton.No)
         if box.exec() != QMessageBox.StandardButton.Yes:
             return
-        failed = self.engine.undo_answer(chat_id, index)
-        if failed:
+        result = self.engine.undo_answer(chat_id, index)
+        if result is None:
+            return
+        if result["failed"]:
             self.chat_area.add_system_note(
                 _("Non è stato possibile ripristinare: {files}.").format(
-                    files=", ".join(failed)))
+                    files=", ".join(result["failed"])))
+        if result["in_trash"]:
+            self.chat_area.add_system_note(
+                _("Sono nel cestino del sistema, da cui puoi ripristinarli: {files}.").format(
+                    files=", ".join(result["in_trash"])))
 
     def _show_undo_button(self, chat_id: str) -> None:
         """Dopo il salvataggio della risposta: se ha cambiato dei file, la sua
@@ -1144,6 +1156,8 @@ class MainWindow(QMainWindow):
         # su un socket muoiono al loro timeout di rete.
         # un'unica scadenza per tutti: prima 1,5 s per OGNI worker in fila
         shutdown_workers(self._workers.all() + self.engine.shutdown())
+        # una risposta che ha già cambiato dei file si salva con «Annulla»
+        self.engine.save_on_exit()
         super().closeEvent(ev)
         # UNICO punto di uscita dell'app (quitOnLastWindowClosed è sempre
         # False, vedi app.py): «Esci» dalla tray, SIGTERM/SIGINT, logout di

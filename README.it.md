@@ -102,21 +102,17 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   modifica aspetta la tua conferma: la bolla mostra il diff con *Applica*,
   *Rifiuta* e *Consenti per il resto della risposta*, e la risposta resta
   ferma finché non scegli (Stop o la chiusura dell'app valgono come rifiuto);
-  il telefono mostra la richiesta, ma si conferma solo dal PC, e una modifica
-  rifiutata non si ripropone nella stessa risposta. Scrittura atomica, solo
-  file di testo fino a 512 KB; un file allegato da solo si può modificare, ma
+  il telefono mostra la richiesta, ma si conferma solo dal PC, una modifica identica a una rifiutata non si ripropone e dopo tre rifiuti sullo stesso file il modello non può più proporne su quel file nella stessa risposta. Se il file cambia mentre decidi, la modifica non si applica; la scheda avvisa quando il diff è tagliato, quando ci sono righe molto lunghe (delle righe cambiate mostra il pezzo attorno alla modifica) e quando ci sono caratteri invisibili o di controllo (mostrati come ⟦U+…⟧). Scrittura atomica, solo file di testo fino a 512 KB (riscrivendo un file intero, circa 200 KB per volta); un file allegato da solo si può modificare, ma
   accanto non si crea nulla. «Accesso completo» permette anche di spostare o rinominare file e cartelle e di
   mandarli nel cestino del sistema (mai cancellati per sempre): queste
   operazioni chiedono sempre conferma, una per una, anche dopo «Consenti per il
-  resto della risposta», e una cartella con dentro file nascosti, esclusi o
-  collegamenti non si sposta né si cancella. Sotto la risposta «↶ Annulla le modifiche» rimette i file com'erano
-  prima (anche dopo un riavvio; avvisa se nel frattempo un file è cambiato), e
+  resto della risposta», e una cartella con dentro file nascosti, esclusi, collegamenti o file speciali non si sposta né si cancella. Sotto la risposta «↶ Annulla le modifiche» rimette i file com'erano
+  prima (anche dopo un riavvio o se chiudi l'app durante la risposta; avvisa se nel frattempo un file è cambiato; con più risposte sugli stessi file si annulla dalla più recente). Le copie per annullare restano nella cartella di configurazione finché non annulli o elimini la chat; nel Flatpak un file mandato nel cestino non torna con «Annulla»: lo si ripristina dal cestino del sistema. e
   il blocco «🔧 Strumenti usati» dice per ogni modifica se è stata rifiutata o
   annullata. La chiave inglese è grigia,
   blu o ambra secondo il livello. Sempre e solo ciò che è stato allegato, con
   le stesse esclusioni della cartella come contesto anche per scrivere
-  (nascosti, dipendenze, `.gitignore`, credenziali, collegamenti che escono);
-  niente comandi né git.
+  (nascosti, dipendenze, `.gitignore`, credenziali, collegamenti che escono, la cartella di OllaDesk anche dentro una cartella condivisa); niente comandi né git.
   Con la ricerca web (🌐) accesa il modello cerca
   anche sul web quando gli serve, con il provider delle impostazioni e una
   query scritta da lui, invece della ricerca automatica prima della risposta,

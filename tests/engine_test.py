@@ -710,8 +710,9 @@ print("9h3. conferma: Stop durante l'attesa OK")
 # 9h4. «Accesso completo» (0.5, W3): anche move_file e delete_file, nota
 # apposita; spostare e cestinare chiedono anche dopo «consenti per il resto».
 # Il cestino è finto: i test non toccano quello vero
-trash_dir = Path(tempfile.mkdtemp()) / "cestino"
-trash_dir.mkdir()
+trash_dir = Path(tempfile.mkdtemp()) / "cestino" / "files"   # come un cestino vero
+trash_dir.mkdir(parents=True)
+(trash_dir.parent / "info").mkdir()
 real_trash = write_tools.move_to_trash
 write_tools.move_to_trash = lambda p: p.rename(trash_dir / p.name) or trash_dir / p.name
 (shared_dir / "vecchio.txt").write_text("v\n")
@@ -748,7 +749,8 @@ saved = config.load_chat(c9h)["messages"]
 idx = len(saved) - 1
 undo_id = saved[idx]["undo"]
 assert (config.config_dir() / "undo" / c9h / undo_id / "journal.json").is_file()
-assert engine.undo_status(c9h, idx) == {"count": 3, "changed": []}, engine.undo_status(c9h, idx)
+assert engine.undo_status(c9h, idx) == {"count": 3, "changed": [], "later": False}, \
+    engine.undo_status(c9h, idx)
 assert engine.undo_status(c9h, 0) is None                      # messaggio dell'utente
 # un file cambiato dopo la risposta viene segnalato
 (shared_dir / "f.txt").write_text("cambiato a mano\n")
@@ -757,7 +759,7 @@ undone: list = []
 engine.answer_undone.connect(lambda cid, i: undone.append((cid, i)))
 engine2 = ChatEngine(settings)                                  # come dopo un riavvio
 assert engine2.undo_status(c9h, idx)["count"] == 3
-assert engine.undo_answer(c9h, idx) == []
+assert engine.undo_answer(c9h, idx) == {"failed": [], "in_trash": []}
 assert undone == [(c9h, idx)]
 assert not (shared_dir / "f.txt").exists() and not (shared_dir / "e.txt").exists()
 assert (shared_dir / "vecchio.txt").read_text() == "v\n"
@@ -773,6 +775,49 @@ write_tools.move_to_trash = real_trash
 fake.write_rounds = []
 engine.set_chat_tools(c9h, True)
 print("9h5. annullare le modifiche di una risposta OK")
+
+# 9h6. revisione esterna della 0.5: due risposte sullo stesso file si
+# annullano dalla più recente; una chat senza copie non mostra «Annulla»;
+# chiudendo l'app con modifiche già fatte la risposta si salva
+for content in ("uno\n", "due\n"):
+    fake.write_rounds = [[{"name": "write_file",
+                           "arguments": {"path": "condivisa/g.txt", "content": content}}]]
+    engine.send(c9h, "modifica g", "finto", tools="write")
+    assert wait_until(lambda: engine.pending_change() is not None)
+    assert engine.resolve_change(engine.pending_change()["id"], "apply")
+    assert wait_until(lambda: not engine.busy())
+saved = config.load_chat(c9h)["messages"]
+first, second = len(saved) - 3, len(saved) - 1
+assert saved[first].get("undo") and saved[second].get("undo")
+assert engine.undo_status(c9h, first)["later"] is True
+assert engine.undo_answer(c9h, first) is None and (shared_dir / "g.txt").read_text() == "due\n"
+assert engine.undo_status(c9h, second)["later"] is False
+assert engine.undo_answer(c9h, second) == {"failed": [], "in_trash": []}
+assert engine.undo_answer(c9h, first) == {"failed": [], "in_trash": []}
+assert not (shared_dir / "g.txt").exists()
+assert engine.has_undo(c9h, {"undo": "inesistente"}) is False
+# chiusura dell'app durante la seconda conferma: la prima modifica resta
+# annullabile
+fake.write_rounds = [
+    [{"name": "write_file", "arguments": {"path": "condivisa/h.txt", "content": "h\n"}}],
+    [{"name": "write_file", "arguments": {"path": "condivisa/i.txt", "content": "i\n"}}]]
+engine3 = ChatEngine(settings)
+engine3._models, engine3._caps = list(engine._models), dict(engine._caps)   # già noti
+engine3.send(c9h, "modifica h e i", "finto", tools="write")
+assert wait_until(lambda: engine3.pending_change() is not None)
+assert engine3.resolve_change(engine3.pending_change()["id"], "apply")
+assert wait_until(lambda: (engine3.pending_change() or {}).get("label") == "condivisa/i.txt")
+from olladesk.ollama_client import shutdown_workers  # noqa: E402
+shutdown_workers(engine3.shutdown())
+engine3.save_on_exit()
+saved = config.load_chat(c9h)["messages"]
+assert saved[-1]["role"] == "assistant" and saved[-1].get("undo"), saved[-1]
+assert (shared_dir / "h.txt").exists() and not (shared_dir / "i.txt").exists()
+assert ChatEngine(settings).undo_answer(c9h, len(saved) - 1) == {"failed": [], "in_trash": []}
+assert not (shared_dir / "h.txt").exists()
+fake.write_rounds = []
+engine.set_chat_tools(c9h, True)
+print("9h6. annullare in ordine e salvare alla chiusura OK")
 
 # 9i. ricerca web come tool (T4): con 🌐 e i tool attivi niente ricerca prima
 # della risposta, il modello chiama web_search; senza 🌐 il tool non c'è

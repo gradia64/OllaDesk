@@ -112,6 +112,20 @@ class _Files:
         self.writable = writable
         self._by_label = {s.label: s for s in shared}
         self._rules: dict[Path, list] = {}
+        # una cartella condivisa che contiene quella dell'app (allegare
+        # ~/.config): chat, impostazioni e copie per l'annullamento restano
+        # fuori, in lettura e in scrittura
+        self._private: dict[str, list[str]] = {}
+        try:
+            cfg = config.config_dir().resolve()
+        except (OSError, RuntimeError):
+            cfg = None
+        for s in shared:
+            if cfg is not None and s.is_dir:
+                try:
+                    self._private[s.label] = list(cfg.relative_to(s.path.resolve()).parts)
+                except (OSError, RuntimeError, ValueError):
+                    pass
 
     def rules(self, root: Path) -> list:
         if root not in self._rules:
@@ -166,8 +180,17 @@ class _Files:
             raise ToolError(f"'{text}' does not exist.")
         return s, rel, real
 
+    def private(self, s: Shared, parts) -> bool:
+        """Il percorso relativo `parts` è nella cartella dell'app (tranne
+        gli allegati in attachments/)?"""
+        priv = self._private.get(s.label)
+        return bool(priv) and list(parts[:len(priv)]) == priv and \
+            not (len(parts) > len(priv) and parts[len(priv)] == "attachments")
+
     def excluded(self, s: Shared, parts: list[str], is_dir: bool) -> str:
         """Motivo per cui il percorso relativo `parts` non è condiviso, o ""."""
+        if self.private(s, parts):
+            return "is OllaDesk's own data: not shared."
         rules = self.rules(s.path)
         for i, name in enumerate(parts):
             sub = "/".join(parts[:i + 1])
@@ -243,6 +266,7 @@ def make_tools(shared: list[Shared], read_log: list[str] | None = None,
             # FIFO, socket e dispositivi non sono file da leggere: aprirli bloccherebbe
             special = not is_dir and not e.is_file(follow_symlinks=False)
             if (e.name.startswith(".") or e.is_symlink() or special
+                    or files.private(s, (prefix + e.name).split("/"))
                     or (is_dir and e.name in context.FOLDER_SKIP_DIRS)
                     or context._ignored(prefix + e.name, is_dir, rules)
                     or (not is_dir and context._looks_secret(e.name))):
