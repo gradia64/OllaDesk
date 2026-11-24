@@ -23,6 +23,9 @@ Licence : **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   <img src="docs/screenshots/settings.png" alt="Paramètres" width="44%" />
 </p>
 <p align="center">
+  <img src="docs/screenshots/tools.png" alt="Outils : confirmation d'une modification de fichier" width="60%" />
+</p>
+<p align="center">
   <img src="docs/screenshots/phone.png" alt="Companion web sur téléphone" width="30%" />
 </p>
 

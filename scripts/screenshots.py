@@ -216,6 +216,33 @@ TEXTS["en"].update(
                   "by the date they were taken",
     code_thinking="I need to read the EXIF DateTimeOriginal tag…",
 )
+TEXTS["it"].update(
+    tools_title="Opzione --dry-run",
+    tools_folder="rinomina-foto",
+    tools_q1="Aggiungi a rinomina.py un'opzione --dry-run che mostra solo cosa "
+             "rinominerebbe",
+    tools_a1="Fatto: con `--dry-run` lo script stampa ogni `vecchio → nuovo` e non "
+             "cambia nulla. Prova con `python rinomina.py --dry-run Foto`.",
+    tools_q2="Ora documenta l'opzione nel README",
+    tools_file="rinomina.py",
+    tools_readme_old="# rinomina-foto\n\nRinomina le foto di una cartella con la data di "
+                     "scatto.\n\n## Uso\n\n```\npython rinomina.py Foto\n```\n",
+    tools_readme_add="\nPer vedere cosa cambierebbe senza rinominare nulla:\n\n```\n"
+                     "python rinomina.py --dry-run Foto\n```\n",
+)
+TEXTS["en"].update(
+    tools_title="Add a --dry-run option",
+    tools_folder="photo-renamer",
+    tools_q1="Add a --dry-run option to rename.py that only prints what it would rename",
+    tools_a1="Done: with `--dry-run` the script prints each `old → new` name and changes "
+             "nothing. Try it with `python rename.py --dry-run Photos`.",
+    tools_q2="Now document the option in the README",
+    tools_file="rename.py",
+    tools_readme_old="# photo-renamer\n\nRenames the photos in a folder by the date they "
+                     "were taken.\n\n## Usage\n\n```\npython rename.py Photos\n```\n",
+    tools_readme_add="\nTo see what would change without renaming anything:\n\n```\n"
+                     "python rename.py --dry-run Photos\n```\n",
+)
 TX = TEXTS[LANG]
 
 WEB_RESULTS = [
@@ -258,6 +285,54 @@ def write_chats() -> tuple[str, str]:
                            "thinking": TX["code_thinking"],
                            "stats": "486 token · 43.2 tok/s · 11.2 s"}]})
     return code_id, web_id
+
+
+def write_tools_chat() -> str:
+    """Chat con «Scrivere file»: una risposta che ha già cambiato un file
+    (blocco 🔧 e «Annulla») e una seconda domanda, a cui la finestra
+    risponde con una modifica in attesa di conferma."""
+    t = time.time()
+    folder, py = TX["tools_folder"], TX["tools_file"]
+    f_py = f"{folder}/{py}"
+    rounds = [
+        {"content": "", "calls": [
+            {"name": "list_files", "arguments": {"path": folder},
+             "result": f"{folder}/: 0 folders, 2 files\nREADME.md  (1 KB, text)\n"
+                       f"{py}  (1 KB, text)"},
+            {"name": "read_file", "arguments": {"path": f_py},
+             "result": f"{f_py} — lines 1-24 of 24\n    1  import argparse"}]},
+        {"content": "", "calls": [
+            {"name": "edit_file", "arguments": {
+                "path": f_py, "old_text": "        photo.rename(target)",
+                "new_text": "        if args.dry_run:\n            print(photo.name, \"→\", "
+                            "target.name)\n        else:\n            photo.rename(target)"},
+             "result": f"Replaced 1 occurrence in {f_py}. Lines 20-27 now:"}]}]
+    chat_id = config.new_chat_id()
+    undo_id = "shot" + config.new_chat_id()
+    # il pulsante «Annulla» compare solo se il registro esiste
+    undo = config.config_dir() / "undo" / chat_id / undo_id
+    undo.mkdir(parents=True)
+    (undo / "journal.json").write_text('{"version": 1, "ops": [], "final": {}}')
+    config.save_chat({"id": chat_id, "title": TX["tools_title"], "model": "qwen3:8b",
+                      "tools": "write", "updated": t - 30, "messages": [
+                          {"role": "user", "display": TX["tools_q1"], "ts": t - 300,
+                           "attachments": [folder],
+                           "attachments_meta": [{"kind": "folder", "name": folder,
+                                                 "path": f"/home/user/{folder}"}]},
+                          {"role": "assistant", "content": TX["tools_a1"], "ts": t - 240,
+                           "tool_rounds": rounds, "undo": undo_id,
+                           "stats": "268 token · 39.8 tok/s · 6.7 s"},
+                          {"role": "user", "display": TX["tools_q2"], "ts": t - 30}]})
+    return chat_id
+
+
+def pending_change_view() -> dict:
+    """La modifica al README che aspetta la conferma, come la manda il motore."""
+    from olladesk import write_tools
+    label = f"{TX['tools_folder']}/README.md"
+    old = TX["tools_readme_old"]
+    diff = write_tools._diff(label, old, old + TX["tools_readme_add"])
+    return write_tools.Request(1, write_tools.Change("edit", label, None, diff)).view()
 
 
 # -------------------------------------------------------- Firefox headless
@@ -375,6 +450,7 @@ def main() -> int:
              app_update_check=False, ollama_update_check=False)
     config.save_settings(s)
     code_id, web_id = write_chats()
+    tools_id = write_tools_chat()
 
     from olladesk import theme
     from olladesk.main_window import MainWindow
@@ -403,6 +479,25 @@ def main() -> int:
         area.verticalScrollBar().setValue(0)   # la domanda in alto
     wait(200)
     save(win, "chat.png")
+
+    # strumenti: risposta con le modifiche fatte e una nuova in attesa di conferma
+    from olladesk import tools as tools_mod
+    win._open_chat(tools_id)
+    wait(300)
+    f_readme = f"{TX['tools_folder']}/README.md"
+    win.chat_area.begin_stream()
+    win.chat_area.stream_tool_calls(tools_mod.calls_view([], {"calls": [
+        {"name": "read_file", "arguments": {"path": f_readme}, "done": True,
+         "result": f"{f_readme} — lines 1-9 of 9"},
+        {"name": "edit_file", "arguments": {"path": f_readme}, "waiting": True}]}))
+    win.chat_area.show_change(pending_change_view())
+    wait(500)
+    for area in win.chat_area.findChildren(QScrollArea):
+        bar = area.verticalScrollBar()
+        bar.setValue(bar.maximum())   # la scheda di conferma in vista
+    wait(200)
+    save(win, "tools.png")
+    win.chat_area.end_stream(discard_empty=True)
 
     win.settings["theme"] = "light"
     win._apply_theme_now()

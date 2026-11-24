@@ -115,11 +115,11 @@ class ChangeCard(QFrame):
         self.diff.setWordWrapMode(QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
         self.diff.setHtml(diff_html(view.get("diff", ""), t["dim"],
                                     theme.palette_for(theme_name) is theme.palette_for("dark")))
-        # alto quanto il diff, fino al tetto (poi si scorre); misurato a una
-        # larghezza tipica della bolla, prima che la scheda abbia la sua
+        # alto quanto il diff, fino al tetto (poi si scorre); con l'a capo
+        # l'altezza dipende dalla larghezza: si ricalcola quando cambia
+        self.diff.document().documentLayout().documentSizeChanged.connect(self._fit_diff)
         self.diff.document().setTextWidth(DIFF_MEASURE_WIDTH)
-        doc_h = int(self.diff.document().size().height())
-        self.diff.setFixedHeight(min(DIFF_MAX_HEIGHT, doc_h + 2 * self.diff.frameWidth() + 2))
+        self._fit_diff()
         self.diff.setVisible(bool(view.get("diff")))
         lay.addWidget(self.diff)
         # una modifica lunga si vede solo in parte: chi approva deve saperlo
@@ -157,6 +157,10 @@ class ChangeCard(QFrame):
         self.rest_btn.setVisible(view.get("allow_rest", True) is not False)
         row.addStretch(1)
         lay.addLayout(row)
+
+    def _fit_diff(self, *_args) -> None:
+        doc_h = int(self.diff.document().size().height())
+        self.diff.setFixedHeight(min(DIFF_MAX_HEIGHT, doc_h + 2 * self.diff.frameWidth() + 2))
 
     def _note(self, lay, text: str, show) -> QLabel:
         """Avviso in ambra sotto il diff: chi approva deve saperlo."""

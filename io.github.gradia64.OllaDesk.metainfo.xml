@@ -149,6 +149,14 @@
       <image>https://raw.githubusercontent.com/gradia64/OllaDesk/main/docs/screenshots/web-search.png</image>
     </screenshot>
     <screenshot>
+      <caption>A change to a shared file waiting for confirmation, with the diff</caption>
+      <caption xml:lang="it">Una modifica a un file condiviso in attesa di conferma, con il diff</caption>
+      <caption xml:lang="fr">Une modification d'un fichier partagé en attente de confirmation, avec le diff</caption>
+      <caption xml:lang="de">Eine Änderung an einer geteilten Datei wartet auf Bestätigung, mit dem Diff</caption>
+      <caption xml:lang="es">Un cambio en un archivo compartido a la espera de confirmación, con el diff</caption>
+      <image>https://raw.githubusercontent.com/gradia64/OllaDesk/main/docs/screenshots/tools.png</image>
+    </screenshot>
+    <screenshot>
       <caption>Model manager</caption>
       <caption xml:lang="it">Gestore dei modelli</caption>
       <caption xml:lang="fr">Gestionnaire de modèles</caption>
