@@ -26,10 +26,12 @@ License: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   <img src="docs/screenshots/settings.png" alt="Settings" width="44%" />
 </p>
 <p align="center">
-  <img src="docs/screenshots/tools.png" alt="Tools: confirming a change to a file" width="60%" />
+  <img src="docs/screenshots/tools.png" alt="Tools: confirming a change to a file" width="45%" />
+  <img src="docs/screenshots/tools-menu.png" alt="Tools menu: access levels" width="45%" />
 </p>
 <p align="center">
   <img src="docs/screenshots/phone.png" alt="Web companion on phone" width="30%" />
+  <img src="docs/screenshots/phone-tools.png" alt="Phone: change waiting for confirmation on the PC" width="30%" />
 </p>
 
 ## Features
@@ -285,7 +287,13 @@ License: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   presence/frequency penalties, seed, stop sequences, mirostat, num_gpu,
   num_thread…). Only checked parameters are sent to Ollama: the others keep
   the server defaults. Each profile can be **saved** and **reset to defaults**
-  with one click.
+  with one click. Without num_ctx the context window is the server's
+  (for example `OLLAMA_CONTEXT_LENGTH`): OllaDesk reads it from Ollama after
+  the first answer and uses it to warn when a request is too long, counting
+  the tool definitions too; until then the warning says the window is not
+  known yet. When Ollama refuses a request that exceeds the window, the
+  message says so and suggests raising num_ctx; an answer that ends without
+  text gets a warning instead of an empty bubble.
 - Connection status always visible (green/red) with automatic recheck every
   30 s.
 

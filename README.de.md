@@ -23,10 +23,12 @@ Lizenz: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   <img src="docs/screenshots/settings.png" alt="Einstellungen" width="44%" />
 </p>
 <p align="center">
-  <img src="docs/screenshots/tools.png" alt="Werkzeuge: Bestätigung einer Dateiänderung" width="60%" />
+  <img src="docs/screenshots/tools.png" alt="Werkzeuge: Bestätigung einer Dateiänderung" width="45%" />
+  <img src="docs/screenshots/tools-menu.png" alt="Werkzeugmenü: Zugriffsstufen" width="45%" />
 </p>
 <p align="center">
   <img src="docs/screenshots/phone.png" alt="Web-Companion auf dem Telefon" width="30%" />
+  <img src="docs/screenshots/phone-tools.png" alt="Telefon: Änderung wartet auf Bestätigung am PC" width="30%" />
 </p>
 
 ## Funktionen
@@ -84,7 +86,7 @@ Lizenz: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
 - **Ollama-Aktualisierungen**: beim Start höchstens einmal am Tag prüft die App das letzte Release auf GitHub; ist es neuer als der verwendete Server, zeigt die Statusanzeige oben rechts «⬆ Version». Ein Klick darauf öffnet das Menü mit der **Aktualisierung per Klick** über das offizielle Skript (ausgeführt mit `pkexec`, also mit dem Administratorpasswort von KDE), den Modellen und der Serveradresse. Dieselbe Prüfung ist in Einstellungen → Aktualisierungen, wo sich die Prüfung beim Start abschalten lässt. Nur mit einem Ollama-Server auf diesem Rechner.
 - **OllaDesk-Aktualisierungen**: beim Start, höchstens einmal am Tag, prüft die App auf GitHub, ob eine neue Version erschienen ist, und zeigt in dem Fall einen Hinweis in der oberen Leiste mit Anweisungen, die zur Installationsart passen (.deb, AUR, AppImage, pip oder Quellen). Nur ein Hinweis: kein automatischer Download und keine Installation. Eine Version kann übersprungen, manuell geprüft oder die Prüfung in Einstellungen → Aktualisierungen deaktiviert werden.
 - **Einstellungen** (Seiten Allgemein, Erscheinungsbild, Websuche, Aktualisierungen, Hilfe und Info, im Menü links; F1 öffnet die Hilfe mit den wichtigsten Funktionen und Tastenkürzeln; Info enthält Versionen, Lizenz, Links und «Systeminformationen kopieren» für Fehlermeldungen): URL des Ollama-Servers, dunkles/helles/**System**-Thema (folgt KDE Plasma, auch live beim Wechsel), Schriftgröße, Streaming an/aus, Senden mit Enter, Uhrzeit in Nachrichten, Tray-Icon, Menge des Kontexts, der an das Modell gesendet wird, automatische Archivierung inaktiver Chats, Standard-Systemprompt, Ergebnisse der Websuche.
-- **Einstellungen → «Modellparameter»**: separates Parameterprofil für jedes Modell (Temperatur, top_k, top_p, min_p, num_ctx, num_predict, Wiederholungs-/Präsenz-/Frequenz-Strafe, Seed, Stop-Sequenzen, mirostat, num_gpu, num_thread…). Nur die angehakten Parameter werden an Ollama gesendet: die anderen bleiben bei den Server-Standards. Jedes Profil kann **gespeichert** und mit einem Klick **auf die Standardwerte zurückgesetzt** werden.
+- **Einstellungen → «Modellparameter»**: separates Parameterprofil für jedes Modell (Temperatur, top_k, top_p, min_p, num_ctx, num_predict, Wiederholungs-/Präsenz-/Frequenz-Strafe, Seed, Stop-Sequenzen, mirostat, num_gpu, num_thread…). Nur die angehakten Parameter werden an Ollama gesendet: die anderen bleiben bei den Server-Standards. Jedes Profil kann **gespeichert** und mit einem Klick **auf die Standardwerte zurückgesetzt** werden. Ohne num_ctx gilt das Kontextfenster des Servers (zum Beispiel `OLLAMA_CONTEXT_LENGTH`): OllaDesk liest es nach der ersten Antwort aus Ollama und warnt damit, wenn eine Anfrage zu lang ist, wobei auch die Definitionen der Werkzeuge mitzählen; bis dahin sagt der Hinweis, dass das Fenster noch nicht bekannt ist. Lehnt Ollama eine Anfrage ab, die das Fenster überschreitet, sagt die Meldung das und rät, num_ctx zu erhöhen; eine Antwort, die ohne Text endet, bekommt einen Hinweis statt einer leeren Blase.
 - Verbindungsstatus immer sichtbar (grün/rot) mit automatischer Neuprüfung alle 30 s.
 
 ## Voraussetzungen

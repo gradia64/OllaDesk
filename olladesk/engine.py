@@ -41,6 +41,58 @@ from .ollama_client import (
 from .workers import WorkerRegistry
 
 
+
+_CTX_ERROR = re.compile(r"request \((\d+) tokens?\) exceeds the available context size "
+                        r"\((\d+) tokens?\)")
+
+
+def context_size_from_error(err: str) -> int | None:
+    """La finestra di contesto dall'errore di Ollama per una richiesta troppo
+    lunga («request (16639 tokens) exceeds the available context size
+    (16384 tokens)»), None se l'errore è un altro."""
+    m = _CTX_ERROR.search(err or "")
+    return int(m.group(2)) if m else None
+
+
+def failure_hint(err: str) -> str:
+    """Suggerimento da mostrare sotto un errore della generazione, o "".
+
+    Prima a ogni errore si aggiungeva «avvia Ollama con `ollama serve`»,
+    anche quando Ollama aveva risposto e rifiutato la richiesta (finestra
+    di contesto superata): lì il consiglio giusto è un altro. Il
+    suggerimento sul server resta per gli errori di connessione.
+    """
+    m = _CTX_ERROR.search(err or "")
+    if m:
+        return _("Suggerimento: la richiesta ({used} token) supera la finestra di contesto "
+                 "del modello ({limit} token). Aumenta «num_ctx» in Impostazioni → "
+                 "Parametri modelli, se la memoria della GPU lo permette, oppure riduci "
+                 "allegati e cronologia o inizia una nuova chat.").format(
+                     used=m.group(1), limit=m.group(2))
+    if _server_replied(err):
+        return ""
+    return _("Suggerimento: avvia Ollama con `ollama serve` e verifica l'URL "
+             "nelle impostazioni (Ctrl+,).")
+
+
+
+def empty_answer_note(thought: bool) -> str:
+    """Avviso per una risposta finita senza testo (con o senza ragionamento)."""
+    if thought:
+        return _("Il modello ha ragionato ma non ha scritto la risposta. Riprova, oppure "
+                 "spegni il ragionamento (🧠) o prova un altro modello.")
+    return _("Il modello ha terminato senza scrivere nulla. Può dipendere dal modello o "
+             "dal suo template: prova un altro modello o, se il ragionamento (🧠) è "
+             "acceso, spegnilo.")
+
+
+def _server_replied(err: str) -> bool:
+    """L'errore è una risposta di Ollama (HTTP, modello mancante), non un
+    problema di connessione: i testi sono quelli di friendly_error."""
+    http = _('Errore HTTP {code} dal server Ollama: {detail}').split("{code}")[0]
+    missing = _("Modello non trovato sul server: scaricalo con `ollama pull <modello>`.")
+    return bool(err) and (err.startswith(http) or err.startswith(missing))
+
 class ChatEngine(QObject):
     # --- conversazioni
     chats_changed = Signal()                  # indice cambiato (titoli, ordine, eliminazioni)
@@ -123,6 +175,11 @@ class ChatEngine(QObject):
         # aggiornato cambia digest e si richiede
         self._caps: dict[str, tuple[str, list[str]]] = {}
         self._caps_worker: CapsWorker | None = None
+        # finestra di contesto vista da Ollama per modello (da /api/ps dopo una
+        # risposta, o dall'errore «exceeds the available context size»): senza
+        # num_ctx nei Parametri modelli vale il predefinito del server
+        self._ctx_seen: dict[str, int] = {}
+        self._ps_worker: ApiWorker | None = None
         self._caps_again = False              # elenco ricaricato mentre si chiedevano
         # scarica/elimina avviato dal telefono (una sola operazione alla volta):
         # {"op": "pull"|"delete", "name", "state": "running"|"done"|"failed",
@@ -220,6 +277,38 @@ class ChatEngine(QObject):
         rispondono con un errore se la richiesta porta `tools`.
         """
         return "tools" in (self.model_caps(name) or [])
+
+    def context_window(self, model: str, options: dict | None = None) -> int | None:
+        """Finestra di contesto del modello: `num_ctx` dei Parametri modelli
+        se impostato, altrimenti quella vista da Ollama; None se non è nota."""
+        if options and options.get("num_ctx"):
+            try:
+                return int(options["num_ctx"])
+            except (TypeError, ValueError):
+                pass
+        return self._ctx_seen.get(model)
+
+    def _learn_context(self, model: str) -> None:
+        """Chiede a /api/ps la finestra con cui Ollama ha caricato `model`."""
+        if self._closed or self._ps_worker is not None or not model:
+            return
+        w = ApiWorker(self.settings["host"], "/api/ps", self)
+        w.ready.connect(lambda data, model=model: self._on_ps(model, data))
+        w.finished.connect(w.deleteLater)
+        w.finished.connect(self._workers.clear_ref(self, "_ps_worker", w))
+        self._ps_worker = w
+        self._workers.track(w)
+        w.start()
+
+    def _on_ps(self, model: str, data: object) -> None:
+        models = data.get("models") if isinstance(data, dict) else None
+        for m in models if isinstance(models, list) else []:
+            if not isinstance(m, dict) or model not in (m.get("name"), m.get("model")):
+                continue
+            n = m.get("context_length")
+            if isinstance(n, int) and not isinstance(n, bool) and n > 0:
+                self._ctx_seen[model] = n
+            return
 
     def _tools_for(self, chat: dict, web: bool = False) -> tools.ToolRegistry:
         """Tool del turno: quelli fissi, la lettura di ciò che la chat
@@ -948,11 +1037,6 @@ class ChatEngine(QObject):
         from .widgets.model_params import options_for_model
 
         options = options_for_model(model)
-        note = context.context_overflow_note(messages, options.get("num_ctx"))
-        if note:
-            warnings.append(note)
-        if warnings:
-            self.notice.emit(chat_id, "⚠ " + "\n⚠ ".join(warnings))
 
         payload = {
             "model": model,
@@ -974,6 +1058,13 @@ class ChatEngine(QObject):
             if self._turn_tools.get("web_search") is not None:
                 # con la ricerca il modello deve sapere che giorno è
                 _add_system_note(messages, tools.today_note(datetime.date.today()))
+        # stima dopo i tool: anche le loro definizioni occupano il contesto
+        note = context.context_overflow_note(messages, self.context_window(model, options),
+                                             payload.get("tools"))
+        if note:
+            warnings.append(note)
+        if warnings:
+            self.notice.emit(chat_id, "⚠ " + "\n⚠ ".join(warnings))
         return payload
 
     def _launch_chat(self) -> None:
@@ -1049,6 +1140,12 @@ class ChatEngine(QObject):
             self.notice.emit(self._active_id, "⚠ " + _(
                 'Il modello ha provato a chiamare uno strumento non disponibile invece di '
                 'rispondere: la chiamata è stata tolta dalla risposta.'))
+        elif not self._pending_stream[self._stream_mark:].strip():
+            # senza testo la bolla restava vuota e sembrava che l'app si fosse
+            # fermata: succede con modelli il cui template chiude subito la
+            # risposta (stop sbagliati) o che col ragionamento non scrivono
+            self.notice.emit(self._active_id, "⚠ " + empty_answer_note(
+                bool(self._pending_think[self._think_mark:].strip())))
         self._finalize("done", format_stats(done))
 
     # ---------------------------------------------------------------- tool
@@ -1215,6 +1312,11 @@ class ChatEngine(QObject):
 
     def _finalize(self, outcome: str, stats: str | None) -> None:
         """Chiude la risposta, salva il testo prodotto e torna idle."""
+        payload = self._payload or {}
+        if outcome == "done" and not (payload.get("options") or {}).get("num_ctx"):
+            # senza num_ctx nella richiesta vale il predefinito del server:
+            # lo si legge ora che il modello è caricato
+            self._learn_context(payload.get("model") or "")
         self.generation_finished.emit(self._active_id, outcome, stats or "", "")
         self._save_assistant(stats)
         self._set_idle()
@@ -1223,6 +1325,9 @@ class ChatEngine(QObject):
         if self._chat_stopped or self.sender() is not self._worker:
             return
         self._release_held()
+        n = context_size_from_error(err)
+        if n and self._payload and self._payload.get("model"):
+            self._ctx_seen[self._payload["model"]] = n
         self.generation_finished.emit(self._active_id, "failed", "", err)
         # se il modello aveva già prodotto testo, conservalo nella conversazione
         self._save_assistant(None)

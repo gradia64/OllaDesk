@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import base64
 import fnmatch
+import json
 import os
 import re
 import time
@@ -130,23 +131,56 @@ def estimate_tokens(text: str) -> int:
     return len(text) // 4
 
 
-def context_overflow_note(messages: list[dict], num_ctx: int | None) -> str | None:
+# finestra presunta quando non la si conosce: il predefinito di Ollama senza
+# OLLAMA_CONTEXT_LENGTH (con poca memoria video). Solo per una stima prudente:
+# l'avviso dice che il valore vero non è noto
+ASSUMED_NUM_CTX = 4096
+
+
+def prompt_tokens(messages: list[dict], tool_schemas: list[dict] | None = None) -> int:
+    """Token stimati della richiesta: testi, chiamate ai tool e definizioni dei tool.
+
+    Le definizioni dei tool e gli argomenti delle chiamate viaggiano anche
+    loro nel prompt: senza contarli una richiesta appena sopra la finestra
+    (16.639 token su 16.384) passava senza avviso.
+    """
+    used = 0
+    for m in messages:
+        used += estimate_tokens(m.get("content") or "")
+        if m.get("tool_calls"):
+            used += estimate_tokens(json.dumps(m["tool_calls"], ensure_ascii=False))
+    if tool_schemas:
+        used += estimate_tokens(json.dumps(tool_schemas, ensure_ascii=False))
+    return used
+
+
+def context_overflow_note(messages: list[dict], num_ctx: int | None,
+                          tool_schemas: list[dict] | None = None) -> str | None:
     """Avviso se il prompt stimato supera la finestra di contesto.
 
-    Ollama tronca il prompt dall'inizio quando è troppo lungo: si perdono
-    il prompt di sistema e i primi messaggi senza alcun errore. Senza un
-    num_ctx personalizzato si usa 4096, il predefinito delle versioni recenti.
+    `num_ctx` è la finestra vera (impostata in Parametri modelli o vista da
+    Ollama, `engine.context_window`); None se non è ancora nota: allora si
+    confronta con ASSUMED_NUM_CTX e l'avviso lo dice, invece di dare per
+    certo un numero che sul server può essere diverso (OLLAMA_CONTEXT_LENGTH).
+    Le versioni recenti di Ollama rifiutano la richiesta troppo lunga, le
+    precedenti ne scartano l'inizio senza errore.
     """
-    limit = int(num_ctx) if num_ctx else 4096
-    used = sum(estimate_tokens(m.get("content", "")) for m in messages)
-    if used <= limit * 0.9:
+    used = prompt_tokens(messages, tool_schemas)
+    if num_ctx:
+        limit = int(num_ctx)
+        if used <= limit * 0.9:
+            return None
+        return _('il contesto stimato (~{used} token) supera la finestra del modello '
+                 '({limit} token): Ollama può rifiutare la richiesta o scartarne '
+                 "l'inizio. Aumenta «num_ctx» in Impostazioni → Parametri modelli, "
+                 'oppure riduci allegati e cronologia.').format(used=used, limit=limit)
+    if used <= ASSUMED_NUM_CTX * 0.9:
         return None
-    return (
-        _('il contesto stimato (~{used} token) supera la finestra del modello '
-          "({limit} token): Ollama scarterà l'inizio del prompt. Aumenta "
-          '«num_ctx» in Impostazioni → Parametri modelli, oppure riduci allegati '
-          'e cronologia.').format(used=used, limit=limit)
-    )
+    return _('il contesto stimato (~{used} token) potrebbe superare la finestra del '
+             'modello, che OllaDesk non conosce ancora: con le impostazioni predefinite '
+             'di Ollama può essere di soli {limit} token. Se la risposta non arriva o '
+             'ignora gli allegati, imposta «num_ctx» in Impostazioni → Parametri '
+             'modelli.').format(used=used, limit=ASSUMED_NUM_CTX)
 
 
 # contenuto decompresso di una pagina oltre il quale non se ne estrae il testo:

@@ -26,10 +26,12 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   <img src="docs/screenshots/settings.png" alt="Impostazioni" width="44%" />
 </p>
 <p align="center">
-  <img src="docs/screenshots/tools.png" alt="Strumenti: conferma di una modifica a un file" width="60%" />
+  <img src="docs/screenshots/tools.png" alt="Strumenti: conferma di una modifica a un file" width="45%" />
+  <img src="docs/screenshots/tools-menu.png" alt="Menu degli strumenti: livelli di accesso" width="45%" />
 </p>
 <p align="center">
   <img src="docs/screenshots/phone.png" alt="Companion web sul telefono" width="30%" />
+  <img src="docs/screenshots/phone-tools.png" alt="Telefono: modifica in attesa di conferma sul PC" width="30%" />
 </p>
 
 ## Funzionalità
@@ -300,7 +302,14 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   penalità di ripetizione/presenza/frequenza, seed, sequenze di stop, mirostat,
   num_gpu, num_thread…). Solo i parametri spuntati vengono inviati a Ollama:
   gli altri restano ai valori predefiniti del server. Ogni profilo può essere
-  **salvato** e **ripristinato ai predefiniti** con un clic.
+  **salvato** e **ripristinato ai predefiniti** con un clic. Senza num_ctx la
+  finestra di contesto è quella del server (per esempio `OLLAMA_CONTEXT_LENGTH`):
+  OllaDesk la legge da Ollama dopo la prima risposta e la usa per avvisare
+  quando una richiesta è troppo lunga, contando anche le definizioni dei tool;
+  fino ad allora l'avviso dice che la finestra non è ancora nota. Quando Ollama
+  rifiuta una richiesta che supera la finestra, il messaggio lo dice e consiglia
+  di alzare num_ctx; una risposta che finisce senza testo ha un avviso invece
+  di una bolla vuota.
 - Stato della connessione sempre visibile (verde/rosso) con ricontrollo
   automatico ogni 30 s.
 

@@ -23,10 +23,12 @@ Licence : **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   <img src="docs/screenshots/settings.png" alt="Paramètres" width="44%" />
 </p>
 <p align="center">
-  <img src="docs/screenshots/tools.png" alt="Outils : confirmation d'une modification de fichier" width="60%" />
+  <img src="docs/screenshots/tools.png" alt="Outils : confirmation d'une modification de fichier" width="45%" />
+  <img src="docs/screenshots/tools-menu.png" alt="Menu des outils : niveaux d'accès" width="45%" />
 </p>
 <p align="center">
   <img src="docs/screenshots/phone.png" alt="Companion web sur téléphone" width="30%" />
+  <img src="docs/screenshots/phone-tools.png" alt="Téléphone : modification en attente de confirmation sur le PC" width="30%" />
 </p>
 
 ## Fonctionnalités
@@ -85,7 +87,7 @@ Licence : **GPL-3.0** · Python 3.10+ · PySide6 6.6+
 - **Mises à jour d'Ollama** : au démarrage, au plus une fois par jour, l'application vérifie la dernière release sur GitHub ; si elle est plus récente que le serveur utilisé, l'indicateur d'état en haut à droite affiche « ⬆ version ». Un clic sur l'indicateur ouvre le menu avec la **mise à jour en un clic** via le script officiel (exécuté avec `pkexec`, donc avec le mot de passe administrateur de KDE), les modèles et l'adresse du serveur. La même vérification est dans Paramètres → Mises à jour, où l'on désactive le contrôle au démarrage. Seulement avec un serveur Ollama sur cet ordinateur.
 - **Mises à jour d'OllaDesk** : au démarrage, au maximum une fois par jour, l'application vérifie sur GitHub si une nouvelle version est sortie et, dans ce cas, affiche un avertissement dans la barre supérieure avec les instructions adaptées à la façon dont elle a été installée (.deb, AUR, AppImage, pip ou sources). Simple avertissement : aucun téléchargement ni installation automatique. On peut ignorer une version, vérifier à la main ou désactiver le contrôle dans Paramètres → Mises à jour.
 - **Paramètres** (pages Général, Apparence, Recherche web, Mises à jour, Aide et À propos, choisies dans le menu de gauche ; F1 ouvre l'Aide, avec les fonctions principales et les raccourcis ; À propos contient les versions, la licence, les liens et « Copier les informations système » pour les signalements) : URL du serveur Ollama, thème sombre/clair/**système** (suit KDE Plasma, même à chaud quand on le change), taille de la police, streaming on/off, envoi avec Entrée, heure dans les messages, icône dans la zone de notification, quantité de contexte envoyée au modèle, archivage automatique des discussions inactives, prompt système par défaut, résultats de recherche web.
-- **Paramètres → « Paramètres des modèles »** : profil de paramètres distinct pour chaque modèle (température, top_k, top_p, min_p, num_ctx, num_predict, pénalités de répétition/présence/fréquence, seed, séquences d'arrêt, mirostat, num_gpu, num_thread…). Seuls les paramètres cochés sont envoyés à Ollama : les autres restent aux valeurs par défaut du serveur. Chaque profil peut être **sauvegardé** et **rétabli aux valeurs par défaut** d'un clic.
+- **Paramètres → « Paramètres des modèles »** : profil de paramètres distinct pour chaque modèle (température, top_k, top_p, min_p, num_ctx, num_predict, pénalités de répétition/présence/fréquence, seed, séquences d'arrêt, mirostat, num_gpu, num_thread…). Seuls les paramètres cochés sont envoyés à Ollama : les autres restent aux valeurs par défaut du serveur. Chaque profil peut être **sauvegardé** et **rétabli aux valeurs par défaut** d'un clic. Sans num_ctx, la fenêtre de contexte est celle du serveur (par exemple `OLLAMA_CONTEXT_LENGTH`) : OllaDesk la lit depuis Ollama après la première réponse et l'utilise pour avertir quand une requête est trop longue, en comptant aussi les définitions des outils ; jusque-là, l'avertissement indique que la fenêtre n'est pas encore connue. Quand Ollama refuse une requête qui dépasse la fenêtre, le message le dit et conseille d'augmenter num_ctx ; une réponse qui se termine sans texte reçoit un avertissement au lieu d'une bulle vide.
 - État de la connexion toujours visible (vert/rouge) avec revérification automatique toutes les 30 s.
 
 ## Prérequis

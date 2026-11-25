@@ -917,6 +917,44 @@ assert len(config.load_chat(c9j)["messages"][1]["tool_rounds"]) == 2
 search_broken.clear()
 print("9j. ricerca guasta: tool web tolti OK")
 
+# 9k. finestra di contesto vera (0.5.1): da /api/ps dopo una risposta e
+# dall'errore di Ollama; suggerimento giusto e avviso per le risposte vuote
+from olladesk.engine import context_size_from_error, failure_hint  # noqa: E402
+
+engine._ctx_seen.clear()
+assert engine.context_window("finto") is None
+ck = engine.send(None, "ciao", "finto")
+assert wait_until(lambda: not engine.busy())
+assert wait_until(lambda: engine.context_window("finto") == 8192), engine._ctx_seen
+assert engine.context_window("finto", {"num_ctx": 2048}) == 2048   # i Parametri modelli vincono
+events.clear()
+engine.send(ck, "x" * 40_000, "finto")
+assert wait_until(lambda: not engine.busy())
+notes = [e[2] for e in events if e[0] == "notice" and e[1] == ck]
+assert any("finestra del modello (8192 token)" in n for n in notes), notes
+events.clear()
+engine.send(ck, "troppolunga", "finto")
+assert wait_until(lambda: not engine.busy())
+err = finished()[-1][4]
+assert finished()[-1][2] == "failed" and "exceeds the available context size" in err, err
+assert context_size_from_error(err) == 16384 and engine.context_window("finto") == 16384
+assert "16639 token" in failure_hint(err) and "ollama serve" not in failure_hint(err)
+events.clear()
+engine.send(ck, "risposta vuota", "finto")
+assert wait_until(lambda: not engine.busy())
+assert finished()[-1][2] == "done"
+assert any("terminato senza scrivere nulla" in e[2] for e in events if e[0] == "notice"), events
+events.clear()
+engine.send(ck, "risposta vuota ragionata", "finto")
+assert wait_until(lambda: not engine.busy())
+assert any("ha ragionato ma non ha scritto" in e[2] for e in events if e[0] == "notice"), events
+events.clear()
+engine.send(ck, "ciao", "finto")
+assert wait_until(lambda: not engine.busy())
+assert not any("senza scrivere" in e[2] for e in events if e[0] == "notice")
+engine.delete_chat(ck)
+print("9k. finestra di contesto, suggerimenti e risposte vuote OK")
+
 # ---------------------------------------------------------------- chiusura
 
 from olladesk.ollama_client import shutdown_workers  # noqa: E402

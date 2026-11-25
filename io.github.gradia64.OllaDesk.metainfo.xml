@@ -157,6 +157,14 @@
       <image>https://raw.githubusercontent.com/gradia64/OllaDesk/main/docs/screenshots/tools.png</image>
     </screenshot>
     <screenshot>
+      <caption>The tools menu: what the model may do with the attached files, per conversation</caption>
+      <caption xml:lang="it">Il menu degli strumenti: cosa può fare il modello con i file allegati, per conversazione</caption>
+      <caption xml:lang="fr">Le menu des outils : ce que le modèle peut faire avec les fichiers joints, par conversation</caption>
+      <caption xml:lang="de">Das Werkzeugmenü: was das Modell mit den angehängten Dateien tun darf, pro Unterhaltung</caption>
+      <caption xml:lang="es">El menú de herramientas: qué puede hacer el modelo con los archivos adjuntos, por conversación</caption>
+      <image>https://raw.githubusercontent.com/gradia64/OllaDesk/main/docs/screenshots/tools-menu.png</image>
+    </screenshot>
+    <screenshot>
       <caption>Model manager</caption>
       <caption xml:lang="it">Gestore dei modelli</caption>
       <caption xml:lang="fr">Gestionnaire de modèles</caption>
@@ -171,6 +179,14 @@
       <caption xml:lang="de">Dieselbe Unterhaltung auf dem Telefon, über den Companion</caption>
       <caption xml:lang="es">La misma conversación en el teléfono, a través del companion</caption>
       <image>https://raw.githubusercontent.com/gradia64/OllaDesk/main/docs/screenshots/phone.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>On the phone, a change to a file waits for confirmation on the PC</caption>
+      <caption xml:lang="it">Sul telefono, una modifica a un file aspetta la conferma sul PC</caption>
+      <caption xml:lang="fr">Sur le téléphone, une modification de fichier attend la confirmation sur le PC</caption>
+      <caption xml:lang="de">Auf dem Telefon wartet eine Dateiänderung auf die Bestätigung am PC</caption>
+      <caption xml:lang="es">En el teléfono, un cambio en un archivo espera la confirmación en el PC</caption>
+      <image>https://raw.githubusercontent.com/gradia64/OllaDesk/main/docs/screenshots/phone-tools.png</image>
     </screenshot>
   </screenshots>
 

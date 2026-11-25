@@ -29,7 +29,7 @@ from PySide6.QtWidgets import (
 
 from . import __version__, app_update, companion, config, icons, theme, tools, updater, web_search
 from .i18n import _
-from .engine import ChatEngine, chat_tools_level
+from .engine import ChatEngine, chat_tools_level, failure_hint
 from .ollama_client import shutdown_workers
 from .widgets.chat_area import ChatArea
 from .widgets.model_manager import ModelManagerDialog
@@ -877,11 +877,8 @@ class MainWindow(QMainWindow):
                 _("\n\nSuggerimento: il modello potrebbe non accettare il campo «think»: "
                 "riattiva il pulsante 🧠 nell'input.")
             )
-        self.chat_area.add_system_note(
-            err + extra
-            + _("\n\nSuggerimento: avvia Ollama con `ollama serve` e verifica l'URL "
-            "nelle impostazioni (Ctrl+,).")
-        )
+        hint = failure_hint(err)
+        self.chat_area.add_system_note(err + extra + ("\n\n" + hint if hint else ""))
 
     def _on_notice(self, chat_id: str, text: str) -> None:
         if self._viewing(chat_id):

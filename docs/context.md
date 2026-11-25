@@ -54,13 +54,17 @@ Accetta sia `str` sia `Path`.
 ### `estimate_tokens(text: str) -> int`
 Stima grossolana: `len(text) // 4`, cioè circa 4 caratteri per token. Basta per decidere se mostrare un avviso.
 
-### `context_overflow_note(messages: list[dict], num_ctx: int | None) -> str | None`
-Somma le stime di `content` di tutti i messaggi e la confronta con la finestra di contesto.
-- **Finestra usata:** il valore di `num_ctx`, cioè la dimensione della finestra configurata per il modello. Se `num_ctx` manca o vale 0, si usa 4096, il predefinito delle versioni recenti di Ollama.
-- **Soglia:** l'avviso scatta oltre il 90% della finestra.
-- **Messaggio:** spiega che Ollama scarterà l'inizio del prompt. Suggerisce di aumentare «num_ctx» in Impostazioni → Parametri modelli oppure di ridurre allegati e cronologia.
+### `prompt_tokens(messages: list[dict], tool_schemas: list[dict] | None = None) -> int`
+Stima dei token della richiesta: il `content` di ogni messaggio, gli argomenti delle `tool_calls` e, se date, le definizioni dei tool (in JSON). Le definizioni e le chiamate occupano il prompt come il testo: senza contarle una richiesta appena oltre la finestra passava senza avviso.
 
-Il controllo serve perché Ollama tronca silenziosamente dall'inizio: si perdono il prompt di sistema e i primi messaggi senza alcun errore.
+### `context_overflow_note(messages: list[dict], num_ctx: int | None, tool_schemas: list[dict] | None = None) -> str | None`
+Confronta `prompt_tokens` con la finestra di contesto.
+- **Finestra usata:** `num_ctx` è la finestra vera, quella dei Parametri modelli o quella che il motore ha visto da Ollama (`engine.context_window`: `context_length` di `/api/ps` dopo una risposta, o il numero dell'errore «exceeds the available context size»).
+- **Finestra non nota** (`None`): si confronta con `ASSUMED_NUM_CTX` (4096, il predefinito di Ollama senza `OLLAMA_CONTEXT_LENGTH` con poca memoria video) e il messaggio dice che la finestra non è ancora nota, invece di darla per certa.
+- **Soglia:** l'avviso scatta oltre il 90% della finestra.
+- **Messaggio:** Ollama può rifiutare la richiesta (le versioni recenti rispondono con un errore 400) o scartarne l'inizio (le precedenti, senza errore). Suggerisce di aumentare «num_ctx» in Impostazioni → Parametri modelli oppure di ridurre allegati e cronologia.
+
+Il motore calcola l'avviso dopo aver aggiunto i tool alla richiesta, così le loro definizioni contano.
 
 ### `_pdf_text(path: Path, limit: int, deadline: float | None = None) -> tuple[str, str | None]`
 Estrae il testo, pagina per pagina, fino a `limit` caratteri o alla scadenza `deadline`, delle prime **50 pagine** con `pypdf.PdfReader`. Senza `deadline` la scadenza è a `MAX_SECONDS` secondi. Le pagine senza testo contano come stringa vuota; quelle con più di `MAX_PDF_PAGE_CONTENT` byte di contenuto si saltano. Se una pagina è stata saltata o la scadenza è arrivata, restituisce il testo letto con la nota «documento troppo grande o lento da leggere, allegato solo in parte». In caso di problemi restituisce `("", nota)`:

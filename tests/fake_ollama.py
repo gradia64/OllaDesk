@@ -39,6 +39,7 @@ class FakeOllama:
         self.capabilities = ["completion", "vision", "thinking"]   # risposta di /api/show
         self.model_caps: dict[str, list[str]] = {}   # capacità diverse per un modello
         self.shows: list[str] = []         # modelli chiesti a /api/show
+        self.ps_ctx = 8192                 # finestra di contesto in /api/ps
         fake = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -67,6 +68,11 @@ class FakeOllama:
                     ]}
                     fake.tags_release.wait(10)   # risposta con l'elenco di prima
                     self._json(tags)
+                elif self.path == "/api/ps":
+                    # il modello dell'ultima richiesta, caricato con ps_ctx
+                    name = fake.payloads[-1]["model"] if fake.payloads else ""
+                    self._json({"models": [{"name": name, "model": name,
+                                            "context_length": fake.ps_ctx}] if name else []})
                 else:
                     self.send_error(404)
 
@@ -111,6 +117,16 @@ class FakeOllama:
                 user = next((m["content"] for m in reversed(body["messages"])
                              if m["role"] == "user"), "")
                 offers = "tools" in body
+                if "troppolunga" in user:
+                    # come Ollama 0.40: la richiesta oltre la finestra si rifiuta
+                    data = json.dumps({"error": "request (16639 tokens) exceeds the available "
+                                       "context size (16384 tokens), try increasing it"}).encode()
+                    self.send_response(400)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(data)))
+                    self.end_headers()
+                    self.wfile.write(data)
+                    return
                 self.send_response(200)
                 self.send_header("Content-Type", "application/x-ndjson")
                 self.end_headers()
@@ -154,6 +170,11 @@ class FakeOllama:
                         fake.release.wait(10)
                         self._line({"message": {"content": "e finale"}})
                         self._line({"done": True})
+                    elif "vuota" in last:
+                        # template che chiude subito la risposta: niente testo
+                        if "ragionata" in last:
+                            self._line({"message": {"thinking": "ci penso"}})
+                        self._line({"done": True, "eval_count": 1})
                     elif "pensa" in last:
                         self._line({"message": {"thinking": "sto pensando"}})
                         fake.release.wait(10)

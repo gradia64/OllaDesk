@@ -886,8 +886,37 @@ def test_context_overflow_note():
     small = [{"role": "user", "content": "ciao"}]
     big = [{"role": "user", "content": "x" * 40_000}]
     assert context_overflow_note(small, None) is None
-    assert context_overflow_note(big, None)             # 4096 predefinito
+    # finestra non nota: si confronta con 4096 e l'avviso dice che è una stima
+    unknown = context_overflow_note(big, None)
+    assert unknown and "non conosce ancora" in unknown and "4096" in unknown
     assert context_overflow_note(big, 32768) is None
+    known = context_overflow_note(big, 8192)
+    assert known and "(8192 token)" in known and "rifiutare la richiesta" in known
+    # le definizioni dei tool e le chiamate contano: appena sotto senza, sopra con
+    near = [{"role": "user", "content": "x" * 14_000}]       # ~3500 token
+    schemas = [{"type": "function", "function": {"name": "t", "description": "d" * 4_000}}]
+    assert context_overflow_note(near, 4096) is None
+    assert context_overflow_note(near, 4096, schemas)
+    calls = [{"role": "assistant", "content": "",
+              "tool_calls": [{"function": {"name": "t", "arguments": {"a": "y" * 4_000}}}]}]
+    assert context_overflow_note(near + calls, 4096)
+
+
+def test_failure_hint():
+    from olladesk.engine import context_size_from_error, empty_answer_note, failure_hint
+    err = ('Errore HTTP 400 dal server Ollama: {"error":"request (16639 tokens) exceeds '
+           'the available context size (16384 tokens), try increasing it"}')
+    assert context_size_from_error(err) == 16384
+    hint = failure_hint(err)
+    assert "16639 token" in hint and "16384 token" in hint and "num_ctx" in hint
+    assert "ollama serve" not in hint
+    # altra risposta di Ollama: niente consiglio sul server
+    assert failure_hint('Errore HTTP 500 dal server Ollama: {"error":"boom"}') == ""
+    assert failure_hint("Modello non trovato sul server: scaricalo con `ollama pull <modello>`.") == ""
+    # connessione: il consiglio sul server resta
+    assert "ollama serve" in failure_hint("Timeout di connessione con il server Ollama.")
+    assert context_size_from_error("modello esploso") is None
+    assert "ragionato" in empty_answer_note(True) and "senza scrivere" in empty_answer_note(False)
 
 
 def test_image_to_b64_limits_and_conversion():

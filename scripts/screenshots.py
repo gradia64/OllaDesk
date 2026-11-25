@@ -39,7 +39,8 @@ OUT_REL = os.path.join("docs", "screenshots", *([] if LANG == "en" else [LANG]))
 OUT = os.path.join(ROOT, OUT_REL)
 sys.path.insert(0, ROOT)
 
-from PySide6.QtCore import QEventLoop, QTimer  # noqa: E402
+from PySide6.QtCore import QEventLoop, QPoint, QTimer  # noqa: E402
+from PySide6.QtGui import QPainter  # noqa: E402
 from PySide6.QtWidgets import QApplication, QLabel, QScrollArea, QToolButton  # noqa: E402
 
 from olladesk import config, web_search  # noqa: E402
@@ -364,7 +365,10 @@ class Marionette:
         return result
 
 
-def phone_shot(url: str, token: str, cookie: str, path: str) -> None:
+def phone_shot(url: str, token: str, cookie: str, path: str, live=None) -> None:
+    """Vista del telefono su `url`. Con `live` (chiamata dal thread di
+    Firefox, a pagina pronta) si mandano eventi alla pagina aperta, e la
+    foto mostra la fine della conversazione invece dell'inizio."""
     profile = tempfile.mkdtemp(prefix="olladesk_ff_")
     ff = None
     try:
@@ -413,16 +417,21 @@ def phone_shot(url: str, token: str, cookie: str, path: str) -> None:
                 "fetch('/api/session').then(r => r.text().then(t => arguments[0](r.status + ' ' + t)))"}),
                 file=sys.stderr)
             raise RuntimeError("la conversazione non compare nella companion: " + str(state.get("value")))
-        # fonti aperte, domanda in alto, niente barra di scorrimento
+        if live is not None:
+            live()
+            time.sleep(1.5)   # gli eventi arrivano dallo stream SSE
+        # fonti aperte, domanda in alto (o la fine, con `live`), niente barra
         size = m.cmd("WebDriver:ExecuteScript", {"script": """
             // la CSP della companion blocca i <style> aggiunti, non lo stile in linea
             const html = document.documentElement;
             html.style.zoom = innerWidth / 390;
             for (const el of document.querySelectorAll('*')) el.style.scrollbarWidth = 'none';
             for (const d of document.querySelectorAll('#messages details.sources')) d.open = true;
-            for (const el of document.querySelectorAll('*')) el.scrollTop = 0;
+            for (const d of document.querySelectorAll('#messages details.tools')) d.open = true;
+            for (const el of document.querySelectorAll('*'))
+              el.scrollTop = arguments[0] ? el.scrollHeight : 0;
             return Math.round(html.clientWidth / html.style.zoom) + 'x'
-                + Math.round(html.clientHeight / html.style.zoom);"""})
+                + Math.round(html.clientHeight / html.style.zoom);""", "args": [live is not None]})
         print("telefono:", size.get("value"), "px CSS", file=sys.stderr)
         time.sleep(0.5)
         png = m.cmd("WebDriver:TakeScreenshot", {"full": False})["value"]
@@ -499,6 +508,27 @@ def main() -> int:
     save(win, "tools.png")
     win.chat_area.end_stream(discard_empty=True)
 
+    # il menu 🔧 con i livelli, aperto sopra il suo pulsante, sotto la risposta
+    # con «Annulla le modifiche»: disegnato sopra la finestra, perché un popup
+    # non entra in grab() (e sopra la scheda di conferma ne copriva i pulsanti)
+    win._open_chat(tools_id)
+    wait(300)
+    for area in win.chat_area.findChildren(QScrollArea):
+        bar = area.verticalScrollBar()
+        bar.setValue(bar.maximum())
+    wait(200)
+    menu, btn = win.chat_area._tools_menu, win.chat_area.tools_btn
+    menu.ensurePolished()
+    menu.adjustSize()
+    shot = win.grab()
+    menu_px = menu.grab()
+    at = btn.mapTo(win, QPoint(0, 0))
+    painter = QPainter(shot)
+    painter.drawPixmap(at.x(), at.y() - menu_px.height() - 4, menu_px)
+    painter.end()
+    shot.save(os.path.join(OUT, "tools-menu.png"))
+    print("scritto", os.path.join(OUT_REL, "tools-menu.png"))
+
     win.settings["theme"] = "light"
     win._apply_theme_now()
     win._open_chat(web_id)
@@ -554,11 +584,41 @@ def main() -> int:
     t.start()
     while t.is_alive():   # il server della companion risponde dal ciclo Qt
         wait(100)
+    if "err" in result:
+        win._companion.stop()
+        print("telefono:", result["err"], file=sys.stderr)
+        return 1
+    print("scritto", os.path.join(OUT_REL, "phone.png"))
+
+    # telefono con una modifica in attesa: gli eventi che il motore manda
+    # durante una risposta (inizio, testo, tool), senza un modello vero
+    hub = win._companion.hub
+    waiting_calls = companion.phone_tools(tools_mod.calls_view([], {"calls": [
+        {"name": "read_file", "arguments": {"path": f_readme}, "done": True,
+         "result": f"{f_readme} — lines 1-9 of 9"},
+        {"name": "edit_file", "arguments": {"path": f_readme}, "waiting": True}]}))
+
+    def live():
+        hub._push(tools_id, "start", {})
+        hub._push(tools_id, "tools", waiting_calls)
+
+    def shoot_waiting():
+        try:
+            phone_shot(f"http://127.0.0.1:{port}/#/c/{tools_id}", token,
+                       companion.COOKIE, os.path.join(OUT, "phone-tools.png"), live)
+            result["ok"] = True
+        except Exception as e:   # noqa: BLE001 (riportato sotto)
+            result["err"] = e
+
+    t = threading.Thread(target=shoot_waiting)
+    t.start()
+    while t.is_alive():
+        wait(100)
     win._companion.stop()
     if "err" in result:
         print("telefono:", result["err"], file=sys.stderr)
         return 1
-    print("scritto", os.path.join(OUT_REL, "phone.png"))
+    print("scritto", os.path.join(OUT_REL, "phone-tools.png"))
     win._really_quit = True
     win.close()
     srv.shutdown()
