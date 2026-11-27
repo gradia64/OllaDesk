@@ -131,7 +131,7 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   ricerca il modello riceve anche la data di oggi, per non cercare notizie
   dell'anno sbagliato;
   con 🌐 spenta non va in rete. Al massimo 8 giri di strumenti per risposta (12 con la scrittura): il
-  modello sa quanti gliene restano (all'ultimo gli si chiede di rispondere), e una lettura identica a una già fatta non
+  modello sa quanti gliene restano (all'ultimo gli si chiede di rispondere, e un avviso ℹ dice quali strumenti ha usato e quante volte), e una lettura identica a una già fatta non
   si ripete. In «Solo lettura» sa anche che i file condivisi non si modificano, così non dice
   di averli modificati; con la scrittura sa che ogni modifica va confermata e
   che non deve annunciarne una che lo strumento non ha confermato. Le chiamate compaiono nella bolla in un blocco «🔧 Strumenti usati» richiudibile,
@@ -294,7 +294,7 @@ Licenza: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
 - **Impostazioni** (pagine Generale, Aspetto, Ricerca web, Aggiornamenti, Aiuto e Info, scelte dal menu a sinistra; F1 apre l'Aiuto, con le funzioni principali e le scorciatoie; Info ha versioni, licenza, collegamenti e «Copia informazioni di sistema» per le segnalazioni): URL del server Ollama, tema
   scuro/chiaro/**sistema** (segue KDE Plasma, anche a caldo quando lo cambi),
   dimensione del carattere, streaming on/off, invio con Invio, orario nei
-  messaggi, icona nella tray, quantità di contesto
+  messaggi, esempi di domanda nella pagina iniziale (si possono nascondere), icona nella tray, quantità di contesto
   inviata al modello, archiviazione automatica delle chat inattive, prompt di
   sistema predefinito, risultati ricerca web.
 - **Impostazioni → «Parametri modelli»**: profilo di parametri separato

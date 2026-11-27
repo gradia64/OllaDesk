@@ -1115,6 +1115,39 @@ def test_chat_column_side_margin():
     assert ChatArea._side_margin(300) == 20
     assert ChatArea._side_margin(COLUMN_MAX_W + 40) == 20
     assert ChatArea._side_margin(COLUMN_MAX_W + 340) == 170
+    # casella del messaggio più stretta della colonna, centrata (0.5.2)
+    from olladesk.widgets.chat_area import INPUT_MAX_W
+    assert INPUT_MAX_W < COLUMN_MAX_W
+    assert ChatArea._input_margin(300) == 20
+    assert ChatArea._input_margin(1128) == (1128 - INPUT_MAX_W) // 2
+
+
+def test_welcome_suggestions_toggle():
+    # esempi della pagina iniziale disattivabili dalle Impostazioni (0.5.2)
+    from olladesk import config
+    from olladesk.widgets.chat_area import ChatArea
+    from olladesk.widgets.settings_dialog import SettingsDialog
+    from PySide6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+
+    ca = ChatArea("dark")
+    assert ca._suggestion_btns
+    ca.set_suggestions_visible(False)
+    assert all(b.isHidden() for b in ca._suggestion_btns)
+    ca.set_suggestions_visible(True)
+    assert not any(b.isHidden() for b in ca._suggestion_btns)
+    ca.deleteLater()
+
+    with _isolated_config():
+        s = config.load_settings()
+        assert s["show_suggestions"] is True
+        dlg = SettingsDialog(s, lambda: [], "dark", "?")
+        try:
+            assert dlg.collect_settings()["show_suggestions"] is True
+            dlg.sugg_chk.setChecked(False)
+            assert dlg.collect_settings()["show_suggestions"] is False
+        finally:
+            dlg.deleteLater()
 
 
 def test_lan_url_filter():
@@ -4226,3 +4259,26 @@ def _try(fn, *args):
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
+def test_tool_limit_notice():
+    # avviso del tetto dei giri: informativo, con gli strumenti usati (0.5.2)
+    from olladesk import tools
+
+    def rnd(*names):
+        return {"calls": [{"name": n, "arguments": {}, "result": "ok"} for n in names]}
+
+    two = [rnd("web_search"), rnd("web_search", "fetch_page"), rnd("fetch_page"),
+           rnd("web_search")]
+    assert tools.tools_used(two) == [("web_search", 3), ("fetch_page", 2)]
+    msg = tools.limit_notice(two, 8)
+    assert msg == ("ℹ Il modello ha usato gli strumenti ricerca web (3) e lettura pagina (2) "
+                   "fino al limite di 8 giri: risponde con quello che ha raccolto."), msg
+    three = two + [rnd("read_file")]
+    assert "ricerca web (3), lettura pagina (2) e lettura file (1)" in tools.limit_notice(three, 8)
+    one = tools.limit_notice([rnd("read_file")] * 8, 8)
+    assert one.startswith("ℹ Il modello ha usato lo strumento lettura file (8) "), one
+    # tool senza etichetta: nome tecnico
+    assert "lo strumento eco (1)" in tools.limit_notice([rnd("eco")], 8)
+    assert tools.limit_notice([], 8).startswith("ℹ Raggiunto il limite di 8 giri")
+    assert "⚠" not in msg

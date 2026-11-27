@@ -988,4 +988,22 @@ $("models-btn").addEventListener("click", () => { location.hash = "#/models"; })
 $("new-chat").addEventListener("click", () => { location.hash = "#/new"; });
 $("refresh").addEventListener("click", route);
 window.addEventListener("hashchange", route);
+
+// tastiera virtuale: il compositore è fisso in fondo alla pagina. Con
+// «interactive-widget=resizes-content» (meta viewport, Chrome per Android)
+// la tastiera restringe la pagina e basta; dove il meta non vale (Safari,
+// Chrome vecchi) la tastiera copre solo la parte visibile, e chiudendola il
+// compositore poteva restare fuori vista. Qui lo si tiene sopra la parte
+// della pagina davvero visibile, e chiusa la tastiera si torna a posto
+function fitKeyboard() {
+  const vv = window.visualViewport;
+  if (!vv) return;
+  const covered = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
+  document.documentElement.style.setProperty("--keyboard", covered + "px");
+}
+if (window.visualViewport) {
+  window.visualViewport.addEventListener("resize", fitKeyboard);
+  window.visualViewport.addEventListener("scroll", fitKeyboard);
+}
+$("input").addEventListener("blur", () => setTimeout(fitKeyboard, 300));
 loadStrings().then(route);

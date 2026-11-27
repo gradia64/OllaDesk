@@ -319,7 +319,8 @@ body.composing.web-on main { padding-bottom: 224px; }
   position: fixed;
   left: 0;
   right: 0;
-  bottom: 0;
+  /* sopra la tastiera virtuale dove il browser non restringe la pagina (app.js) */
+  bottom: var(--keyboard, 0px);
   display: flex;
   flex-direction: column;
   gap: 6px;

@@ -119,6 +119,10 @@ USER_MAX_W = 620
 # larghezza massima della colonna messaggi: centrata quando la finestra è
 # più larga, così nascondere la sidebar non stira il contenuto
 COLUMN_MAX_W = 900
+# larghezza massima della casella del messaggio (e degli allegati sopra):
+# più stretta della colonna, centrata. A tutta colonna, con la sidebar
+# chiusa, era una striscia lunga e scomoda da leggere
+INPUT_MAX_W = 760
 
 FILE_FILTER = N_(
     "Documenti e immagini (*.txt *.md *.py *.json *.csv *.log *.yaml *.yml "
@@ -395,6 +399,11 @@ class ChatArea(QWidget):
         """Margine laterale che centra la colonna messaggi (min 20 px)."""
         return max(20, (viewport_w - COLUMN_MAX_W) // 2)
 
+    @staticmethod
+    def _input_margin(viewport_w: int) -> int:
+        """Margine laterale che centra la casella del messaggio (min 20 px)."""
+        return max(20, (viewport_w - INPUT_MAX_W) // 2)
+
     def _update_column(self) -> None:
         """Centra la colonna messaggi e allinea input e chip allargati.
 
@@ -404,8 +413,9 @@ class ChatArea(QWidget):
         vw = self.scroll.viewport().width()
         side = self._side_margin(vw)
         self.msgs.setContentsMargins(side, 12, side, 12)
-        self.attach_lay.setContentsMargins(side, 6, side, 0)
-        self._input_row.setContentsMargins(side, 4, side, 10)
+        inp = self._input_margin(vw)
+        self.attach_lay.setContentsMargins(inp, 6, inp, 0)
+        self._input_row.setContentsMargins(inp, 4, inp, 10)
 
     def eventFilter(self, obj, ev) -> bool:
         if obj is self.scroll.viewport():
@@ -470,6 +480,11 @@ class ChatArea(QWidget):
         self.refresh_suggestions()
         lay.addStretch(3)
         return w
+
+    def set_suggestions_visible(self, visible: bool) -> None:
+        """Esempi della pagina iniziale mostrati o no (Impostazioni)."""
+        for btn in self._suggestion_btns:
+            btn.setVisible(visible)
 
     def refresh_suggestions(self) -> None:
         """Nuovi esempi a caso: all'avvio e a ogni nuova chat."""

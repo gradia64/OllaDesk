@@ -1259,9 +1259,8 @@ class ChatEngine(QObject):
             del self._payload["tools"]
             self._payload["messages"].append(
                 {"role": "user", "content": tools.FINAL_ANSWER_REQUEST})
-            self.notice.emit(self._active_id, "⚠ " + _(
-                'Raggiunto il limite di {count} giri di strumenti: il modello '
-                'risponde con quello che ha raccolto.').format(count=self._max_rounds))
+            self.notice.emit(self._active_id,
+                             tools.limit_notice(self._rounds, self._max_rounds))
         self._launch_chat()
 
     def _save_assistant(self, stats: str | None) -> None:

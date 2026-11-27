@@ -296,6 +296,9 @@ class SettingsDialog(QDialog):
         self.ts_chk = QCheckBox(_("Mostra l'orario accanto ai messaggi"), w)
         self.ts_chk.setChecked(bool(s.get("show_timestamps", False)))
         form.addRow(_("Orario:"), self.ts_chk)
+        self.sugg_chk = QCheckBox(_("Mostra gli esempi di domanda nella pagina iniziale"), w)
+        self.sugg_chk.setChecked(bool(s.get("show_suggestions", True)))
+        form.addRow(_("Esempi:"), self.sugg_chk)
 
         lay.addLayout(form)
         lay.addStretch(1)
@@ -674,6 +677,7 @@ class SettingsDialog(QDialog):
             "stream": self.stream_chk.isChecked(),
             "send_on_enter": self.enter_chk.isChecked(),
             "show_timestamps": self.ts_chk.isChecked(),
+            "show_suggestions": self.sugg_chk.isChecked(),
             "tray_icon": self.tray_chk.isChecked(),
             "close_to_tray": self.close_tray_chk.isChecked(),
             "history_limit": self.hist_spin.value(),

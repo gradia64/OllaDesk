@@ -24,6 +24,8 @@ from dataclasses import dataclass, field
 
 from PySide6.QtCore import QThread, Signal
 
+from .i18n import N_, _
+
 # giri di chiamate per una risposta: poi si richiama il modello senza tool,
 # così deve rispondere (un modello piccolo può chiamare lo stesso tool
 # all'infinito)
@@ -183,6 +185,57 @@ def round_note(done: int, limit: int = MAX_ROUNDS) -> str:
         return (f"[tool round {done} of {limit}: only {left} left. "
                 "Answer with what you have unless another call is really needed.]")
     return f"[tool round {done} of {limit}]"
+
+
+# nomi leggibili dei tool per gli avvisi all'utente; un tool senza etichetta
+# (per esempio uno nuovo) si mostra col nome tecnico
+TOOL_LABELS = {
+    "web_search": N_("ricerca web"),
+    "fetch_page": N_("lettura pagina"),
+    "list_files": N_("elenco cartella"),
+    "read_file": N_("lettura file"),
+    "search_text": N_("ricerca nei file"),
+    "write_file": N_("scrittura file"),
+    "edit_file": N_("modifica file"),
+    "make_dir": N_("creazione cartella"),
+    "move_file": N_("spostamento file"),
+    "delete_file": N_("eliminazione file"),
+}
+
+
+def tool_label(name: str) -> str:
+    """Nome del tool per l'utente, tradotto; il nome tecnico se manca."""
+    label = TOOL_LABELS.get(name)
+    return _(label) if label else name
+
+
+def tools_used(rounds) -> list[tuple[str, int]]:
+    """Tool chiamati nei giri, con quante volte, nell'ordine del primo uso."""
+    counts: dict[str, int] = {}
+    for c in calls_view(rounds):
+        counts[c["name"]] = counts.get(c["name"], 0) + 1
+    return list(counts.items())
+
+
+def limit_notice(rounds, limit: int) -> str:
+    """Avviso per l'utente al tetto dei giri: quali strumenti ha usato il modello.
+
+    Non è un errore (il modello risponde comunque con quello che ha
+    raccolto), perciò ℹ e non ⚠.
+    """
+    used = [f"{tool_label(n)} ({k})" for n, k in tools_used(rounds)]
+    if not used:
+        return "ℹ " + _(
+            'Raggiunto il limite di {count} giri di strumenti: il modello '
+            'risponde con quello che ha raccolto.').format(count=limit)
+    if len(used) == 1:
+        return "ℹ " + _(
+            'Il modello ha usato lo strumento {tools} fino al limite di {count} giri: '
+            'risponde con quello che ha raccolto.').format(tools=used[0], count=limit)
+    listed = _("{items} e {last}").format(items=", ".join(used[:-1]), last=used[-1])
+    return "ℹ " + _(
+        'Il modello ha usato gli strumenti {tools} fino al limite di {count} giri: '
+        'risponde con quello che ha raccolto.').format(tools=listed, count=limit)
 
 
 # chiamata scritta come testo invece che come tool_calls (formato nativo del

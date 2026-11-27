@@ -232,6 +232,7 @@ class MainWindow(QMainWindow):
             self._resolved_theme, self.settings["show_timestamps"], self.main_pane
         )
         pane_lay.addWidget(self.chat_area, 1)
+        self.chat_area.set_suggestions_visible(self.settings.get("show_suggestions", True))
 
         root.addWidget(self.main_pane, 1)
         self.setCentralWidget(central)
@@ -1112,6 +1113,7 @@ class MainWindow(QMainWindow):
         self._apply_theme_now()
         self.chat_area.set_send_on_enter(s["send_on_enter"])
         self.chat_area.set_thinking(s.get("thinking", True))
+        self.chat_area.set_suggestions_visible(s.get("show_suggestions", True))
         # ricontatta il server e ricarica i modelli
         self.engine.reset_status()
         self._check_server()

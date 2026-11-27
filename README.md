@@ -126,7 +126,7 @@ License: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   model is also given today's date, so it does not look for news from the
   wrong year; with 🌐 off it
   does not go online. At most 8 tool rounds per answer (12 with writing): the model is told how
-  many are left (after the last one it is asked to answer), and a read identical to an earlier one is not repeated. With "Read only" it is also told that shared files are not changed, so it
+  many are left (after the last one it is asked to answer, and an ℹ notice says which tools it used and how many times), and a read identical to an earlier one is not repeated. With "Read only" it is also told that shared files are not changed, so it
   does not claim to have changed them; with writing it is told that every
   change must be confirmed and that it must not claim a change the tool did
   not confirm. Calls appear in the
@@ -279,7 +279,7 @@ License: **GPL-3.0** · Python 3.10+ · PySide6 6.6+
   manually or disable the check in Settings → Updates.
 - **Settings** (General, Appearance, Web search, Updates, Help and About pages, chosen from the menu on the left; F1 opens Help, with the main features and the shortcuts; About has versions, license, links and "Copy system information" for bug reports): Ollama server URL, dark/light/**system**
   theme (follows KDE Plasma, even hot when you change it), font size,
-  streaming on/off, send with Enter, timestamps in messages, tray icon, amount
+  streaming on/off, send with Enter, timestamps in messages, example questions on the start page (they can be hidden), tray icon, amount
   of context sent to the model, automatic archiving of inactive chats, default
   system prompt, web search results.
 - **Settings → "Model parameters"**: separate parameter profile for each

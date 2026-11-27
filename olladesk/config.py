@@ -27,6 +27,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "font_size": 10,
     "send_on_enter": True,
     "show_timestamps": False,
+    "show_suggestions": True,   # esempi di domanda nella pagina iniziale
     "stream": True,
     "thinking": True,           # False → invia "think": false (disattiva il ragionamento)
     "history_limit": 20,        # messaggi di cronologia inviati come contesto
